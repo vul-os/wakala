@@ -159,3 +159,17 @@ AC: [ ] resolves peer + builds encrypted envelope per spec [ ] handoff over the 
 `done` · P2 · M · dep: RELAY-14, RELAY-05 · parallel: no — internal/relay/router.go
 Scope: Implement the real `Router.IsPeer(recipient)` using the peering resolver (RELAY-14): a recipient that resolves to a known Vulos peer takes the peering transport; everything else falls back to the standard SMTP sender (RELAY-05). The decision must be cheap (cache peer-resolution results with a TTL) and the fallback seamless — a non-peer or a peer-resolution failure routes to SMTP without dropping the message. A FAILED peer handoff must NOT silently downgrade onto public SMTP without explicit policy; default is retry/defer on the peer path. Per-recipient routing for multi-recipient messages (some peers, some not) splits correctly.
 AC: [ ] peer recipient → peering transport; non-peer → SMTP [ ] peer-resolution result cached with a TTL [ ] mixed-recipient message splits peer vs SMTP correctly [ ] failed peer handoff defers/retries on the peer path (no silent SMTP downgrade) [ ] go test ./internal/relay/...
+
+---
+
+## Area: Future
+
+### Federated peering reputation: ReputationAttestation message + signing/verify path
+`todo` · P2 · L · dep: RELAY-14 · parallel: no — internal/peering/reputation.go (NOTE: check if spam agent is active here before touching)
+Define the `ReputationAttestation` wire message: signed (Ed25519) JSON envelope declaring sender-identity reputation score, issuing relay, and TTL. Implement signing path (emit from local relay on outbound verdict) and verify path (validate chain from peering neighbour before storing score). Expose a `ReputationStore` interface so vulos-cloud can plug in its own store. Do not touch `internal/peering/reputation.go` if the spam agent has it checked out.
+AC: [ ] attestation message encodes score, issuer, TTL, signature [ ] sign path: outbound relay signs after send verdict [ ] verify path: validates Ed25519 sig + issuer key + TTL expiry [ ] ReputationStore interface injectable [ ] go test ./internal/peering/...
+
+### Submit listener per-IP rate cap
+`todo` · P1 · S · dep: RELAY-16 · parallel: yes — cmd/relay/main.go, internal/relay/submit.go (or listener file)
+Add per-IP rate cap to the HTTP submission listener (`RELAY_SUBMIT_ADDR`, default `:8025`). Configurable: `RELAY_SUBMIT_RATE_PER_IP` env var (default 60 req/min per source IP). Return HTTP 429 + `Retry-After` on cap breach. Log cap events to the abuse pipeline. Implement with a sliding-window token bucket per source IP.
+AC: [ ] rate cap enforced per source IP [ ] HTTP 429 + Retry-After returned on cap breach [ ] cap events logged [ ] cap threshold configurable via env var [ ] go test ./internal/relay/... or similar

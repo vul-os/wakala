@@ -235,3 +235,23 @@ peering is documented as a spec from day one rather than reverse-engineered late
   formal standardization is out of scope until interop is real.
 - **No backward-incompatible churn without a version bump.** The wire format is a
   contract; breaking it requires a new protocol version.
+
+---
+
+## Future work
+
+### Federated peering reputation: ReputationAttestation message + signing/verify path
+Define and implement the `ReputationAttestation` peering message: a signed attestation
+that a given sender identity has good/poor sending history, emitted by relay nodes to
+peering neighbours. Includes key distribution for cross-peer trust, a signing path
+(Ed25519 over a canonical JSON envelope), and a verify path that validates the attestation
+chain before accepting the score. The vulos-cloud control plane consumes these attestations
+to build a cloud-side peer reputation store. Do not touch `internal/peering/reputation.go`
+if the spam agent is working in it — coordinate before merging.
+
+### Submit listener per-IP rate cap
+Add a per-IP rate cap to the HTTP submission listener (`RELAY_SUBMIT_ADDR`, default `:8025`).
+Configurable via environment variable or config file: `RELAY_SUBMIT_RATE_PER_IP` (default
+60 requests/min per source IP). Return HTTP 429 with `Retry-After` header on cap breach.
+Log rate-cap events to the abuse/reputation pipeline. Small, safe, high-impact DoS defence
+for the submission path.
