@@ -1,0 +1,12 @@
+# Compiled binaries
+/relay
+*.exe
+*.out
+*.test
+
+# Databases
+*.db
+
+# Build artifacts
+/bin/
+/dist/
