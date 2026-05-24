@@ -418,6 +418,18 @@ func (s *StreamRelay) SetTURNEndpoint(addr string) {
 // registered (in which case the caller MUST buffer or drop per its policy —
 // the relay never blocks).
 //
+// Egress contract (FIX-TURN-EGRESS-CALC-01):
+//   - Inbound side: this method charges ONLY `bytesIn` for the received packet
+//     (the wire-receive happened by the time the caller invoked us).
+//   - Outbound side: after the caller has confirmed the relayed packet hit the
+//     wire, it MUST call RelayMediaSent(session, n) to account `bytesOut`.
+//     The quota check below is monotonic: it admits a packet only if charging
+//     `bytesIn += n` would not cross `quotaBytes`. Because the caller will
+//     subsequently call RelayMediaSent for the outbound leg, the full
+//     `quotaBytes` budget covers the SUM of both legs (in + out), so the
+//     effective per-slot capacity equals the documented `quotaBytes` — not
+//     half of it.
+//
 // from is the source address of the inbound media packet. The slot bridges the
 // first two distinct source addresses it sees: typical WebRTC layout is
 // client-side and host-side, each behind NAT.
@@ -437,6 +449,11 @@ func (s *StreamRelay) RelayMediaInbound(session string, from *net.UDPAddr, n int
 		streamTURNSlotsOpen.Dec()
 		return nil, fmt.Errorf("%w: slot expired", ErrStreamRelay)
 	}
+	// Quota gate: charge only the inbound `n` here. The matching outbound
+	// charge happens in RelayMediaSent AFTER the wire-write completes. This
+	// keeps the check monotonic (bytesIn + bytesOut never exceeds quotaBytes
+	// after either side increments) while restoring full `quotaBytes`
+	// admissibility.
 	if slot.quotaBytes > 0 && slot.bytesIn+slot.bytesOut+uint64(n) > slot.quotaBytes {
 		delete(s.slots, session)
 		streamTURNSlotsOpen.Dec()
@@ -449,8 +466,8 @@ func (s *StreamRelay) RelayMediaInbound(session string, from *net.UDPAddr, n int
 		slot.peers[key] = from
 	}
 
-	// Egress accounting: the byte count of an inbound packet is "received";
-	// when we relay it out it will also count as "sent" via RelayMediaSent.
+	// Inbound-side accounting: count the bytes we just received. The outbound
+	// leg is accounted by the caller via RelayMediaSent after wire-write.
 	slot.bytesIn += uint64(n)
 	streamTURNBytesRelayed.Add(float64(n))
 
@@ -464,16 +481,46 @@ func (s *StreamRelay) RelayMediaInbound(session string, from *net.UDPAddr, n int
 	}
 	if dst == nil {
 		// Bridge not yet established (the other side has not sent its first
-		// packet); the caller MUST drop / buffer per its policy.
+		// packet); the caller MUST drop / buffer per its policy. No outbound
+		// charge is owed because nothing will be relayed for this inbound.
 		return nil, nil
 	}
-	// Speculatively account for the outbound side too — RelayMediaSent is
-	// the post-write hook for callers that want to confirm bytes actually
-	// hit the wire; many use cases combine the two.
-	slot.bytesOut += uint64(n)
-	streamTURNBytesRelayed.Add(float64(n))
 	slot.expires = time.Now().Add(s.DefaultSlotTTL) // refresh on activity
 	return dst, nil
+}
+
+// RelayMediaSent records `n` media bytes the caller has just confirmed as
+// written to the wire for session's outbound leg. This is the POST-WRITE
+// companion to RelayMediaInbound: callers invoke it after the UDP WriteTo
+// returns success so the slot's `bytesOut` meter reflects bytes that actually
+// left the box.
+//
+// It is a no-op (returns nil) when the session has no open slot — typically
+// because the slot was closed between the inbound dispatch and the wire-write.
+// If the post-write charge would cross the quota, the slot is closed and an
+// error is returned (the bytes are still accounted, since they did go on the
+// wire; closing the slot ensures no further packets are relayed).
+func (s *StreamRelay) RelayMediaSent(session string, n int) error {
+	s.init()
+	if n <= 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	slot, ok := s.slots[session]
+	if !ok {
+		// Slot already closed (close race / expiry); nothing to charge.
+		return nil
+	}
+	slot.bytesOut += uint64(n)
+	streamTURNBytesRelayed.Add(float64(n))
+	if slot.quotaBytes > 0 && slot.bytesIn+slot.bytesOut > slot.quotaBytes {
+		delete(s.slots, session)
+		streamTURNSlotsOpen.Dec()
+		return fmt.Errorf("%w: egress quota exhausted", ErrStreamRelay)
+	}
+	slot.expires = time.Now().Add(s.DefaultSlotTTL) // refresh on activity
+	return nil
 }
 
 // SlotEgress returns the (bytesIn, bytesOut, open) accounting tuple for a
@@ -530,10 +577,41 @@ func (s *StreamRelay) Snapshot() StreamSnapshot {
 	}
 }
 
-// tokenSnapshot is a stable, opaque per-slot token. We use the slot's open
-// nanoseconds + session hash; the relay does not authenticate media packets
-// with it (slot lifetime + addr binding are the gates) — it is an opaque
-// identifier the requester can echo to confirm it received the ack.
+// SECURITY (FIX-TOKENSNAP-DOC-01): the 16-byte value returned here is NOT an
+// authentication artifact.
+//
+// Construction. The token packs `opened.UnixNano()` (8 bytes, big-endian) and
+// a cheap FNV-style hash of the session id (8 bytes, big-endian). It is
+// deterministic from public/low-entropy inputs (open-time + session id) and
+// carries no secret, no signature, no AEAD tag.
+//
+// What gates media. Media-relay authorization at this layer rides on:
+//  1. SLOT LIFETIME — a TURN slot only exists between an explicit
+//     msgP2PFailed (opens it) and msgTURNClose / idle expiry / quota
+//     exhaustion (closes it). RelayMediaInbound rejects any session with no
+//     open, unexpired slot.
+//  2. ADDRESS BINDING — the slot bridges the first two distinct source UDP
+//     addresses it observes; once bound, packets from a third address are
+//     not relayed (they become unknown sources with no matching dst).
+//
+// The token is not consulted by RelayMediaInbound / RelayMediaSent at all.
+//
+// What the token is for. It is an opaque identifier the requester can echo
+// back over the signaling channel to confirm it received the msgTURNAck for
+// the slot it asked to open. Its only security property is preventing
+// trivially-spoofed echoes WITHIN A SLOT'S LIFETIME — and even that is a
+// nice-to-have, not a gate. Treat any future use as if the token were
+// public.
+//
+// Therefore: do not introduce code paths that grant authority on the basis
+// of presenting this token, do not log it as if it were sensitive, and do
+// not lengthen it under the impression that doing so improves authentication
+// — the real gates (slot lifetime + addr binding + peering §7/§8 on the
+// signaling envelope that OPENED the slot) are unchanged by anything done
+// to this value.
+//
+// tokenSnapshot returns a stable opaque per-slot identifier as documented
+// above.
 func (t *turnSlot) tokenSnapshot() []byte {
 	var buf [16]byte
 	binary.BigEndian.PutUint64(buf[0:8], uint64(t.opened.UnixNano()))

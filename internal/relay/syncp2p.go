@@ -266,6 +266,30 @@ func (s *SyncTransport) filterMissing(hashes [][]byte) [][]byte {
 // using the asker descriptor resolved from this box's resolver (keyed by the
 // asker domain carried in the request header). The asker later opens it via its
 // own guard. This is the leg that composes with the central-rendezvous path.
+//
+// REPLAY-GUARD OPERATOR NOTE (FIX-REPLAYGUARD-DOC-01):
+//
+// In production (store-and-forward carriers), this HandleEnvelope runs ONLY on
+// the RESPONDER side. It does NOT participate in the asker's reply-open path:
+// the asker receives the response as a separately-delivered inbound envelope
+// and MUST open it through ITS OWN inbound handler — and that handler MUST
+// reuse the SAME *peering.ReplayGuard instance as the asker's other inbound
+// envelope handlers (e.g. its own HandleEnvelope, the reputation receiver,
+// the stream signaling receiver, and any future sub-protocols on this box).
+//
+// The LoopbackSyncTransport.Exchange method (below) does open the reply with
+// `asker.st.guard` — that is correct for the in-process loopback used in
+// tests, but operators wiring a real fabric/bucket carrier MUST NOT
+// interpret that as license to spin up a second ReplayGuard for the asker's
+// reply path. Two guards on the same box = two independent §7 windows, which
+// silently weakens replay protection (a replay across the two paths would
+// pass) and may permit a captured envelope to be re-injected via the other
+// handler.
+//
+// TODO(operators): when wiring this transport over the real fabric/bucket
+// carrier, route the asker's inbound replies through a handler that shares
+// the asker box's single ReplayGuard. See spec/PEERING.md §7 note on
+// "single ReplayGuard per receiver box".
 func (s *SyncTransport) HandleEnvelope(
 	wire []byte,
 	authorized func(domain string) bool,

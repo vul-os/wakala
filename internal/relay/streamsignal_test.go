@@ -316,7 +316,9 @@ func TestTURNMediaRelayDeniedWithoutSlot(t *testing.T) {
 }
 
 // TestTURNEgressAccounting: with a slot open, two distinct sources have media
-// bridged and bytes are metered. Quota exhaustion closes the slot.
+// bridged and bytes are metered. Inbound charges only `bytesIn`; the caller
+// MUST invoke RelayMediaSent post-wire-write to charge `bytesOut`
+// (FIX-TURN-EGRESS-CALC-01). Quota exhaustion closes the slot.
 func TestTURNEgressAccounting(t *testing.T) {
 	_, host, _, _, _ := streamPair(t)
 	host.DefaultSlotQuotaBytes = 10_000 // cap egress for the quota assertion
@@ -333,7 +335,7 @@ func TestTURNEgressAccounting(t *testing.T) {
 	srcB := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 11), Port: 4001}
 
 	// First packet from A: bridge not yet established (no dst), bytes still
-	// metered as bytesIn.
+	// metered as bytesIn. No outbound charge is owed (nothing was relayed).
 	dst, err := host.RelayMediaInbound(sid, srcA, 100)
 	if err != nil {
 		t.Fatalf("relay A: %v", err)
@@ -347,7 +349,8 @@ func TestTURNEgressAccounting(t *testing.T) {
 	}
 
 	// First packet from B: bridge now established; A's addr is returned as
-	// dst, and both directions are accounted (200 bytes total this call).
+	// dst. RelayMediaInbound only charges the inbound `n=200`. The caller is
+	// expected to write to the wire and then call RelayMediaSent(200).
 	dst, err = host.RelayMediaInbound(sid, srcB, 200)
 	if err != nil {
 		t.Fatalf("relay B: %v", err)
@@ -356,8 +359,16 @@ func TestTURNEgressAccounting(t *testing.T) {
 		t.Fatalf("expected bridge to A, got %v", dst)
 	}
 	in, out, _ = host.SlotEgress(sid)
+	if in != 300 || out != 0 {
+		t.Fatalf("after B inbound-only: in=%d out=%d, want 300/0", in, out)
+	}
+	// Post-write confirmation: account the outbound leg.
+	if err := host.RelayMediaSent(sid, 200); err != nil {
+		t.Fatalf("RelayMediaSent: %v", err)
+	}
+	in, out, _ = host.SlotEgress(sid)
 	if in != 300 || out != 200 {
-		t.Fatalf("after B: in=%d out=%d, want 300/200", in, out)
+		t.Fatalf("after RelayMediaSent: in=%d out=%d, want 300/200", in, out)
 	}
 
 	// Quota exhaustion: ask for a huge packet beyond the cap.
@@ -365,6 +376,72 @@ func TestTURNEgressAccounting(t *testing.T) {
 		t.Fatal("expected egress quota exhaustion")
 	}
 	// Slot is now closed.
+	if _, _, ok := host.SlotEgress(sid); ok {
+		t.Fatal("slot should be closed after quota exhaustion")
+	}
+}
+
+// TestTURNEgressFullQuotaReachable verifies that with each inbound matched by
+// a successful RelayMediaSent, the slot's full `quotaBytes` is reachable
+// (FIX-TURN-EGRESS-CALC-01: the prior speculative double-charge halved the
+// effective quota). With quotaBytes=1000 and packet pairs of in=100/out=100,
+// the slot must admit exactly 5 round-trip pairs (5*200=1000) before the next
+// inbound exhausts the quota.
+func TestTURNEgressFullQuotaReachable(t *testing.T) {
+	_, host, _, _, _ := streamPair(t)
+	host.DefaultSlotQuotaBytes = 1000
+
+	const sid = "sess-full-quota"
+	host.openSlot(sid)
+
+	srcA := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 20), Port: 5000}
+	srcB := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 21), Port: 5001}
+
+	// Bootstrap the bridge: one packet from A (no dst yet, charged in=100).
+	if _, err := host.RelayMediaInbound(sid, srcA, 100); err != nil {
+		t.Fatalf("bootstrap A: %v", err)
+	}
+	// One packet from B establishes the bridge (charged in=100, out=100 via
+	// the post-write hook).
+	if _, err := host.RelayMediaInbound(sid, srcB, 100); err != nil {
+		t.Fatalf("bootstrap B: %v", err)
+	}
+	if err := host.RelayMediaSent(sid, 100); err != nil {
+		t.Fatalf("post-write B: %v", err)
+	}
+	// State so far: in=200, out=100; consumed 300/1000.
+
+	// Each subsequent inbound (charged in=100) must also be matched by a
+	// successful RelayMediaSent (charged out=100). The slot's full quota of
+	// 1000 bytes must be reachable as 3 more pairs (200 bytes each) followed
+	// by one final inbound (100 bytes) that fits exactly at the cap.
+	//   after 3 pairs: in=200+3*100=500, out=100+3*100=400 → total=900
+	//   after final in=100:                                  total=1000
+	for i := 0; i < 3; i++ {
+		if _, err := host.RelayMediaInbound(sid, srcA, 100); err != nil {
+			t.Fatalf("pair %d inbound: %v", i, err)
+		}
+		if err := host.RelayMediaSent(sid, 100); err != nil {
+			t.Fatalf("pair %d sent: %v", i, err)
+		}
+	}
+	in, out, ok := host.SlotEgress(sid)
+	if !ok || in != 500 || out != 400 {
+		t.Fatalf("after 3 pairs: in=%d out=%d ok=%v, want 500/400/true", in, out, ok)
+	}
+	// Final inbound that exactly hits the cap (in=500+100=600, out=400, total=1000).
+	if _, err := host.RelayMediaInbound(sid, srcA, 100); err != nil {
+		t.Fatalf("final inbound at cap: %v", err)
+	}
+	in, out, _ = host.SlotEgress(sid)
+	if in != 600 || out != 400 || in+out != host.DefaultSlotQuotaBytes {
+		t.Fatalf("at cap: in=%d out=%d total=%d, want 600/400/1000", in, out, in+out)
+	}
+
+	// One more byte must exhaust the quota and close the slot.
+	if _, err := host.RelayMediaInbound(sid, srcA, 1); err == nil {
+		t.Fatal("expected quota exhaustion after reaching full quotaBytes")
+	}
 	if _, _, ok := host.SlotEgress(sid); ok {
 		t.Fatal("slot should be closed after quota exhaustion")
 	}

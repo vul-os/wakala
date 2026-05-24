@@ -284,6 +284,30 @@ recipient's mailbox. The nonce doubling as the AEAD nonce (§5.3) and the HKDF
 salt (§5.2) means nonce reuse also breaks the cryptographic construction, so the
 two protections reinforce each other.
 
+#### §7 note — single `ReplayGuard` per receiver box (operator guidance)
+
+The Go reference implementation exposes the §7 dedup window as
+`peering.ReplayGuard` (one instance backs the `(sender_identity_pub, nonce)`
+cache). Operators wiring multiple inbound handlers on one box (e.g. the sync
+sub-protocol `SyncTransport.HandleEnvelope`, the stream sub-protocol
+`StreamRelay.HandleEnvelope`, the reputation receiver, and any future
+sub-protocol) MUST share a **single `ReplayGuard` instance** across every
+handler that opens envelopes addressed to that box's identity — including the
+handler that opens replies to envelopes this box originally sent.
+
+For store-and-forward carriers (the fabric/bucket), a request and its eventual
+reply arrive as two independent inbound envelopes on the asker's box. If the
+reply-open path is wired to a separately-constructed `ReplayGuard`, the box
+runs two independent §7 windows; a replayed envelope rejected by one window
+can still pass the other, silently weakening replay protection. The in-process
+`LoopbackSyncTransport` opens the reply with the asker's own guard for exactly
+this reason — but that is a test/loopback property, not a license to wire two
+guards in production.
+
+This applies symmetrically to the responder: the SAME guard the responder uses
+to open inbound requests must also be the guard used by any other handler on
+the same box that opens envelopes from the same peer fleet.
+
 ---
 
 ## 8. Open-relay / abuse prevention at the peer boundary

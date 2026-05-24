@@ -251,27 +251,27 @@ AC: [x] per-segment reputation tracked [x] threshold trips breaker [x] quarantin
 ## Area: Audit-fix wave A (from #125 verification audit — 2026-05-24)
 
 ### [FIX-TURN-EGRESS-CALC-01] Fix TURN slot egress double-count math (or document the half-quota)
-`todo` · P1 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
+`done` · P1 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
 Scope: `RelayMediaInbound` charges `n` bytes to BOTH `bytesIn` and (speculatively) `bytesOut` before the
 caller has confirmed wire-write (`streamsignal.go:473`). Combined with the quota check
 (`bytesIn+bytesOut+n > quota`), per-slot effective quota is half of `quotaBytes`. Fix: split the post-write
 charge into a `RelayMediaSent(n)` call invoked after the wire-write completes, so the quota math is honest.
-AC: [ ] bytesIn charged on inbound; bytesOut charged after confirmed wire-write [ ] quota check honors documented `quotaBytes` [ ] existing TURN-fallback tests still green [ ] go build ./...
+AC: [x] bytesIn charged on inbound; bytesOut charged after confirmed wire-write [x] quota check honors documented `quotaBytes` [x] existing TURN-fallback tests still green [x] go build ./...
 
 ### [FIX-REPLAYGUARD-DOC-01] Operator doc: single ReplayGuard across both directions
-`todo` · P2 · S · dep: none · parallel: yes — internal/relay/syncp2p.go, spec/PEERING.md
+`done` · P2 · S · dep: none · parallel: yes — internal/relay/syncp2p.go, spec/PEERING.md
 Scope: `LoopbackSyncTransport.Exchange` opens the asker's reply with `asker.st.guard` — fine in tests, but
 production `HandleEnvelope` does NOT participate in the asker's reply-open path. For store-and-forward
 carriers, the asker side relies on a separately-wired inbound handler reusing the SAME guard. Add doc/TODO
 in `syncp2p.go` + a §note in `spec/PEERING.md` so operators don't wire two guards by accident.
-AC: [ ] doc note in syncp2p.go [ ] §note in spec/PEERING.md [ ] no code change
+AC: [x] doc note in syncp2p.go [x] §note in spec/PEERING.md [x] no code change
 
 ### [FIX-TOKENSNAP-DOC-01] Security note: tokenSnapshot is not authenticated
-`todo` · P3 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
+`done` · P3 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
 Scope: `tokenSnapshot()` is a 16-byte opaque token derived from `opened.UnixNano()` + FNV(session). Slot
 lifetime + addr-binding are the real auth gates; the token confers no auth (impact bounded to echo). Add a
 SECURITY comment block above the function clarifying this so it doesn't get mistaken for an auth artifact.
-AC: [ ] SECURITY comment block above tokenSnapshot [ ] no behavior change
+AC: [x] SECURITY comment block above tokenSnapshot [x] no behavior change
 
 ---
 
