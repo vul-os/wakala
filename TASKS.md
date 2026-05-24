@@ -176,6 +176,26 @@ AC: [ ] rate cap enforced per source IP [ ] HTTP 429 + Retry-After returned on c
 
 ---
 
+## Area: Storage backend & multi-location
+
+_Spec: [`ROADMAP.md §Storage backend, multi-location & 2-track billing context`](ROADMAP.md)_  ·  _Prefix: `RELAY-STORE-*`_
+_Cross-repo: [`vulos-cloud`](https://github.com/vul-os/vulos-cloud) (CP-MULTLOC-02) · [`vulos-mail`](https://github.com/vul-os/vulos-mail) (MAIL-STORE-03)_
+
+> The relay itself is storage-agnostic. These tasks document the relay's participation in
+> multi-location health signaling. Encrypted queue delivery is already covered by RELAY-BYO-01.
+
+### [RELAY-STORE-01] Multi-location health: include per-instance bucket-reachability in health signal
+`todo` · P2 · S · dep: RELAY-BYO-02 · parallel: yes — internal/relay/health.go
+Scope: Extend the BYO health signal forwarded to the cloud (RELAY-BYO-02) to include the
+instance's bucket-connectivity status, sourced from the `vulos-mail` health endpoint
+(`/health` field `bucket_reachable`, see MAIL-STORE-03). The relay forwards this flag alongside
+the existing heartbeat so the cloud health-check daemon (`BYO-CP-04`) has a richer signal for
+cross-location mail routing (`CP-MULTLOC-02`). Only applicable when the relay has a peering
+connection to the `vulos-mail` instance.
+AC: [ ] health signal includes `bucket_reachable` bool sourced from vulos-mail /health [ ] field omitted (not false) when relay has no peering connection to the instance [ ] no buffering of health signals at relay [ ] `go build ./...`
+
+---
+
 ## Area: BYO Mail
 
 _Spec: [`ROADMAP.md §BYO Mail support`](ROADMAP.md)_  ·  _Prefix: `RELAY-BYO-*`_

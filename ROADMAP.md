@@ -238,6 +238,42 @@ peering is documented as a spec from day one rather than reverse-engineered late
 
 ---
 
+## Storage backend, multi-location & 2-track billing context (finalized 2026-05-24)
+
+### Relay's role in the storage-backend choice
+
+`vulos-relay` is storage-agnostic at the relay level. The relay transports mail; it does not
+touch the customer's document or mail storage bucket. However, the relay is relevant to the
+storage-backend story in two ways:
+
+1. **Encrypted queue delivery:** For BYO (Self-Host) accounts using MinIO, the relay routes
+   encrypted inbound queue blobs from the MX gateway to the customer's `vulos-mail` instance
+   over the peering fabric where possible (RELAY-BYO-01). The relay forwards opaque ciphertext
+   — it never sees plaintext regardless of storage backend.
+
+2. **Multi-location health signal:** The relay's fabric-reachability signal (RELAY-BYO-02)
+   is one input to the cloud health-check daemon's per-location health store, which drives
+   cross-location inbound-mail routing (`CP-MULTLOC-02` in vulos-cloud).
+
+### 2-track billing context
+
+`vulos-relay` serves both billing tracks identically at the relay level:
+- **Self-Host (Track A, R3/user + R9 floor):** warm-up relay, MX inbound routing, peering
+  transport, and spam filtering are all provided to Self-Host customers.
+- **Hosted (Track B, R19/user+):** same relay fleet, same infrastructure.
+
+The relay pool does not distinguish billing tier. Both tracks use the same warmed-IP pool,
+DKIM rotation, and DMARC reporting infrastructure.
+
+### Anchor inbox — relay passthrough
+
+Inbound mail destined for an account's anchor inbox (always Tigris, ~1 GB) flows through the
+same MX gateway and relay path as any other inbound mail. There is no relay-level distinction
+for anchor inbox delivery. The MX gateway handles the routing decision (primary bucket vs
+anchor inbox fallback) transparently.
+
+---
+
 ## BYO Mail support (in progress — parallel implementation)
 
 `vulos-relay` serves BYO and hosted customers identically for outbound sending (the relay pool
@@ -245,8 +281,9 @@ does not care whether the origin is self-hosted or cloud-hosted). The BYO-specif
 covers inbound queue routing and health-check signaling.
 
 **BYO-specific relay responsibilities:**
-- The warm-up relay pool handles outbound SMTP for both BYO and hosted customers at the same R19
-  Vulos Mail tier — no distinction.
+- The warm-up relay pool handles outbound SMTP for both Self-Host (R3 + R9 floor) and Hosted (R19)
+  Vulos Mail customers — the relay pool does not distinguish billing tier; both use the same
+  warm-up relay fleet and IP reputation infrastructure.
 - The MX gateway (inbound) is cloud-side; `vulos-relay` provides the peering transport that
   delivers decrypted mail from the MX bucket to the BYO instance's queue fetch loop.
 - BYO uptime is not a relay concern — the health-check daemon lives in `vulos-cloud`. The relay

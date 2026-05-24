@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -92,6 +93,14 @@ type RouterConfig struct {
 	// WebhookURL is an HTTP endpoint for inbound envelope delivery.  Used when
 	// SpoolDir is empty.  If both are empty, RouteInbound returns an error.
 	WebhookURL string
+
+	// WebhookSecret is the HMAC-SHA256 signing key for webhook payloads.
+	// When set, every POST carries an X-Vulos-Signature header.
+	WebhookSecret []byte
+
+	// WebhookHTTPClient overrides the HTTP client passed to WebhookDeliverer.
+	// Leave nil in production; set in tests to bypass the SSRF guard.
+	WebhookHTTPClient *http.Client
 
 	// Spool is an injectable SpoolWriter.  If non-nil it takes precedence over
 	// SpoolDir and WebhookURL.
@@ -227,11 +236,18 @@ func (r *Router) RouteInbound(ctx context.Context, env InboundEnvelope) error {
 		return nil
 	}
 
-	// Webhook path (placeholder — real HTTP call would live here).
+	// Webhook path (RELAY-17): POST the envelope to the configured URL via
+	// the SSRF-safe, HMAC-signed WebhookDeliverer.
 	if r.cfg.WebhookURL != "" {
-		// Reserved for RELAY-17: POST the envelope JSON to WebhookURL.
-		// For now treat as unavailable to avoid importing net/http here.
-		return fmt.Errorf("%w: webhook delivery not yet implemented", ErrSpoolFull)
+		wd := NewWebhookDeliverer(WebhookConfig{
+			URL:        r.cfg.WebhookURL,
+			Secret:     r.cfg.WebhookSecret,
+			HTTPClient: r.cfg.WebhookHTTPClient,
+		})
+		if err := wd.Deliver(ctx, env); err != nil {
+			return fmt.Errorf("%w: %v", ErrSpoolFull, err)
+		}
+		return nil
 	}
 
 	return fmt.Errorf("%w: no spool or webhook configured", ErrSpoolFull)
