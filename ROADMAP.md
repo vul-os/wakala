@@ -321,3 +321,22 @@ dependency for sync. **Streaming signaling:** WebRTC signaling relay + STUN/TURN
 streaming, with media P2P and the relay as an egress-aware TURN fallback only. **Deliverability isolation:**
 per-pool-segment circuit-breaker that auto-quarantines a warm-IP segment on a blocklist/complaint threshold so
 one bad sender can't blocklist the whole pool. Tasks: `SYNC-P2P-01`, `STREAM-RELAY-01`, `RISK-DELIV-01`.
+
+---
+
+## Audit-fix wave A + video-meet SFU (v7.1 — 2026-05-24)
+
+**Audit-fix wave A** addresses the 3 relay findings from the #125 pass: TURN slot egress double-count math
+(`RelayMediaInbound` speculatively charges bytesOut, halving documented quota — split into a post-write
+`RelayMediaSent`); a doc/TODO clarifying that operators must wire a single ReplayGuard across both directions
+for store-and-forward carriers; a SECURITY note that `tokenSnapshot` is not authenticated (slot-lifetime +
+addr-binding are the gates). Tasks: `FIX-TURN-EGRESS-CALC-01`, `FIX-REPLAYGUARD-DOC-01`, `FIX-TOKENSNAP-DOC-01`.
+
+**Video meetings — SFU (Wave B).** STREAM-RELAY-01 was sized for 1:1 game streaming (opaque media relay, no
+simulcast/SVC). 500-participant meetings need a real SFU with simulcast + active-speaker + audio-mix-top-N.
+The OSS-aligned choice is LiveKit (MIT, Go) wrapped in a new sibling repo `vulos-meet` — same language, same
+license as our 4 OSS repos, self-hostable, supports cascading SFU for large rooms. `vulos-meet` becomes the
+4th OSS sibling alongside vulos / vulos-mail / vulos-office. Spec addition: `VULOS-MEET/1` token shape in
+`spec/VERSIONS.md`. Tasks: `MEET-CORE-01` (this repo's entry point — the task creates the new repo); see
+sibling repos for cloud Pro-gate (`MEET-CP-01`), office UI (`MEET-SPACES-01`), OS wrapper (`MEET-OS-01`),
+transcription (`MEET-TRANSCRIPT-01`).

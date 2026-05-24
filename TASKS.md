@@ -245,3 +245,44 @@ Scope: Per-pool-segment circuit-breaker: when a warm-IP segment hits a blocklist
 auto-quarantine it (stop assigning new senders, drain) so one bad sender can't blocklist the whole pool.
 Reputation signals feed the decision. Protects the #1 deliverability risk (RISKS-HUMAN-TEAM.md §1).
 AC: [x] per-segment reputation tracked [x] threshold trips breaker [x] quarantined segment drains, no new senders [x] auto-recovery on reputation restore [x] go build ./...
+
+---
+
+## Area: Audit-fix wave A (from #125 verification audit — 2026-05-24)
+
+### [FIX-TURN-EGRESS-CALC-01] Fix TURN slot egress double-count math (or document the half-quota)
+`todo` · P1 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
+Scope: `RelayMediaInbound` charges `n` bytes to BOTH `bytesIn` and (speculatively) `bytesOut` before the
+caller has confirmed wire-write (`streamsignal.go:473`). Combined with the quota check
+(`bytesIn+bytesOut+n > quota`), per-slot effective quota is half of `quotaBytes`. Fix: split the post-write
+charge into a `RelayMediaSent(n)` call invoked after the wire-write completes, so the quota math is honest.
+AC: [ ] bytesIn charged on inbound; bytesOut charged after confirmed wire-write [ ] quota check honors documented `quotaBytes` [ ] existing TURN-fallback tests still green [ ] go build ./...
+
+### [FIX-REPLAYGUARD-DOC-01] Operator doc: single ReplayGuard across both directions
+`todo` · P2 · S · dep: none · parallel: yes — internal/relay/syncp2p.go, spec/PEERING.md
+Scope: `LoopbackSyncTransport.Exchange` opens the asker's reply with `asker.st.guard` — fine in tests, but
+production `HandleEnvelope` does NOT participate in the asker's reply-open path. For store-and-forward
+carriers, the asker side relies on a separately-wired inbound handler reusing the SAME guard. Add doc/TODO
+in `syncp2p.go` + a §note in `spec/PEERING.md` so operators don't wire two guards by accident.
+AC: [ ] doc note in syncp2p.go [ ] §note in spec/PEERING.md [ ] no code change
+
+### [FIX-TOKENSNAP-DOC-01] Security note: tokenSnapshot is not authenticated
+`todo` · P3 · S · dep: none · parallel: yes — internal/relay/streamsignal.go
+Scope: `tokenSnapshot()` is a 16-byte opaque token derived from `opened.UnixNano()` + FNV(session). Slot
+lifetime + addr-binding are the real auth gates; the token confers no auth (impact bounded to echo). Add a
+SECURITY comment block above the function clarifying this so it doesn't get mistaken for an auth artifact.
+AC: [ ] SECURITY comment block above tokenSnapshot [ ] no behavior change
+
+---
+
+## Area: Video meetings — relay side / vulos-meet repo (Wave B — 2026-05-24)
+
+### [MEET-CORE-01] vulos-meet repo: LiveKit Server wrap with Vulos auth + multi-tenancy
+`todo` · P1 · L · dep: none · parallel: yes — NEW REPO at /Users/pc/code/exo/vulos-meet (MIT, Go module)
+Scope: Create a new MIT Go repo `vulos-meet` (sibling of vulos-relay) that embeds or runs LiveKit Server
+(`github.com/livekit/livekit-server`) and wraps it with: Vulos token-auth (rooms minted by vulos-cloud
+MEET-CP-01), per-tenant room-namespace prefixes (one tenant cannot list/join another's rooms), multi-region
+geo-routing reusing vulos-cloud `georoute`, and a small admin HTTP surface. Self-hostable as a standalone
+SFU. Default config: VP9 simulcast (3 layers: 180p/360p/720p), top-N audio mix, cascading SFU enabled.
+Spec wire format addition: `VULOS-MEET/1` token shape in `spec/VERSIONS.md`.
+AC: [ ] new repo created at /Users/pc/code/exo/vulos-meet with MIT LICENSE + go.mod [ ] LiveKit Server runs with Vulos token auth [ ] per-tenant namespace [ ] simulcast + top-N audio mix configured [ ] admin endpoint [ ] go build ./...
