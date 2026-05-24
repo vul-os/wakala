@@ -221,3 +221,27 @@ Forward these as health signals to the cloud control plane's health-check endpoi
 cloud health-check daemon (BYO-CP-04) can use peering-reachability as a "last seen" signal
 in addition to direct HTTP pings.
 AC: [ ] peering heartbeat from BYO instance forwarded to cloud health endpoint [ ] signal includes instance ULID + timestamp [ ] relay does not buffer or persist health signals [ ] go build ./...
+
+---
+
+## Area: Fabric-P2P sync, streaming signaling & deliverability isolation (v6 — 2026-05-24)
+
+### [SYNC-P2P-01] Fabric-P2P CRDT sync transport (box-to-box, same-LAN offline)
+`todo` · P1 · L · dep: none · parallel: yes — internal/relay/syncp2p.go (new)
+Scope: Direct box-to-box CRDT delta + blob sync over the fabric (leaderless, NAT-friendly). Includes
+same-LAN local peer discovery so two boxes on one LAN sync with the internet down. Removes the central
+dependency for sync (the central rendezvous remains as fallback/backup).
+AC: [ ] box-to-box CRDT delta exchange over fabric [ ] same-LAN discovery works internet-down [ ] converges with rendezvous path [ ] no central dependency for P2P sync [ ] go build ./...
+
+### [STREAM-RELAY-01] WebRTC signaling + NAT-traversal/TURN for streaming
+`todo` · P3 · L · dep: none · parallel: yes — internal/relay/streamsignal.go (new)
+Scope: Relay provides WebRTC signaling relay + STUN/TURN NAT-traversal for low-latency streaming; media goes
+P2P, relay is TURN fallback only (egress-aware). Pairs with STREAM-SIGNAL-01 (cloud) + STREAM-BYO-01 (box).
+AC: [ ] SDP/ICE signaling relayed [ ] STUN/TURN NAT traversal [ ] media P2P, relay only on failure [ ] egress-aware fallback [ ] go build ./...
+
+### [RISK-DELIV-01] Relay reputation isolation: pool circuit-breaker + auto-quarantine
+`done` · P0 · M · dep: none · parallel: yes — internal/relay/repisolation.go (new)
+Scope: Per-pool-segment circuit-breaker: when a warm-IP segment hits a blocklist/complaint threshold,
+auto-quarantine it (stop assigning new senders, drain) so one bad sender can't blocklist the whole pool.
+Reputation signals feed the decision. Protects the #1 deliverability risk (RISKS-HUMAN-TEAM.md §1).
+AC: [ ] per-segment reputation tracked [ ] threshold trips breaker [ ] quarantined segment drains, no new senders [ ] auto-recovery on reputation restore [ ] go build ./...
