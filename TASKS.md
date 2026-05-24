@@ -234,10 +234,10 @@ dependency for sync (the central rendezvous remains as fallback/backup).
 AC: [x] box-to-box CRDT delta exchange over fabric [x] same-LAN discovery works internet-down [x] converges with rendezvous path [x] no central dependency for P2P sync [x] go build ./...
 
 ### [STREAM-RELAY-01] WebRTC signaling + NAT-traversal/TURN for streaming
-`todo` · P3 · L · dep: none · parallel: yes — internal/relay/streamsignal.go (new)
+`done` · P3 · L · dep: none · parallel: yes — internal/relay/streamsignal.go (new)
 Scope: Relay provides WebRTC signaling relay + STUN/TURN NAT-traversal for low-latency streaming; media goes
 P2P, relay is TURN fallback only (egress-aware). Pairs with STREAM-SIGNAL-01 (cloud) + STREAM-BYO-01 (box).
-AC: [ ] SDP/ICE signaling relayed [ ] STUN/TURN NAT traversal [ ] media P2P, relay only on failure [ ] egress-aware fallback [ ] go build ./...
+AC: [x] SDP/ICE signaling relayed [x] STUN/TURN NAT traversal [x] media P2P, relay only on failure [x] egress-aware fallback [x] go build ./...
 
 ### [RISK-DELIV-01] Relay reputation isolation: pool circuit-breaker + auto-quarantine
 `done` · P0 · M · dep: none · parallel: yes — internal/relay/repisolation.go (new)

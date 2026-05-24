@@ -90,6 +90,7 @@ does not implement. Bumping a sub-protocol does not require bumping
 | Sub-protocol | Status | Notes |
 |---|---|---|
 | `VULOS-SYNC/1` | STABLE | Box-to-box CRDT delta + content-addressed blob sync ([`PEERING.md`](PEERING.md) §11). Store-agnostic; same-LAN offline capable. |
+| `VULOS-STREAM/1` | STABLE | WebRTC signaling (SDP offer/answer + trickled ICE) + TURN-control frames for low-latency desktop/game streaming. Media is P2P over the negotiated WebRTC connection; the relay opens a TURN slot ONLY on an explicit `p2p-failed` signal, with per-slot egress accounting. STUN binding-request responder (RFC 5389) is a separate stdlib UDP path and is NOT a sub-protocol frame. |
 
 ---
 
