@@ -278,11 +278,17 @@ AC: [x] SECURITY comment block above tokenSnapshot [x] no behavior change
 ## Area: Video meetings — relay side / vulos-meet repo (Wave B — 2026-05-24)
 
 ### [MEET-CORE-01] vulos-meet repo: LiveKit Server wrap with Vulos auth + multi-tenancy
-`todo` · P1 · L · dep: none · parallel: yes — NEW REPO at /Users/pc/code/exo/vulos-meet (MIT, Go module)
+`done` · P1 · L · dep: none · parallel: yes — NEW REPO at /Users/pc/code/exo/vulos-meet (MIT, Go module)
 Scope: Create a new MIT Go repo `vulos-meet` (sibling of vulos-relay) that embeds or runs LiveKit Server
 (`github.com/livekit/livekit-server`) and wraps it with: Vulos token-auth (rooms minted by vulos-cloud
 MEET-CP-01), per-tenant room-namespace prefixes (one tenant cannot list/join another's rooms), multi-region
 geo-routing reusing vulos-cloud `georoute`, and a small admin HTTP surface. Self-hostable as a standalone
 SFU. Default config: VP9 simulcast (3 layers: 180p/360p/720p), top-N audio mix, cascading SFU enabled.
 Spec wire format addition: `VULOS-MEET/1` token shape in `spec/VERSIONS.md`.
-AC: [ ] new repo created at /Users/pc/code/exo/vulos-meet with MIT LICENSE + go.mod [ ] LiveKit Server runs with Vulos token auth [ ] per-tenant namespace [ ] simulcast + top-N audio mix configured [ ] admin endpoint [ ] go build ./...
+Implementation: chose (b) supervise livekit-server as a child process (not Go-module embed) — see
+[vulos-meet README](https://github.com/vul-os/vulos-meet/blob/main/README.md) "Architecture: vendor or
+supervise?". Token validation uses `github.com/livekit/protocol/auth` directly so the validator path is
+byte-identical to LiveKit's own. Follow-ups (MEET-ROOMSVC-02, MEET-SIGNAL-GATE-03, MEET-CASCADE-CFG-04,
+MEET-RECORDING-DRIVER-05, MEET-METRICS-06, MEET-UPSTREAM-MERGE-07) tracked in
+[vulos-meet/tasks.md](https://github.com/vul-os/vulos-meet/blob/main/tasks.md).
+AC: [x] new repo created at /Users/pc/code/exo/vulos-meet with MIT LICENSE + go.mod [x] LiveKit Server runs with Vulos token auth [x] per-tenant namespace [x] simulcast + top-N audio mix configured [x] admin endpoint [x] go build ./... && go vet ./... && go test ./...
