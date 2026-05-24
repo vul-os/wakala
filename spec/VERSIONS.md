@@ -66,12 +66,30 @@ deprecation window announced here.
 
 ### What does NOT require a bump
 
-- New peer-descriptor transport mechanisms (e.g. a new discovery method) as long
-  as the resolved descriptor shape is unchanged.
+- New peer-descriptor transport mechanisms (e.g. a new discovery method, such as
+  the same-LAN multicast beacon of [`PEERING.md`](PEERING.md) §11.5) as long as
+  the resolved descriptor shape is unchanged.
+- New **payload sub-protocols** carried inside the envelope (e.g. the
+  `VULOS-SYNC/1` box-to-box CRDT + blob sync of [`PEERING.md`](PEERING.md) §11):
+  the envelope wire format is unchanged, so `VULOS-PEER` is unaffected. Sub-protocols
+  carry their own independent version string (see below).
 - Operational parameters that are local policy and never appear on the wire
   (timestamp skew tolerance bounds, dedup cache retention, retry backoff).
 - Editorial clarifications to the spec that do not change conformant bytes or
   required behavior.
+
+---
+
+## Payload sub-protocol versions
+
+Sub-protocols ride the §4 envelope payload and version **independently** of the
+envelope `VULOS-PEER/<N>`. A receiver MUST reject a frame whose sub-protocol it
+does not implement. Bumping a sub-protocol does not require bumping
+`VULOS-PEER`, and vice versa.
+
+| Sub-protocol | Status | Notes |
+|---|---|---|
+| `VULOS-SYNC/1` | STABLE | Box-to-box CRDT delta + content-addressed blob sync ([`PEERING.md`](PEERING.md) §11). Store-agnostic; same-LAN offline capable. |
 
 ---
 

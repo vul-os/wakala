@@ -227,11 +227,11 @@ AC: [ ] peering heartbeat from BYO instance forwarded to cloud health endpoint [
 ## Area: Fabric-P2P sync, streaming signaling & deliverability isolation (v6 — 2026-05-24)
 
 ### [SYNC-P2P-01] Fabric-P2P CRDT sync transport (box-to-box, same-LAN offline)
-`todo` · P1 · L · dep: none · parallel: yes — internal/relay/syncp2p.go (new)
+`done` · P1 · L · dep: none · parallel: yes — internal/relay/syncp2p.go (new)
 Scope: Direct box-to-box CRDT delta + blob sync over the fabric (leaderless, NAT-friendly). Includes
 same-LAN local peer discovery so two boxes on one LAN sync with the internet down. Removes the central
 dependency for sync (the central rendezvous remains as fallback/backup).
-AC: [ ] box-to-box CRDT delta exchange over fabric [ ] same-LAN discovery works internet-down [ ] converges with rendezvous path [ ] no central dependency for P2P sync [ ] go build ./...
+AC: [x] box-to-box CRDT delta exchange over fabric [x] same-LAN discovery works internet-down [x] converges with rendezvous path [x] no central dependency for P2P sync [x] go build ./...
 
 ### [STREAM-RELAY-01] WebRTC signaling + NAT-traversal/TURN for streaming
 `todo` · P3 · L · dep: none · parallel: yes — internal/relay/streamsignal.go (new)

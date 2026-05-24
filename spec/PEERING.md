@@ -355,7 +355,81 @@ Peering is one branch of the send pipeline. The fallback contract:
 
 ---
 
-## 11. Cross-references
+## 11. Sync sub-protocol — `VULOS-SYNC/1` (box-to-box CRDT + blob sync)
+
+This section specifies an **opt-in payload sub-protocol** that rides the envelope
+of §4 to converge two Vulos boxes' CRDT index and content-addressed blobs
+directly over the fabric — including two boxes on the **same LAN with the internet
+down**. It is a *payload* format: it does **not** change the envelope wire format
+of §4–§6, so `VULOS-PEER/1` is unchanged. A sync message is marshaled into a
+`VULOS-SYNC/1` frame and placed in the envelope payload slot (where a mail
+message would otherwise go); the envelope's existing AEAD, Ed25519 signature, and
+§7 replay window protect it. This mirrors the reputation side-channel
+(`internal/peering/reputation.go`): a new message type carried over the existing
+transport, with no new crypto and no envelope-format change.
+
+### 11.1 Versioning
+
+`VULOS-SYNC/<N>` is a **payload-level** version, independent of the envelope
+`VULOS-PEER/<N>`. It is the first string field of every sync frame. A receiver
+MUST reject a frame whose sub-protocol it does not implement. Bumping
+`VULOS-SYNC` does NOT require bumping `VULOS-PEER` and vice versa — they evolve
+separately. The current sync version is `VULOS-SYNC/1`.
+
+### 11.2 Store-agnostic model
+
+The transport is **store-agnostic**. The CRDT merge logic and the content store
+live in the application (vulos-mail / vulos-office); this layer only moves bytes
+between two stores via a small interface (`relay.SyncStore`):
+
+| Concept | Wire shape | Meaning |
+|---|---|---|
+| **Version vector** | opaque bytes | a store-defined summary of history held. The transport never interprets it. |
+| **Delta range** | `from` (opaque VV) + opaque bytes | one store-encoded chunk of CRDT history advancing a peer past `from`. |
+| **Blob** | `hash` + `content` | a content-addressed object; `hash` is the store's addressing scheme (e.g. SHA-256). |
+
+### 11.3 Message types and frame format
+
+A frame is `len16(proto="VULOS-SYNC/1") || type(1 byte) || body`, where every
+sub-field is length-prefixed big-endian, matching §6's codec style:
+
+| Type | Name | Direction | Body |
+|---|---|---|---|
+| 1 | `pull` | A→B | the asker's opaque version vector |
+| 2 | `deltas` | B→A | count + (`from`, delta-bytes)\* the asker is missing |
+| 3 | `blob_req` | A→B | count + content-addressed hashes the asker lacks |
+| 4 | `blob_resp` | B→A | count + (hash, content)\* |
+
+One convergence leg is: A sends `pull(VV_A)`; B replies `deltas`; A applies them
+(idempotently) and learns which referenced blob hashes it lacks; A sends
+`blob_req`; B replies `blob_resp`. Leaderless convergence runs this leg in both
+directions (or on a timer).
+
+### 11.4 Idempotency and rendezvous compatibility
+
+`ApplyDeltas` MUST be idempotent: applying the same delta(s) more than once leaves
+the store unchanged beyond the first application. Because deltas are requested
+relative to a version vector and applied idempotently, re-sync, retries, and a
+separate **central-rendezvous** path (a node draining the same deltas from a
+shared bucket) all compose without double-apply. The peering §7 replay window
+still rejects a replayed *envelope*; idempotent apply additionally guarantees a
+replayed *delta* (arriving via a different envelope or carrier) is a no-op.
+
+### 11.5 Same-LAN discovery (offline)
+
+Two boxes on one LAN find each other with an mDNS-style **UDP multicast beacon**
+(admin-scoped, link-local), so they sync with no internet and no central
+rendezvous. A beacon advertises enough to build a peer descriptor (§3): domain,
+Ed25519 identity key, X25519 kex key, and an endpoint. As with the DNS path
+(§3.1), the beacon's **identity key is the only trust anchor and is pinned**
+(§3.2): a forged beacon can deny sync but can never impersonate a pinned peer or
+read/forge a frame, because the handshake remains the pinned-key peering crypto.
+Discovery only learns descriptors; per [`VERSIONS.md`](VERSIONS.md) a new
+discovery method does **not** change the wire format.
+
+---
+
+## 12. Cross-references
 
 - [`VERSIONS.md`](VERSIONS.md) — current version + version-bump rules.
 - [`../internal/peering/`](../internal/peering/) — the Go reference
