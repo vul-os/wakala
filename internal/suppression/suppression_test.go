@@ -77,11 +77,16 @@ func TestParseDSNHardBounceSuppresses(t *testing.T) {
 	}
 
 	list := suppression.NewList()
-	if n := r.ApplyTo(list); n != 1 {
+	if n := r.ApplyTo("acct1", list); n != 1 {
 		t.Fatalf("ApplyTo: want 1 newly suppressed, got %d", n)
 	}
-	if _, ok := list.IsSuppressed("DeadBox@Example.com"); !ok {
+	if _, ok := list.IsSuppressed("acct1", "DeadBox@Example.com"); !ok {
 		t.Error("address should be suppressed (case-insensitive)")
+	}
+	// Per-account scoping: the same recipient must NOT be suppressed for a
+	// DIFFERENT account.
+	if _, ok := list.IsSuppressed("acct2", "deadbox@example.com"); ok {
+		t.Error("suppression must be per-account: acct2 must be unaffected by acct1's report")
 	}
 }
 
@@ -97,7 +102,7 @@ func TestParseDSNSoftBounceDoesNotSuppress(t *testing.T) {
 		t.Errorf("want 1 soft failure recorded, got %v", r.SoftFailures)
 	}
 	list := suppression.NewList()
-	if n := r.ApplyTo(list); n != 0 {
+	if n := r.ApplyTo("acct1", list); n != 0 {
 		t.Errorf("transient failure must not suppress; suppressed %d", n)
 	}
 }
@@ -114,8 +119,8 @@ func TestParseARFComplaintSuppresses(t *testing.T) {
 		t.Fatalf("complaints: want [complainer@isp.example], got %v", r.Complaints)
 	}
 	list := suppression.NewList()
-	r.ApplyTo(list)
-	e, ok := list.IsSuppressed("complainer@isp.example")
+	r.ApplyTo("acct1", list)
+	e, ok := list.IsSuppressed("acct1", "complainer@isp.example")
 	if !ok || e.Reason != suppression.ReasonComplaint {
 		t.Fatalf("complaint address should be suppressed with complaint reason, got %+v ok=%v", e, ok)
 	}
@@ -123,19 +128,35 @@ func TestParseARFComplaintSuppresses(t *testing.T) {
 
 func TestFilterRecipientsDropsSuppressed(t *testing.T) {
 	list := suppression.NewList()
-	list.Suppress("bad@example.com", suppression.ReasonHardBounce, "")
-	allowed, dropped := list.FilterRecipients([]string{"good@example.com", "bad@example.com"})
+	list.Suppress("acct1", "bad@example.com", suppression.ReasonHardBounce, "")
+	allowed, dropped := list.FilterRecipients("acct1", []string{"good@example.com", "bad@example.com"})
 	if len(allowed) != 1 || allowed[0] != "good@example.com" {
 		t.Errorf("allowed: want [good@example.com], got %v", allowed)
 	}
 	if len(dropped) != 1 || dropped[0] != "bad@example.com" {
 		t.Errorf("dropped: want [bad@example.com], got %v", dropped)
 	}
+	// Per-account: a DIFFERENT account is not affected by acct1's suppression.
+	allowed2, dropped2 := list.FilterRecipients("acct2", []string{"bad@example.com"})
+	if len(allowed2) != 1 || len(dropped2) != 0 {
+		t.Errorf("per-account scoping broken: acct2 should be allowed=[bad] dropped=[], got allowed=%v dropped=%v", allowed2, dropped2)
+	}
+}
+
+// stubReportAuth authenticates every request as a fixed account (the test's
+// stand-in for the relay's HMAC gate).
+type stubReportAuth struct{ account string }
+
+func (s stubReportAuth) AuthenticateReport(*http.Request) (string, error) {
+	return s.account, nil
 }
 
 func TestIngressHandlerFeedsList(t *testing.T) {
 	list := suppression.NewList()
-	h := suppression.NewIngressHandler(suppression.IngressConfig{List: list})
+	h := suppression.NewIngressHandler(suppression.IngressConfig{
+		List:          list,
+		Authenticator: stubReportAuth{account: "acct1"},
+	})
 
 	req := httptest.NewRequest(http.MethodPost, suppression.IngressPath, bytes.NewReader([]byte(dsnHardBounce)))
 	rec := httptest.NewRecorder()
@@ -145,6 +166,7 @@ func TestIngressHandlerFeedsList(t *testing.T) {
 		t.Fatalf("status: want 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	var resp struct {
+		Account     string `json:"account"`
 		Kind        string `json:"kind"`
 		Suppressed  int    `json:"suppressed"`
 		HardBounces []string
@@ -155,8 +177,11 @@ func TestIngressHandlerFeedsList(t *testing.T) {
 	if resp.Suppressed != 1 {
 		t.Errorf("suppressed: want 1, got %d", resp.Suppressed)
 	}
-	if _, ok := list.IsSuppressed("deadbox@example.com"); !ok {
-		t.Error("ingress POST should have suppressed the hard-bounced address")
+	if resp.Account != "acct1" {
+		t.Errorf("response account: want acct1, got %q", resp.Account)
+	}
+	if _, ok := list.IsSuppressed("acct1", "deadbox@example.com"); !ok {
+		t.Error("ingress POST should have suppressed the hard-bounced address for the authenticated account")
 	}
 
 	// GET must be rejected.
@@ -164,5 +189,22 @@ func TestIngressHandlerFeedsList(t *testing.T) {
 	h.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, suppression.IngressPath, strings.NewReader("")))
 	if getRec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET: want 405, got %d", getRec.Code)
+	}
+}
+
+// TestIngressHandlerRejectsUnauthenticated proves the CRITICAL fix: with NO
+// authenticator wired, the HTTP intake refuses every request (fail-closed)
+// rather than acting as an open, globally-scoped suppression sink.
+func TestIngressHandlerRejectsUnauthenticated(t *testing.T) {
+	list := suppression.NewList()
+	h := suppression.NewIngressHandler(suppression.IngressConfig{List: list}) // no Authenticator
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, suppression.IngressPath, bytes.NewReader([]byte(dsnHardBounce))))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated POST must be 401, got %d", rec.Code)
+	}
+	if list.Len() != 0 {
+		t.Fatal("VULN: an unauthenticated report mutated the suppression list")
 	}
 }

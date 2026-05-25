@@ -287,6 +287,39 @@ func (h *SubmitHandler) observe(ip, outcome string) {
 	}
 }
 
+// ─── Reusable request authenticator (for other cp↔relay HTTP surfaces) ────────
+
+// RequestAuthenticator wraps a SubmitAuthenticator so other authenticated
+// cp↔relay HTTP surfaces (e.g. the suppression report intake) can identify the
+// calling account using the EXACT same credential extraction + open-relay gate
+// as /submit. The surface that uses it MUST scope its effect to the returned
+// account ID.
+type RequestAuthenticator struct {
+	// Auth is the open-relay gate. REQUIRED.
+	Auth SubmitAuthenticator
+}
+
+// NewRequestAuthenticator builds a RequestAuthenticator. It panics if auth is
+// nil — an authenticated surface with no gate is a programmer error.
+func NewRequestAuthenticator(auth SubmitAuthenticator) *RequestAuthenticator {
+	if auth == nil {
+		panic("relay: NewRequestAuthenticator requires a non-nil SubmitAuthenticator")
+	}
+	return &RequestAuthenticator{Auth: auth}
+}
+
+// AuthenticateRequest extracts the credentials from r (Authorization HMAC or
+// verified TLS client cert, exactly like /submit) and returns the canonical
+// account ID the caller is allowed to act as. A non-nil error means the request
+// is unauthenticated and the surface MUST refuse it.
+func (ra *RequestAuthenticator) AuthenticateRequest(r *http.Request) (string, error) {
+	creds, err := extractCredentials(r)
+	if err != nil {
+		return "", err
+	}
+	return ra.Auth.Authenticate(r.Context(), creds)
+}
+
 // ─── Credential extraction ────────────────────────────────────────────────────
 
 // extractCredentials pulls credentials from either the Authorization header

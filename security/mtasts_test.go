@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -173,6 +174,95 @@ func sendOne(t *testing.T, s *sending.SMTPSender) sending.SendResult {
 		RawRFC822:  []byte("From: alice@tenant.example\r\nSubject: hi\r\n\r\nbody\r\n"),
 	})
 	return res
+}
+
+// ─── MTA-STS downgrade gaps (well-known fetch) ────────────────────────────────
+
+// failingGetter fails every fetch after the first N successful ones, returning
+// a fixed body for the successes. It models a network attacker who can BLOCK the
+// well-known re-fetch (DNS/TLS/connect failure) once a policy has been cached.
+type failingGetter struct {
+	body         string
+	okBeforeFail int
+	calls        int
+}
+
+func (g *failingGetter) Get(string) (*http.Response, error) {
+	g.calls++
+	if g.calls > g.okBeforeFail {
+		return nil, fmt.Errorf("simulated blocked well-known fetch (MITM)")
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(g.body))}, nil
+}
+
+// ATTACK: a network attacker REDIRECTS the well-known fetch (3xx) toward a
+// weaker policy. RFC 8461 §3.3 forbids following redirects on the well-known
+// resource. EXPECT: the production fetcher does NOT follow the redirect — the
+// weaker policy at the redirect target is never read.
+func TestMTASTS_WellKnownRedirect_NotFollowed(t *testing.T) {
+	// The redirect TARGET would serve a (weaker) mode:none policy. If the client
+	// followed the 302, this body would win.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "version: STSv1\nmode: none\n")
+	}))
+	defer target.Close()
+
+	// The well-known origin issues a 302 to the weaker policy (the MITM redirect).
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer origin.Close()
+
+	fetcher := sending.NewWellKnownFetcher()
+	resp, err := fetcher.Get(origin.URL)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	defer resp.Body.Close()
+	// The redirect must be SURFACED (302), not followed to the 200 of the target.
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("VULN: well-known fetch followed a 3xx redirect (status %d); RFC 8461 §3.3 forbids it", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "mode: none") {
+		t.Fatal("VULN: well-known fetch read the weaker redirect-target policy")
+	}
+}
+
+// ATTACK: once an ENFORCE policy is cached, the attacker BLOCKS the re-fetch
+// (the well-known becomes unreachable). EXPECT: the relay keeps enforcing the
+// cached policy rather than silently downgrading to opportunistic — a blocked
+// fetch must not strip a known enforce policy.
+func TestMTASTS_BlockedRefetch_KeepsCachedEnforce(t *testing.T) {
+	cache := sending.NewMTASTSCache()
+	getter := &failingGetter{
+		body:         "version: STSv1\nmode: enforce\nmx: mail.enforced.example\nmax_age: 3600\n",
+		okBeforeFail: 1, // first fetch succeeds (caches enforce), then all fail
+	}
+	cache.HTTPClient = getter
+
+	// Drive the clock so we can expire the cached policy and force a re-fetch.
+	base := time.Now()
+	cur := base
+	cache.SetClock(func() time.Time { return cur })
+
+	// First call: caches the enforce policy.
+	p, err := cache.PolicyFor(context.Background(), "enforced.example")
+	if err != nil || p == nil || p.Mode != sending.MTASTSEnforce {
+		t.Fatalf("first PolicyFor should cache an enforce policy, got %+v err=%v", p, err)
+	}
+
+	// Advance past max_age so the cached entry is expired and a re-fetch happens.
+	cur = base.Add(2 * time.Hour)
+
+	// Re-fetch is now BLOCKED (getter fails). The cached enforce policy must win.
+	p2, _ := cache.PolicyFor(context.Background(), "enforced.example")
+	if p2 == nil || p2.Mode != sending.MTASTSEnforce {
+		t.Fatalf("VULN: a blocked well-known re-fetch downgraded a known enforce policy to %v (want enforce)", p2)
+	}
+	if getter.calls < 2 {
+		t.Fatalf("expected a re-fetch attempt after expiry, got %d calls", getter.calls)
+	}
 }
 
 // ATTACK: STARTTLS downgrade/MITM — the MX advertises STARTTLS but the handshake

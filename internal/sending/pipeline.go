@@ -50,11 +50,15 @@ type PipelineConfig struct {
 
 // SuppressionChecker is the minimal seam the pipeline needs from a suppression
 // list: partition recipients into allowed (deliverable) and dropped
-// (suppressed). *suppression.List satisfies it via FilterRecipients.
+// (suppressed) FOR A GIVEN ACCOUNT. Suppression is per-account, so the check
+// takes the message's account ID — a recipient suppressed only for another
+// account is still deliverable here. *suppression.List satisfies it via
+// FilterRecipients.
 type SuppressionChecker interface {
 	// FilterRecipients returns the recipients that may be delivered to and the
-	// recipients that are suppressed (dropped), preserving input order.
-	FilterRecipients(rcpts []string) (allowed, dropped []string)
+	// recipients that are suppressed (dropped) for account, preserving input
+	// order.
+	FilterRecipients(account string, rcpts []string) (allowed, dropped []string)
 }
 
 func (c *PipelineConfig) workers() int {
@@ -179,7 +183,7 @@ func (p *Pipeline) process(ctx context.Context, lm queue.LeasedMessage) {
 	// from the queue rather than retried against addresses we must never contact.
 	recipients := lm.Recipients
 	if p.cfg.Suppression != nil {
-		allowed, dropped := p.cfg.Suppression.FilterRecipients(lm.Recipients)
+		allowed, dropped := p.cfg.Suppression.FilterRecipients(lm.AccountID, lm.Recipients)
 		if len(dropped) > 0 {
 			logger.Printf("sending: message %s — %d recipient(s) suppressed and dropped: %v", lm.ID, len(dropped), dropped)
 		}

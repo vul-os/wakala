@@ -135,6 +135,17 @@ type config struct {
 	// hard-bounce/complaint reports suppress recipients and the send gate drops
 	// suppressed recipients. Set to 0/false to disable.
 	SuppressionEnable bool
+
+	// RELAY_SUPPRESSION_DB: path to a pure-Go SQLite database file backing the
+	// suppression list so hard-bounce/complaint protection SURVIVES restart.
+	// Empty (default) uses an in-memory store (lost on restart). Set to a file
+	// path (e.g. /var/lib/vulos-relay/suppression.db) for durability.
+	SuppressionDB string
+
+	// RELAY_SUPPRESSION_REPORTS_PER_IP_PER_MIN: per-IP rate cap on the
+	// authenticated DSN/ARF report-intake endpoint. 0 → default (60/min).
+	// Negative disables.
+	SuppressionReportsPerIPPerMin int
 }
 
 // envString reads an env var, returning def if it is unset or empty.
@@ -176,31 +187,33 @@ func envFloat(key string, def float64) float64 {
 // parseConfig reads all configuration from environment variables.
 func parseConfig() config {
 	return config{
-		QueueBackend:          envString("RELAY_QUEUE_BACKEND", "fs"),
-		QueueDir:              envString("RELAY_QUEUE_DIR", "/var/lib/vulos-relay/queue"),
-		Policy:                envString("RELAY_POLICY", "permissive"),
-		PolicyDailyCap:        envInt("RELAY_POLICY_DAILY_CAP", 1000),
-		PolicyBounceThreshold: envFloat("RELAY_POLICY_BOUNCE_THRESHOLD", 0.10),
-		PolicyWindowSize:      envInt("RELAY_POLICY_WINDOW_SIZE", 100),
-		SMTPLocalIP:           envString("RELAY_SMTP_LOCAL_IP", ""),
-		SMTPHelo:              envString("RELAY_SMTP_HELO", ""),
-		PeerConfig:            envString("RELAY_PEER_CONFIG", ""),
-		PeeringEnable:         envBool("RELAY_PEERING_ENABLE", false),
-		PeeringDomains:        envString("RELAY_PEERING_DOMAINS", ""),
-		PeeringKeyDir:         envString("RELAY_PEERING_KEY_DIR", ""),
-		Workers:               envInt("RELAY_WORKERS", 4),
-		SubmitAddr:            envString("RELAY_SUBMIT_ADDR", ":8025"),
-		SubmitDisabled:        envBool("RELAY_SUBMIT_DISABLE", false),
-		SubmitMaxBytes:        envInt("RELAY_SUBMIT_MAX_BYTES", 0),
-		SubmitPerIPPerMin:     envInt("RELAY_SUBMIT_PER_IP_PER_MIN", 0),
-		DKIMDomain:            envString("RELAY_DKIM_DOMAIN", ""),
-		DKIMKeyDir:            envString("RELAY_DKIM_KEY_DIR", ""),
-		SMTPTLSPolicy:         envString("RELAY_SMTP_TLS_POLICY", "required"),
-		MTASTSEnable:          envBool("RELAY_MTASTS_ENABLE", false),
-		PoolIPs:               envString("RELAY_POOL_IPS", ""),
-		RampEnable:            envBool("RELAY_RAMP_ENABLE", false),
-		BlocklistEnable:       envBool("RELAY_BLOCKLIST_ENABLE", false),
-		SuppressionEnable:     envBool("RELAY_SUPPRESSION_ENABLE", true),
+		QueueBackend:                  envString("RELAY_QUEUE_BACKEND", "fs"),
+		QueueDir:                      envString("RELAY_QUEUE_DIR", "/var/lib/vulos-relay/queue"),
+		Policy:                        envString("RELAY_POLICY", "permissive"),
+		PolicyDailyCap:                envInt("RELAY_POLICY_DAILY_CAP", 1000),
+		PolicyBounceThreshold:         envFloat("RELAY_POLICY_BOUNCE_THRESHOLD", 0.10),
+		PolicyWindowSize:              envInt("RELAY_POLICY_WINDOW_SIZE", 100),
+		SMTPLocalIP:                   envString("RELAY_SMTP_LOCAL_IP", ""),
+		SMTPHelo:                      envString("RELAY_SMTP_HELO", ""),
+		PeerConfig:                    envString("RELAY_PEER_CONFIG", ""),
+		PeeringEnable:                 envBool("RELAY_PEERING_ENABLE", false),
+		PeeringDomains:                envString("RELAY_PEERING_DOMAINS", ""),
+		PeeringKeyDir:                 envString("RELAY_PEERING_KEY_DIR", ""),
+		Workers:                       envInt("RELAY_WORKERS", 4),
+		SubmitAddr:                    envString("RELAY_SUBMIT_ADDR", ":8025"),
+		SubmitDisabled:                envBool("RELAY_SUBMIT_DISABLE", false),
+		SubmitMaxBytes:                envInt("RELAY_SUBMIT_MAX_BYTES", 0),
+		SubmitPerIPPerMin:             envInt("RELAY_SUBMIT_PER_IP_PER_MIN", 0),
+		DKIMDomain:                    envString("RELAY_DKIM_DOMAIN", ""),
+		DKIMKeyDir:                    envString("RELAY_DKIM_KEY_DIR", ""),
+		SMTPTLSPolicy:                 envString("RELAY_SMTP_TLS_POLICY", "required"),
+		MTASTSEnable:                  envBool("RELAY_MTASTS_ENABLE", false),
+		PoolIPs:                       envString("RELAY_POOL_IPS", ""),
+		RampEnable:                    envBool("RELAY_RAMP_ENABLE", false),
+		BlocklistEnable:               envBool("RELAY_BLOCKLIST_ENABLE", false),
+		SuppressionEnable:             envBool("RELAY_SUPPRESSION_ENABLE", true),
+		SuppressionDB:                 envString("RELAY_SUPPRESSION_DB", ""),
+		SuppressionReportsPerIPPerMin: envInt("RELAY_SUPPRESSION_REPORTS_PER_IP_PER_MIN", 0),
 	}
 }
 
@@ -278,6 +291,17 @@ func buildAuthenticator(cfg config) relay.SubmitAuthenticator {
 	auth := relay.NewSharedSecretAuth(reg)
 	log.Printf("relay: open-relay prevention gate active (SharedSecretAuth)")
 	return auth
+}
+
+// reportAuthAdapter adapts the relay's RequestAuthenticator to the
+// suppression.ReportAuthenticator seam, so the DSN/ARF report intake is gated by
+// the EXACT same cp↔relay credential surface as /submit and scoped to the
+// authenticated account.
+type reportAuthAdapter struct{ ra *relay.RequestAuthenticator }
+
+// AuthenticateReport implements suppression.ReportAuthenticator.
+func (a reportAuthAdapter) AuthenticateReport(r *http.Request) (string, error) {
+	return a.ra.AuthenticateRequest(r)
 }
 
 // buildRouter constructs the submission-side Router (RELAY-15).
@@ -840,9 +864,19 @@ Environment variables:
 	// complaint intake feeds it; the send gate drops suppressed recipients).
 	var suppressList *suppression.List
 	if cfg.SuppressionEnable {
-		suppressList = suppression.NewList()
+		if cfg.SuppressionDB != "" {
+			store, sErr := suppression.NewSQLiteStore(cfg.SuppressionDB)
+			if sErr != nil {
+				log.Fatalf("relay: suppression durable store %q: %v", cfg.SuppressionDB, sErr)
+			}
+			suppressList = suppression.NewListWithStore(store)
+			log.Printf("relay: recipient suppression backed by durable SQLite store %q (survives restart)", cfg.SuppressionDB)
+		} else {
+			suppressList = suppression.NewList()
+			log.Printf("relay: recipient suppression using IN-MEMORY store (lost on restart; set RELAY_SUPPRESSION_DB for durability)")
+		}
 		suppressList.SetObserver(metricsObserver{})
-		log.Printf("relay: recipient suppression ENABLED — DSN/ARF reports POST to %s; suppressed recipients dropped at the send gate", suppression.IngressPath)
+		log.Printf("relay: recipient suppression ENABLED — authenticated, per-account DSN/ARF reports POST to %s; suppressed recipients dropped at the send gate", suppression.IngressPath)
 	} else {
 		log.Printf("relay: recipient suppression DISABLED (set RELAY_SUPPRESSION_ENABLE=1) — hard-bounced/complained recipients will NOT be auto-dropped")
 	}
@@ -936,11 +970,31 @@ func startSubmitListener(cfg config, auth relay.SubmitAuthenticator, router *rel
 		log.Printf("relay: peering ingress bound (POST %s)", peering.PeeringPath)
 	}
 
-	// DSN/ARF report-intake endpoint feeding the suppression list.
+	// DSN/ARF report-intake endpoint feeding the suppression list. It is
+	// AUTHENTICATED (same cp↔relay HMAC/mTLS gate as /submit) and per-account
+	// scoped, plus per-IP rate limited — never an open, globally-scoped
+	// suppression sink.
 	if suppressList != nil {
-		ih := suppression.NewIngressHandler(suppression.IngressConfig{List: suppressList})
+		reportLimit := cfg.SuppressionReportsPerIPPerMin
+		if reportLimit == 0 {
+			reportLimit = 60 // secure default
+		}
+		var limiter suppression.RateLimiter
+		if reportLimit > 0 {
+			limiter = relay.NewIPRateLimiter(reportLimit, time.Minute)
+		}
+		ih := suppression.NewIngressHandler(suppression.IngressConfig{
+			List:          suppressList,
+			Authenticator: reportAuthAdapter{ra: relay.NewRequestAuthenticator(auth)},
+			RateLimiter:   limiter,
+			ClientIP:      relay.ClientIP,
+		})
 		mux.Handle(suppression.IngressPath, ih)
-		log.Printf("relay: suppression report intake bound (POST %s)", suppression.IngressPath)
+		if reportLimit > 0 {
+			log.Printf("relay: suppression report intake bound (authenticated, per-account; POST %s; per-IP cap %d/min)", suppression.IngressPath, reportLimit)
+		} else {
+			log.Printf("relay: suppression report intake bound (authenticated, per-account; POST %s; per-IP cap DISABLED)", suppression.IngressPath)
+		}
 	}
 
 	srv := &http.Server{

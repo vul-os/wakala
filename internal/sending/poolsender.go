@@ -73,6 +73,21 @@ func (p *PoolSender) logger() *log.Logger {
 	return log.Default()
 }
 
+// authoritativeTier resolves the account's trust tier from the authoritative
+// TrustSource (or the legacy SegmentFor override). It fails closed to the
+// coldest tier so an unclassified account is never selected onto a warm IP. The
+// tier is the AUTHORITATIVE eligibility input to pool selection — it is never
+// derived from sender-supplied data, so a sender cannot self-inflate its tier.
+func (p *PoolSender) authoritativeTier(accountID string) TrustTier {
+	if p.SegmentFor != nil {
+		return tierFromSegment(p.SegmentFor(accountID))
+	}
+	if p.Trust == nil {
+		return TrustNew // fail closed
+	}
+	return p.Trust.TrustTierFor(accountID)
+}
+
 // segmentHint resolves the pool segment for an account from the trust source
 // (or the legacy SegmentFor override). It fails closed to the coldest tier so
 // an unclassified account is never selected onto a warm IP.
@@ -86,8 +101,11 @@ func (p *PoolSender) segmentHint(accountID string) SegmentName {
 // Send selects a source binding and delegates to the inner Sender.
 func (p *PoolSender) Send(ctx context.Context, msg Message) (SendResult, error) {
 	hint := p.segmentHint(msg.AccountID)
+	tier := p.authoritativeTier(msg.AccountID)
 
-	binding, err := p.Pool.Select(SegmentName(msg.AccountID), hint)
+	// Eligibility is decided by the AUTHORITATIVE tier, not the hint — a sender
+	// cannot reach a warm IP by influencing the requested segment.
+	binding, err := p.Pool.SelectForTrust(msg.AccountID, tier, hint)
 	if err != nil {
 		// No IP available — either the pool is empty/all quarantined, or this
 		// account's trust tier is gated off the only (warm) IPs available. Defer

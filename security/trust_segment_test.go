@@ -4,7 +4,9 @@
 package security_test
 
 import (
+	"context"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/vul-os/vulos-relay/internal/sending"
@@ -78,6 +80,88 @@ func TestTrustGating_NilTrustSource_FailsClosedToCold(t *testing.T) {
 	hint := sending.SegmentForTrust(nil, "anyone")
 	if hint != sending.SegmentNew {
 		t.Fatalf("VULN: nil TrustSource did not fail closed; hint=%q (want %q)", hint, sending.SegmentNew)
+	}
+}
+
+// captureBinding is an inner Sender that records the source IP the PoolSender
+// chose for each message — the canary for the trust-gating attack via the REAL
+// production send path.
+type captureBinding struct {
+	mu  sync.Mutex
+	ips []net.IP
+}
+
+func (c *captureBinding) Send(_ context.Context, msg sending.Message) (sending.SendResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if msg.Binding != nil {
+		c.ips = append(c.ips, msg.Binding.LocalIP)
+	}
+	return sending.SendResult{State: sending.StateDelivered, Code: 250}, nil
+}
+
+func (c *captureBinding) usedWarm(warm net.IP) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, ip := range c.ips {
+		if ip.Equal(warm) {
+			return true
+		}
+	}
+	return false
+}
+
+// ATTACK (self-inflation, production path): a sender tries to GAME its way onto
+// warm IPs. The authoritative TrustSource is the ONLY thing that decides
+// eligibility — a sender has no input into it. We drive the real PoolSender: an
+// account the TrustSource classifies as TrustNew must be confined to the cold
+// segment and must NEVER ride the warm/established IP, even when warm + cold IPs
+// both exist. EXPECT: the captured source IP is never the warm one.
+func TestTrustGating_SelfInflation_ProductionPath_Blocked(t *testing.T) {
+	pool, warm, cold, _ := warmPool(true)
+	_ = cold
+
+	inner := &captureBinding{}
+	// The authoritative classifier says: brand-new account. A sender cannot
+	// override this — it is resolved server-side from reputation/trust state.
+	ps := &sending.PoolSender{
+		Pool:  pool,
+		Inner: inner,
+		Trust: sending.StaticTrustSource{Tier: sending.TrustNew},
+	}
+
+	for i := 0; i < 10; i++ {
+		_, err := ps.Send(context.Background(), sending.Message{
+			ID:         "atk",
+			AccountID:  "self-inflating-account",
+			Sender:     "attacker@new.example",
+			Recipients: []string{"victim@dest.example"},
+			RawRFC822:  []byte("Subject: x\r\n\r\nbody"),
+		})
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+	}
+	if inner.usedWarm(warm) {
+		t.Fatal("VULN: a TrustNew account was placed on the warm/established IP via the real send path")
+	}
+}
+
+// ATTACK (self-inflation, pool seam): even when handed the authoritative tier
+// directly, SelectForTrust must IGNORE a forged request for a warmer segment
+// than the tier permits. A TrustNew account asking for SegmentEstablished is
+// still denied the warm IP. EXPECT: never the warm IP (deferred or cold).
+func TestTrustGating_SelectForTrust_IgnoresForgedSegment(t *testing.T) {
+	pool, warm, _, _ := warmPool(false) // only the warm IP exists
+
+	// Account is authoritatively TrustNew but FORGES a request for the
+	// established segment. SelectForTrust decides by tier, not the request.
+	b, err := pool.SelectForTrust("liar", sending.TrustNew, sending.SegmentEstablished)
+	if err == nil && b.LocalIP.Equal(warm) {
+		t.Fatal("VULN: SelectForTrust honoured a forged established-segment request for a TrustNew account")
+	}
+	if err != sending.ErrNoAvailableIP {
+		t.Fatalf("a TrustNew account requesting established with only a warm IP must defer (ErrNoAvailableIP), got binding=%v err=%v", b.LocalIP, err)
 	}
 }
 

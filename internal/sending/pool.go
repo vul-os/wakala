@@ -120,25 +120,43 @@ func (p *Pool) Unquarantine(ip net.IP) {
 // (which maps to a SegmentName; empty string means "best available for this
 // account").
 //
+// SECURITY: the account's warm-IP eligibility is derived from the hint's
+// trust LEVEL, but the hint is mapped through eligibilityFromHint which treats
+// ONLY SegmentEstablished/SegmentDedicated as a high-trust request. Because the
+// production caller (PoolSender) always derives the hint from an authoritative
+// TrustSource — never from sender-supplied input — a sender cannot pick its own
+// segment. For defence-in-depth a caller that holds the authoritative trust tier
+// should prefer SelectForTrust, which decides eligibility from the tier directly
+// and IGNORES any attempt to request a higher segment than the tier permits.
+//
 // Selection rules (in order):
 //  1. If policyHint matches SegmentDedicated and there is a dedicated entry for
 //     accountID, return it.
 //  2. If accountID has a dedicated entry, always return it (ignoring hint).
 //  3. If policyHint specifies a segment, return an available IP from that
-//     segment — but NEVER hand an untrusted/new segment hint an established IP,
-//     and never hand a new/untrusted account an established IP.
+//     segment — but NEVER hand an untrusted/new account an established IP.
 //  4. Fall back to any available non-quarantined IP whose segment is compatible
 //     with the account's trust level.
-//
-// "Compatible" means: established accounts may use any segment; new/untrusted
-// accounts may only use new or untrusted segments.
 func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) {
+	// Map the requested hint to the trust tier it implies. This is the legacy
+	// behaviour, retained for callers that only have a hint.
+	return p.SelectForTrust(string(accountID), tierFromSegment(policyHint), policyHint)
+}
+
+// SelectForTrust returns a SourceBinding for accountID, deciding warm-IP
+// eligibility from the AUTHORITATIVE trust tier rather than the requested
+// segment hint. A caller cannot reach a warmer segment than its tier permits:
+// the requested hint can only ever pick a segment AT OR BELOW the tier's
+// eligibility. This is the hardened path that closes the trust-tier-gaming gap —
+// a sender that asks for SegmentEstablished while classified TrustNew is still
+// confined to the cold segment (or deferred).
+func (p *Pool) SelectForTrust(accountID string, tier TrustTier, policyHint SegmentName) (SourceBinding, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	// 1 & 2: dedicated binding takes priority.
 	for _, e := range p.entries {
-		if e.Segment == SegmentDedicated && e.DedicatedAccount == string(accountID) {
+		if e.Segment == SegmentDedicated && e.DedicatedAccount == accountID {
 			if e.quarantined {
 				return SourceBinding{}, ErrNoAvailableIP
 			}
@@ -146,10 +164,12 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 		}
 	}
 
-	// Determine whether the account is considered "untrusted" by the hint.
-	accountIsLowTrust := policyHint == SegmentNew || policyHint == SegmentUntrusted || policyHint == ""
+	// Eligibility is decided by the AUTHORITATIVE tier, never the requested hint.
+	// Only an established account may ride an established IP.
+	canRideEstablished := tier == TrustEstablished
 
-	// 3: honour an explicit non-dedicated segment hint.
+	// 3: honour an explicit non-dedicated segment hint, but never let it exceed
+	// the account's real eligibility.
 	if policyHint != "" && policyHint != SegmentDedicated {
 		for _, e := range p.entries {
 			if e.quarantined {
@@ -158,8 +178,9 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 			if e.Segment != policyHint {
 				continue
 			}
-			// Never hand an established IP to a low-trust account.
-			if accountIsLowTrust && e.Segment == SegmentEstablished {
+			// Never hand an established IP to an account that is not established,
+			// regardless of what segment was REQUESTED.
+			if e.Segment == SegmentEstablished && !canRideEstablished {
 				continue
 			}
 			return SourceBinding{LocalIP: e.IP, HELOName: e.HELOName}, nil
@@ -167,7 +188,6 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 	}
 
 	// 4: fallback — best available compatible IP.
-	// Prefer established for established accounts, untrusted/new otherwise.
 	var fallback *PoolEntry
 	for _, e := range p.entries {
 		if e.quarantined {
@@ -176,8 +196,8 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 		if e.Segment == SegmentDedicated {
 			continue // dedicated IPs are never shared
 		}
-		// Low-trust accounts must not get established IPs.
-		if accountIsLowTrust && e.Segment == SegmentEstablished {
+		// Accounts that are not established must not get established IPs.
+		if e.Segment == SegmentEstablished && !canRideEstablished {
 			continue
 		}
 		if fallback == nil {
@@ -185,7 +205,7 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 			continue
 		}
 		// Prefer better-trusted segments for established accounts.
-		if !accountIsLowTrust && segmentRank(e.Segment) > segmentRank(fallback.Segment) {
+		if canRideEstablished && segmentRank(e.Segment) > segmentRank(fallback.Segment) {
 			fallback = e
 		}
 	}
@@ -194,6 +214,21 @@ func (p *Pool) Select(accountID, policyHint SegmentName) (SourceBinding, error) 
 		return SourceBinding{}, ErrNoAvailableIP
 	}
 	return SourceBinding{LocalIP: fallback.IP, HELOName: fallback.HELOName}, nil
+}
+
+// tierFromSegment infers the trust tier implied by a requested segment hint.
+// This is only used by the legacy Select path; SelectForTrust takes the
+// authoritative tier directly. An established/dedicated hint implies an
+// established tier; everything else (new/untrusted/empty) is treated as the
+// lowest trust so a bare hint can never silently self-promote when the caller
+// provides no authoritative tier.
+func tierFromSegment(hint SegmentName) TrustTier {
+	switch hint {
+	case SegmentEstablished, SegmentDedicated:
+		return TrustEstablished
+	default:
+		return TrustNew
+	}
 }
 
 // Entries returns a snapshot of all pool entries (including quarantined ones).

@@ -10,16 +10,21 @@ import (
 	"time"
 )
 
-// ipRateLimiter is a fixed-window per-IP request limiter used at the submission
-// gate. It caps the number of submission attempts a single client IP may make
-// per window, BEFORE authentication, so an unauthenticated flood from one
-// source cannot exhaust the relay (the per-account daily cap only protects
-// against an authenticated sender; it does nothing for an anonymous DoS).
+// IPRateLimiter is a fixed-window per-IP request limiter used at the submission
+// gate (and the suppression report-intake gate). It caps the number of attempts
+// a single client IP may make per window, BEFORE authentication, so an
+// unauthenticated flood from one source cannot exhaust the relay (the
+// per-account daily cap only protects against an authenticated sender; it does
+// nothing for an anonymous DoS).
 //
 // A fixed-window counter is intentionally simple and bounded: each IP holds one
 // small struct, stale entries are swept on a timer, and there is no per-request
 // allocation. It is safe for concurrent use.
-type ipRateLimiter struct {
+//
+// It is exported so other HTTP surfaces in this repo (e.g. the suppression
+// report intake) can reuse the same per-IP limiter rather than re-implementing
+// it.
+type IPRateLimiter struct {
 	mu     sync.Mutex
 	limit  int           // max requests per window (<=0 disables limiting)
 	window time.Duration // window length
@@ -28,23 +33,33 @@ type ipRateLimiter struct {
 	buckets map[string]*ipBucket
 }
 
+// ipRateLimiter retains the historic unexported alias so existing call sites in
+// this package read unchanged.
+type ipRateLimiter = IPRateLimiter
+
 type ipBucket struct {
 	windowStart time.Time
 	count       int
 }
 
-// newIPRateLimiter creates a limiter allowing limit requests per window per IP.
+// NewIPRateLimiter creates a limiter allowing limit requests per window per IP.
 // A limit <= 0 disables limiting (Allow always returns true).
-func newIPRateLimiter(limit int, window time.Duration) *ipRateLimiter {
+func NewIPRateLimiter(limit int, window time.Duration) *IPRateLimiter {
 	if window <= 0 {
 		window = time.Minute
 	}
-	return &ipRateLimiter{
+	return &IPRateLimiter{
 		limit:   limit,
 		window:  window,
 		now:     time.Now,
 		buckets: make(map[string]*ipBucket),
 	}
+}
+
+// newIPRateLimiter is the historic unexported constructor, kept so existing
+// call sites in this package read unchanged.
+func newIPRateLimiter(limit int, window time.Duration) *ipRateLimiter {
+	return NewIPRateLimiter(limit, window)
 }
 
 // Allow reports whether a request from ip may proceed, incrementing the IP's
@@ -95,3 +110,7 @@ func clientIP(r *http.Request) string {
 	}
 	return host
 }
+
+// ClientIP is the exported form of clientIP, for other HTTP surfaces in this
+// repo (e.g. the suppression report intake) that share the per-IP limiter.
+func ClientIP(r *http.Request) string { return clientIP(r) }

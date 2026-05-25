@@ -103,10 +103,67 @@ func (p *MTASTSPolicy) MatchesMX(mxHost string) bool {
 	return false
 }
 
-// httpGetter is the minimal HTTP interface the policy fetcher needs.
-// *http.Client satisfies it; tests inject a stub.
+// httpGetter is the minimal HTTP interface the policy fetcher needs. Tests
+// inject a stub implementing Get(url). The production fetcher prefers a
+// context-aware getter (ctxGetter) so the passed ctx bounds the fetch; a plain
+// Get(url) stub still works for tests that don't exercise cancellation.
 type httpGetter interface {
 	Get(url string) (*http.Response, error)
+}
+
+// ctxGetter is the context-aware fetch the production client implements so the
+// caller's ctx (deadline/cancel) bounds the well-known fetch. fetch type-asserts
+// for it and falls back to httpGetter.Get when a stub provides only Get.
+type ctxGetter interface {
+	GetContext(ctx context.Context, url string) (*http.Response, error)
+}
+
+// stsHTTPClient is the production well-known fetcher. It REFUSES redirects
+// (RFC 8461 §3.3 forbids following 3xx on the well-known fetch — a MITM could
+// otherwise redirect the policy fetch to a weaker policy) and threads the
+// caller's context through http.NewRequestWithContext.
+type stsHTTPClient struct {
+	client *http.Client
+}
+
+// NewWellKnownFetcher builds the production well-known fetcher: a cert-verifying
+// HTTP client that REFUSES redirects (RFC 8461 §3.3) and threads the caller's
+// context. It is exported so the pentest suite can prove, against a real
+// redirecting server, that a 3xx on the well-known fetch is never followed to a
+// weaker policy. Assign it to MTASTSCache.HTTPClient.
+func NewWellKnownFetcher() interface {
+	Get(url string) (*http.Response, error)
+	GetContext(ctx context.Context, url string) (*http.Response, error)
+} {
+	return newSTSHTTPClient()
+}
+
+// newSTSHTTPClient builds the redirect-refusing, cert-verifying client used for
+// the well-known fetch. CheckRedirect returns http.ErrUseLastResponse so a 3xx
+// is surfaced as-is (a non-200, non-404 status) and never followed.
+func newSTSHTTPClient() *stsHTTPClient {
+	return &stsHTTPClient{client: &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			// Do not follow ANY redirect on the well-known fetch.
+			return http.ErrUseLastResponse
+		},
+	}}
+}
+
+// Get satisfies httpGetter (no context).
+func (c *stsHTTPClient) Get(url string) (*http.Response, error) {
+	return c.GetContext(context.Background(), url)
+}
+
+// GetContext satisfies ctxGetter: it issues a GET bound to ctx that refuses to
+// follow redirects.
+func (c *stsHTTPClient) GetContext(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.client.Do(req)
 }
 
 // MTASTSCache fetches and caches MTA-STS policies per recipient domain. It is
@@ -136,6 +193,12 @@ func NewMTASTSCache() *MTASTSCache {
 	}
 }
 
+// SetClock overrides the clock used for cache-expiry decisions. It is intended
+// for tests (e.g. proving a cached enforce policy is preferred over a failed
+// re-fetch after the policy has nominally expired). Production leaves it at the
+// default (time.Now).
+func (c *MTASTSCache) SetClock(fn func() time.Time) { c.now = fn }
+
 func (c *MTASTSCache) clock() time.Time {
 	if c.now != nil {
 		return c.now()
@@ -147,7 +210,8 @@ func (c *MTASTSCache) httpClient() httpGetter {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	// Default: a redirect-REFUSING, cert-verifying, context-aware client.
+	return newSTSHTTPClient()
 }
 
 // PolicyFor returns the (possibly cached) MTA-STS policy for domain. It returns
@@ -163,17 +227,33 @@ func (c *MTASTSCache) PolicyFor(ctx context.Context, domain string) (*MTASTSPoli
 
 	now := c.clock()
 	c.mu.Lock()
-	if p, ok := c.policies[domain]; ok && !p.expired(now) {
+	cached, hadCached := c.policies[domain]
+	if hadCached && !cached.expired(now) {
 		c.mu.Unlock()
-		return p, nil
+		return cached, nil
 	}
 	c.mu.Unlock()
 
 	p, err := c.fetch(ctx, domain)
 	if err != nil {
+		// Re-fetch failed. Tighten the fail-open behaviour: if we previously
+		// observed an ENFORCE policy for this domain (even if it has nominally
+		// expired), prefer to keep enforcing it rather than silently downgrading
+		// to opportunistic on a transient/MITM fetch failure. A network attacker
+		// who can block the well-known fetch must NOT be able to strip a known
+		// enforce policy. (DANE is still deferred; this only covers MTA-STS.)
+		if hadCached && cached.Mode == MTASTSEnforce {
+			return cached, nil
+		}
 		return nil, err
 	}
 	if p == nil {
+		// The fetch succeeded and reported NO policy (404 / unparseable). Honour a
+		// still-cached enforce policy until it truly expires rather than dropping
+		// straight to opportunistic.
+		if hadCached && cached.Mode == MTASTSEnforce && !cached.expired(now) {
+			return cached, nil
+		}
 		return nil, nil
 	}
 	p.fetchedAt = now
@@ -188,9 +268,19 @@ func (c *MTASTSCache) PolicyFor(ctx context.Context, domain string) (*MTASTSPoli
 // resource (a correct, if slightly chattier, behaviour) and rely on max_age for
 // caching. This avoids a second DNS dependency while remaining spec-faithful on
 // the security-critical part (HTTPS-authenticated policy + enforce semantics).
-func (c *MTASTSCache) fetch(_ context.Context, domain string) (*MTASTSPolicy, error) {
+func (c *MTASTSCache) fetch(ctx context.Context, domain string) (*MTASTSPolicy, error) {
 	url := "https://mta-sts." + domain + "/.well-known/mta-sts.txt"
-	resp, err := c.httpClient().Get(url)
+	getter := c.httpClient()
+	var resp *http.Response
+	var err error
+	// Prefer the context-aware path so the caller's deadline/cancel bounds the
+	// fetch (RFC 8461 §3.3 + ctx honouring). A plain Get(url)-only stub (tests)
+	// falls back transparently.
+	if cg, ok := getter.(ctxGetter); ok {
+		resp, err = cg.GetContext(ctx, url)
+	} else {
+		resp, err = getter.Get(url)
+	}
 	if err != nil {
 		// Discovery failure (DNS, TLS, connect) → no policy known. Fail open on
 		// discovery: returning the error lets the caller distinguish "unknown"

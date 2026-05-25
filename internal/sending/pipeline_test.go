@@ -296,7 +296,7 @@ func TestPipelineSuspendedDeadLetters(t *testing.T) {
 // stubSuppression is a SuppressionChecker that drops a fixed set of addresses.
 type stubSuppression struct{ suppressed map[string]bool }
 
-func (s stubSuppression) FilterRecipients(rcpts []string) (allowed, dropped []string) {
+func (s stubSuppression) FilterRecipients(_ string, rcpts []string) (allowed, dropped []string) {
 	for _, r := range rcpts {
 		if s.suppressed[r] {
 			dropped = append(dropped, r)

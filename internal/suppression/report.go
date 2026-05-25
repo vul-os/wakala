@@ -39,16 +39,19 @@ type ParsedReport struct {
 }
 
 // ApplyTo records this report's hard bounces and complaints into the
-// suppression list. It returns the number of addresses newly suppressed.
-func (r ParsedReport) ApplyTo(list *List) int {
+// suppression list, SCOPED to account. It returns the number of addresses newly
+// suppressed. Scoping by account is the fix for suppression poisoning: a report
+// only ever suppresses recipients for the account that submitted/owns it, never
+// globally for every sender.
+func (r ParsedReport) ApplyTo(account string, list *List) int {
 	n := 0
 	for _, a := range r.HardBounces {
-		if list.Suppress(a, ReasonHardBounce, "DSN 5.x.x permanent failure") {
+		if list.Suppress(account, a, ReasonHardBounce, "DSN 5.x.x permanent failure") {
 			n++
 		}
 	}
 	for _, a := range r.Complaints {
-		if list.Suppress(a, ReasonComplaint, "ARF/FBL complaint") {
+		if list.Suppress(account, a, ReasonComplaint, "ARF/FBL complaint") {
 			n++
 		}
 	}
