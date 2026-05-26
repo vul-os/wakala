@@ -107,6 +107,13 @@ var (
 		Help:      "Total MTA-STS enforcement events by outcome (enforced|deferred).",
 	}, []string{"outcome"})
 
+	// DANEEvents counts RFC 7672 DANE/TLSA enforcement actions (enforced/deferred).
+	DANEEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "vulos_relay",
+		Name:      "dane_events_total",
+		Help:      "Total DANE/TLSA enforcement events by outcome (enforced|deferred).",
+	}, []string{"outcome"})
+
 	// PoolSegmentSelections counts per-account pool segment selections.
 	PoolSegmentSelections = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "vulos_relay",
@@ -128,7 +135,7 @@ func Init() {
 	for _, c := range []prometheus.Collector{
 		RequestCount, RequestDuration, ErrorCount, QueueDepth, CacheHitRatio,
 		QuarantineEvents, RampStep, SubmitPerIP, SuppressionHits, SuppressionAdds,
-		DKIMSignCount, PeeringEvents, MTASTSEvents, PoolSegmentSelections, PoolDeferrals,
+		DKIMSignCount, PeeringEvents, MTASTSEvents, DANEEvents, PoolSegmentSelections, PoolDeferrals,
 	} {
 		_ = prometheus.DefaultRegisterer.Register(c)
 	}

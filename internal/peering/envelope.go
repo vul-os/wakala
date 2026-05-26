@@ -121,6 +121,16 @@ type OpenParams struct {
 	// PinnedSenderKey returns the pinned Ed25519 identity key for the claimed
 	// sender domain (spec §8 check 2), or ok=false if the domain is unknown.
 	PinnedSenderKey func(domain string) (ed25519.PublicKey, bool)
+
+	// DeferReplayCommit, when true, makes Open run the §7 replay check WITHOUT
+	// recording the (sender, nonce) pair (a Peek), so the caller can safely
+	// re-process the identical envelope after a TRANSIENT failure and must
+	// itself Commit the pair on successful delivery. This is used only by the
+	// store-and-forward bucket ingestor (which retries the same stored object);
+	// the HTTP/loopback paths leave it false (committing check) because each
+	// retry there is a freshly-sealed envelope. A genuine replay is still
+	// rejected once a prior delivery has committed.
+	DeferReplayCommit bool
 }
 
 // Open verifies and decrypts an envelope, performing all spec §8 receiver-side
@@ -171,9 +181,16 @@ func Open(env *Envelope, p OpenParams, guard *ReplayGuard) ([]byte, error) {
 		}
 	}
 
-	// §7 replay window (timestamp + nonce dedup), keyed by sender identity.
+	// §7 replay window (timestamp + nonce dedup), keyed by sender identity. When
+	// DeferReplayCommit is set the check validates but does not record; the
+	// caller commits via guard.Commit after a successful delivery (two-phase
+	// accept for the store-and-forward bucket path).
 	if guard != nil {
-		if err := guard.Check(h.SenderIdentityPub, h.Nonce, time.Unix(h.Timestamp, 0)); err != nil {
+		check := guard.Check
+		if p.DeferReplayCommit {
+			check = guard.Peek
+		}
+		if err := check(h.SenderIdentityPub, h.Nonce, time.Unix(h.Timestamp, 0)); err != nil {
 			return nil, err
 		}
 	}

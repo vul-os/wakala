@@ -21,9 +21,10 @@ import (
 //
 // This is a standard-library (net/smtp) implementation — NOT Mox smtpclient.
 // MTA-STS enforcement is implemented natively here (see mtasts.go). DANE/TLSA
-// is NOT implemented yet (it requires a DNSSEC-validating resolver); a
-// DANE-aware Sender can be swapped in by providing an alternative
-// implementation of the Sender interface.
+// (RFC 7672) is implemented natively too (see dane.go): when the DANE resolver
+// is wired and an MX publishes a DNSSEC-validated TLSA record, TLS is mandatory
+// and the presented certificate chain MUST match the TLSA association or the
+// message is deferred. DANE takes precedence over MTA-STS for that MX.
 type SMTPSender struct {
 	// Dialer is used to establish TCP connections.  If nil, a plain net.Dialer
 	// is used.  Inject a custom dialer to force a source IP (SourceBinding).
@@ -61,6 +62,14 @@ type SMTPSender struct {
 	// fall back to TLSPolicy. Safe to leave nil to disable MTA-STS.
 	MTASTS *MTASTSCache
 
+	// DANE, when non-nil, enables RFC 7672 DANE/TLSA enforcement: for each MX,
+	// a DNSSEC-validated TLSA record at _25._tcp.<mx> makes TLS mandatory and the
+	// presented certificate chain MUST match the TLSA association or the message
+	// is DEFERRED (never plaintext). DANE takes precedence over MTA-STS for that
+	// MX. The resolver MUST only report Secure=true for DNSSEC-validated answers
+	// (see dane.go). Safe to leave nil to disable DANE.
+	DANE DNSSECResolver
+
 	// Observer, if non-nil, receives MTA-STS enforcement events for metrics.
 	Observer SMTPObserver
 
@@ -81,6 +90,12 @@ type SMTPObserver interface {
 	MTASTSDeferred(domain, reason string)
 	// DKIMSigned reports that an outbound message was successfully DKIM-signed.
 	DKIMSigned()
+	// DANEEnforced reports that a DNSSEC-validated TLSA record applied to a
+	// delivery attempt for the given MX host (TLS was made mandatory).
+	DANEEnforced(mxHost string)
+	// DANEDeferred reports that a delivery was deferred due to a DANE TLS
+	// requirement or TLSA mismatch for the given MX host and reason.
+	DANEDeferred(mxHost, reason string)
 }
 
 // MessageSigner adds authentication headers (e.g. DKIM-Signature) to a raw
@@ -166,7 +181,21 @@ func (s *SMTPSender) deliverToDomain(ctx context.Context, msg Message, domain st
 			lastErr = fmt.Errorf("mta-sts: MX %q not in enforce policy for %s", mx.Host, domain)
 			continue
 		}
-		result, err := s.deliverToMX(ctx, msg, mx.Host, rcpts, dec)
+
+		// RFC 7672 DANE/TLSA: look up the DNSSEC-validated TLSA records for THIS
+		// MX host. When present, TLS is mandatory and the presented chain must
+		// match — this takes precedence over (and is stricter than) the MTA-STS
+		// decision. A lookup failure leaves DANE unknown (fall through to MTA-STS
+		// / TLS policy) but is logged.
+		dane, derr := decideDANE(ctx, s.DANE, mx.Host)
+		if derr != nil {
+			s.logger().Printf("sending: DANE TLSA lookup for MX %q failed: %v — DANE state unknown, falling back to MTA-STS/TLS policy", mx.Host, derr)
+		}
+		if dane.secured && s.Observer != nil {
+			s.Observer.DANEEnforced(mx.Host)
+		}
+
+		result, err := s.deliverToMX(ctx, msg, mx.Host, rcpts, dec, dane)
 		if err == nil {
 			return result, nil
 		}
@@ -188,8 +217,11 @@ func (s *SMTPSender) deliverToDomain(ctx context.Context, msg Message, domain st
 }
 
 // deliverToMX performs the SMTP transaction to a single MX host. The dec
-// parameter carries the recipient domain's MTA-STS decision (enforce + policy).
-func (s *SMTPSender) deliverToMX(ctx context.Context, msg Message, mxHost string, rcpts []string, dec mtastsDecision) (SendResult, error) {
+// parameter carries the recipient domain's MTA-STS decision (enforce + policy);
+// dane carries this MX's DANE/TLSA decision (RFC 7672). DANE, when secured,
+// makes TLS mandatory AND requires the presented chain to match a TLSA record,
+// taking precedence over MTA-STS.
+func (s *SMTPSender) deliverToMX(ctx context.Context, msg Message, mxHost string, rcpts []string, dec mtastsDecision, dane daneDecision) (SendResult, error) {
 	addr := net.JoinHostPort(mxHost, "25")
 
 	conn, err := s.dialer(msg.Binding).DialContext(ctx, "tcp", addr)
@@ -212,20 +244,39 @@ func (s *SMTPSender) deliverToMX(ctx context.Context, msg Message, mxHost string
 		return SendResult{State: StateDeferred}, fmt.Errorf("EHLO %s: %w", heloName, err)
 	}
 
-	// Under an MTA-STS enforce policy, TLS is mandatory and the cert MUST be
-	// CA-valid for the MX host: this is stricter than TLSPolicyRequired and
-	// overrides an opportunistic configuration for this domain.
-	tlsRequired := s.TLSPolicy == TLSPolicyRequired || dec.enforce
+	// Under an MTA-STS enforce policy OR a DANE-secured MX, TLS is mandatory.
+	// DANE (RFC 7672) is stricter than and takes precedence over MTA-STS: TLS is
+	// required and the chain is authenticated by the TLSA record rather than (or
+	// in addition to) WebPKI.
+	tlsRequired := s.TLSPolicy == TLSPolicyRequired || dec.enforce || dane.secured
 
 	// Attempt STARTTLS if the remote advertises it.
 	if ok, _ := c.Extension("STARTTLS"); ok {
-		// For enforce, never accept an unverified cert: clear InsecureSkipVerify
-		// and pin the ServerName to the MX host so Go verifies the chain + name.
+		// For MTA-STS enforce, never accept an unverified cert: clear
+		// InsecureSkipVerify and pin the ServerName to the MX host so Go verifies
+		// the chain + name. For DANE, authentication is the TLSA match performed
+		// AFTER the handshake (RFC 7672 §3.1.1: WebPKI name/CA validity is NOT
+		// required for DANE-EE/DANE-TA), so we let the handshake complete without
+		// WebPKI verification and enforce the TLSA association ourselves.
 		tlsCfg := s.tlsConfig(mxHost)
 		if dec.enforce {
 			tlsCfg.InsecureSkipVerify = false
 		}
+		if dane.secured {
+			// DANE authenticates the cert; skip Go's WebPKI verify so a
+			// DANE-EE/DANE-TA cert that is not WebPKI-valid still completes the
+			// handshake. The TLSA match below is the real gate.
+			tlsCfg.InsecureSkipVerify = true
+		}
 		if err := c.StartTLS(tlsCfg); err != nil {
+			if dane.secured {
+				s.logger().Printf("sending: DANE-secured MX %s — STARTTLS handshake failed: %v — refusing downgrade (deferring)", mxHost, err)
+				if s.Observer != nil {
+					s.Observer.DANEDeferred(mxHost, "starttls_failed")
+				}
+				return SendResult{State: StateDeferred, Message: fmt.Sprintf("DANE: STARTTLS to %s failed: %v", mxHost, err)},
+					fmt.Errorf("dane starttls to %s: %w", mxHost, err)
+			}
 			if dec.enforce {
 				s.logger().Printf("sending: MTA-STS enforce for MX %s — STARTTLS/cert validation failed: %v — refusing downgrade (deferring)", mxHost, err)
 				if s.Observer != nil {
@@ -245,7 +296,39 @@ func (s *SMTPSender) deliverToMX(ctx context.Context, msg Message, mxHost string
 			// Opportunistic policy: STARTTLS failure is non-fatal; continue in
 			// plain text but log the downgrade for operator visibility.
 			s.logger().Printf("sending: STARTTLS to %s failed, continuing in plaintext (opportunistic policy): %v", mxHost, err)
+		} else if dane.secured {
+			// Handshake succeeded for a DANE-secured MX: the presented chain MUST
+			// match one of the TLSA records (RFC 7672 §2.1). A mismatch DEFERS —
+			// never deliver to an MX whose cert is not DANE-authenticated.
+			state, hasState := c.TLSConnectionState()
+			if !hasState || len(state.PeerCertificates) == 0 {
+				s.logger().Printf("sending: DANE-secured MX %s — no peer certificates after STARTTLS — deferring", mxHost)
+				if s.Observer != nil {
+					s.Observer.DANEDeferred(mxHost, "no_peer_cert")
+				}
+				return SendResult{State: StateDeferred, Message: "DANE: no peer certificate to match against TLSA"},
+					fmt.Errorf("dane: %s presented no certificate", mxHost)
+			}
+			if merr := matchTLSA(state.PeerCertificates, dane.records); merr != nil {
+				s.logger().Printf("sending: DANE-secured MX %s — certificate chain does NOT match any TLSA record (%d records) — refusing delivery (deferring)", mxHost, len(dane.records))
+				if s.Observer != nil {
+					s.Observer.DANEDeferred(mxHost, "tlsa_mismatch")
+				}
+				return SendResult{State: StateDeferred, Message: fmt.Sprintf("DANE: MX %s certificate does not match TLSA record", mxHost)},
+					fmt.Errorf("dane match %s: %w", mxHost, merr)
+			}
+			s.logger().Printf("sending: DANE-secured MX %s — TLSA match OK (chain authenticated by %d TLSA record(s))", mxHost, len(dane.records))
 		}
+	} else if dane.secured {
+		// DANE-secured MX that does not even advertise STARTTLS — a downgrade
+		// attack or a broken DANE deployment. TLS is mandatory under DANE; defer
+		// rather than deliver in the clear (RFC 7672 §2.2).
+		s.logger().Printf("sending: DANE-secured MX %s but STARTTLS not offered — refusing plaintext delivery (deferring)", mxHost)
+		if s.Observer != nil {
+			s.Observer.DANEDeferred(mxHost, "starttls_not_offered")
+		}
+		return SendResult{State: StateDeferred, Message: "DANE: remote does not offer STARTTLS"},
+			fmt.Errorf("dane: %s does not offer STARTTLS: %w", mxHost, ErrDANENoTLS)
 	} else if dec.enforce {
 		// Enforce policy but the MX does not even advertise STARTTLS — this is a
 		// downgrade. Defer (RFC 8461 §5): never deliver in the clear.

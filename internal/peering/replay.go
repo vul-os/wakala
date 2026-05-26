@@ -53,6 +53,31 @@ func NewReplayGuard() *ReplayGuard {
 // (sender, nonce) pair has already been accepted within it. A successful Check
 // records the pair.
 func (g *ReplayGuard) Check(senderID ed25519.PublicKey, nonce []byte, ts time.Time) error {
+	return g.check(senderID, nonce, ts, true)
+}
+
+// Peek performs the same window + dedup validation as Check but does NOT record
+// the (sender, nonce) pair. It is for a two-phase accept where the caller must
+// be able to safely RE-process the identical envelope after a transient failure
+// (e.g. the bucket store-and-forward ingestor, which leaves the object in the
+// bucket and retries on the next poll). The caller commits the pair via Commit
+// only once the envelope has been fully accepted (delivered), so a transient
+// local-delivery failure does not burn the nonce and block a legitimate retry,
+// while a genuine attacker replay is still rejected once the first delivery has
+// committed. HTTP/loopback delivery re-Seals a fresh envelope per attempt and so
+// keeps using the committing Check.
+func (g *ReplayGuard) Peek(senderID ed25519.PublicKey, nonce []byte, ts time.Time) error {
+	return g.check(senderID, nonce, ts, false)
+}
+
+// Commit records a (sender, nonce) pair as accepted, after a successful Peek +
+// delivery. It is idempotent and never returns an error; it exists to pair with
+// Peek for the two-phase accept path.
+func (g *ReplayGuard) Commit(senderID ed25519.PublicKey, nonce []byte, ts time.Time) {
+	_ = g.check(senderID, nonce, ts, true)
+}
+
+func (g *ReplayGuard) check(senderID ed25519.PublicKey, nonce []byte, ts time.Time, record bool) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.seen == nil {
@@ -84,6 +109,10 @@ func (g *ReplayGuard) Check(senderID ed25519.PublicKey, nonce []byte, ts time.Ti
 	key := guardKey(senderID, nonce)
 	if _, dup := g.seen[key]; dup {
 		return ErrReplay
+	}
+	if !record {
+		// Peek: validated but not recorded. The caller commits on success.
+		return nil
 	}
 	// An accepted (sender,nonce) can only be replayed while its timestamp still
 	// falls inside [cur-skew, cur+skew]; the widest such window relative to the

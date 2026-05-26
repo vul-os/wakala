@@ -81,6 +81,23 @@ type config struct {
 	// start; remote pins break on restart — not suitable for production).
 	PeeringKeyDir string
 
+	// RELAY_PEERING_BUCKET_ENABLE: when set, enable the bucket (S3/Tigris)
+	// store-and-forward peer carrier ALONGSIDE the HTTP carrier. A peer whose
+	// descriptor endpoint is "bucket:<prefix>" is reached by writing the
+	// encrypted envelope to that bucket prefix; this node also polls its own
+	// inbox prefix and ingests envelopes through the full §7–§8 receiver checks.
+	//
+	// FLAG: the OSS module ships an IN-MEMORY bucket client only (single-process
+	// / standalone / tests). A real S3/Tigris/MinIO client is a drop-in via the
+	// peering.BucketClient seam — the operator/control plane wires it; the build
+	// stays CGO_ENABLED=0 and pulls no SDK by default.
+	PeeringBucketEnable bool
+
+	// RELAY_PEERING_BUCKET_INBOX: this node's inbox prefix in the shared bucket
+	// (the bare prefix, no "bucket:" scheme). Required when the bucket carrier is
+	// enabled and an ingestor should run.
+	PeeringBucketInbox string
+
 	// Pipeline tuning.
 	// RELAY_WORKERS: number of concurrent delivery goroutines (default: 4)
 	Workers int
@@ -119,6 +136,19 @@ type config struct {
 	// outbound path. Recipient domains publishing an `enforce` policy then
 	// REQUIRE TLS to a policy-matching MX with a valid cert; downgrades defer.
 	MTASTSEnable bool
+
+	// RELAY_DANE_ENABLE: when set, enforce RFC 7672 DANE/TLSA on the outbound
+	// path. An MX publishing a DNSSEC-validated TLSA record at _25._tcp.<mx>
+	// then REQUIRES TLS with a chain matching the TLSA association; a mismatch
+	// or missing TLS DEFERS. DANE takes precedence over MTA-STS for that MX.
+	DANEEnable bool
+
+	// RELAY_DANE_RESOLVER: address (host[:port]) of a DNSSEC-VALIDATING upstream
+	// resolver used for TLSA lookups. DANE security depends on this resolver
+	// validating DNSSEC and on the path to it being trusted (see dane.go). On an
+	// untrusted network point this at a localhost validating resolver. Empty =
+	// auto-detect from /etc/resolv.conf (only safe if that resolver validates).
+	DANEResolver string
 
 	// Warm-IP pool / ramp / blocklist wiring (RELAY-11/RELAY-09/RELAY-12).
 	// RELAY_POOL_IPS: comma-separated list of source IPs to warm and rotate.
@@ -199,6 +229,8 @@ func parseConfig() config {
 		PeeringEnable:                 envBool("RELAY_PEERING_ENABLE", false),
 		PeeringDomains:                envString("RELAY_PEERING_DOMAINS", ""),
 		PeeringKeyDir:                 envString("RELAY_PEERING_KEY_DIR", ""),
+		PeeringBucketEnable:           envBool("RELAY_PEERING_BUCKET_ENABLE", false),
+		PeeringBucketInbox:            envString("RELAY_PEERING_BUCKET_INBOX", ""),
 		Workers:                       envInt("RELAY_WORKERS", 4),
 		SubmitAddr:                    envString("RELAY_SUBMIT_ADDR", ":8025"),
 		SubmitDisabled:                envBool("RELAY_SUBMIT_DISABLE", false),
@@ -208,6 +240,8 @@ func parseConfig() config {
 		DKIMKeyDir:                    envString("RELAY_DKIM_KEY_DIR", ""),
 		SMTPTLSPolicy:                 envString("RELAY_SMTP_TLS_POLICY", "required"),
 		MTASTSEnable:                  envBool("RELAY_MTASTS_ENABLE", false),
+		DANEEnable:                    envBool("RELAY_DANE_ENABLE", false),
+		DANEResolver:                  envString("RELAY_DANE_RESOLVER", ""),
 		PoolIPs:                       envString("RELAY_POOL_IPS", ""),
 		RampEnable:                    envBool("RELAY_RAMP_ENABLE", false),
 		BlocklistEnable:               envBool("RELAY_BLOCKLIST_ENABLE", false),
@@ -403,6 +437,28 @@ func buildSMTPSender(cfg config, signer sending.MessageSigner) *sending.SMTPSend
 		log.Printf("relay: MTA-STS enforcement ENABLED (RFC 8461) — enforce-mode recipient domains require valid TLS or delivery defers")
 	} else {
 		log.Printf("relay: MTA-STS enforcement DISABLED (set RELAY_MTASTS_ENABLE=1 to honor recipient MTA-STS policies)")
+	}
+
+	// DANE/TLSA (RFC 7672) enforcement. When enabled, MX hosts with a
+	// DNSSEC-validated TLSA record require TLS + a matching cert chain or
+	// delivery defers; DANE takes precedence over MTA-STS for that MX.
+	//
+	// FLAG: the resolver only TRUSTS a TLSA answer when the configured upstream
+	// returns the AD (Authenticated Data) bit, i.e. the upstream did the DNSSEC
+	// validation. This build does NOT ship a self-contained validator with a
+	// baked IANA trust anchor — the security depends on the upstream validating
+	// AND the path to it being trusted (RFC 7672 §2.1). Point RELAY_DANE_RESOLVER
+	// at a localhost validating resolver on untrusted networks.
+	if cfg.DANEEnable {
+		s.DANE = sending.NewMiekgDNSSECResolver(cfg.DANEResolver)
+		resolverDesc := cfg.DANEResolver
+		if resolverDesc == "" {
+			resolverDesc = "(auto from /etc/resolv.conf)"
+		}
+		log.Printf("relay: DANE/TLSA enforcement ENABLED (RFC 7672) via validating upstream %s — MX with DNSSEC-validated TLSA requires matching cert or delivery defers", resolverDesc)
+		log.Printf("relay: DANE TRUST NOTE — TLSA answers are trusted only when the upstream sets the AD bit; ensure %s is a DNSSEC-validating resolver reached over a trusted path (no local trust-anchor validation in this build)", resolverDesc)
+	} else {
+		log.Printf("relay: DANE/TLSA enforcement DISABLED (set RELAY_DANE_ENABLE=1 to honor recipient DANE/TLSA records)")
 	}
 
 	// TLS policy: secure by default (required). The operator must explicitly
@@ -626,11 +682,18 @@ func buildResolver(cfg config) (*peering.StaticResolver, error) {
 		log.Printf("relay: no RELAY_PEER_CONFIG set — no static peers; all mail goes via SMTP")
 		return r, nil
 	}
-	n, err := peering.LoadPeersFile(r, cfg.PeerConfig)
+	// Load via the PeerStore so the daemon and the `relay peer` onboarding CLI
+	// share one registry + wire format. The store reads the same PeersFile JSON
+	// LoadPeersFile did and enforces the same key pinning via Add.
+	st, err := peering.OpenPeerStore(cfg.PeerConfig)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("relay: loaded %d peer(s) from %s", n, cfg.PeerConfig)
+	n, err := st.LoadInto(r)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("relay: loaded %d peer(s) from %s (use `relay peer ...` to register/list/revoke)", n, cfg.PeerConfig)
 	return r, nil
 }
 
@@ -720,11 +783,18 @@ func parseDomainSet(s string) map[string]bool {
 }
 
 func main() {
+	// Federation onboarding subcommand: `relay peer <register|list|revoke|whoami>`.
+	// Dispatched before flag parsing so it has its own flag set; it never starts
+	// the daemon.
+	if len(os.Args) > 1 && os.Args[1] == "peer" {
+		os.Exit(runPeerCLI(os.Args[2:]))
+	}
+
 	// CLI flags: --version and --help (flag package provides -help automatically).
 	ver := flag.Bool("version", false, "print version and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "vulos-relay %s\n\n", version)
-		fmt.Fprintf(os.Stderr, "Usage: relay [flags]\n\nFlags:\n")
+		fmt.Fprintf(os.Stderr, "Usage: relay [flags]\n       relay peer <register|list|revoke|whoami> [flags]   (federation onboarding)\n\nFlags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, `
 Environment variables:
@@ -740,6 +810,8 @@ Environment variables:
   RELAY_PEERING_ENABLE         Enable the real HTTPS Vulos↔Vulos peering transport + ingress (1/true)
   RELAY_PEERING_DOMAINS        Comma-list of mail domains THIS relay is authoritative for (peering)
   RELAY_PEERING_KEY_DIR        Directory to persist this node's peer identity keypair (default: ephemeral)
+  RELAY_PEERING_BUCKET_ENABLE  Enable the S3/Tigris store-and-forward peer carrier alongside HTTP (1/true; in-memory client in OSS build)
+  RELAY_PEERING_BUCKET_INBOX   This node's inbox prefix in the shared bucket (required to ingest bucket-delivered envelopes)
   RELAY_WORKERS                Concurrent delivery workers (default: 4)
   RELAY_SUBMIT_ADDR            HTTP submission listener address (default: ":8025")
   RELAY_SUBMIT_DISABLE         Set to 1 to skip binding the submission listener
@@ -750,6 +822,8 @@ Environment variables:
   RELAY_DKIM_KEY_DIR           Directory to persist DKIM keys (default: in-memory)
   RELAY_SMTP_TLS_POLICY        "required" (secure default) or "opportunistic"
   RELAY_MTASTS_ENABLE          Enforce RFC 8461 MTA-STS on outbound SMTP (1/true)
+  RELAY_DANE_ENABLE            Enforce RFC 7672 DANE/TLSA on outbound SMTP (1/true; takes precedence over MTA-STS per MX)
+  RELAY_DANE_RESOLVER          DNSSEC-VALIDATING upstream resolver host[:port] for TLSA lookups (empty = /etc/resolv.conf; use localhost validator on untrusted nets)
   RELAY_SUPPRESSION_ENABLE     Recipient suppression list + DSN/ARF intake (default: on)
   RELAY_POOL_IPS               Comma-list of warm-IP pool entries: ip[@helo[@segment]]
   RELAY_RAMP_ENABLE            Enable warm-up ramp caps over pool IPs (1/true)
@@ -825,6 +899,19 @@ Environment variables:
 		transport = peering.NewLoopbackTransport()
 		log.Printf("relay: peering transport: in-memory loopback (set RELAY_PEERING_ENABLE for cross-process peering)")
 	}
+
+	// Optional bucket (S3/Tigris) store-and-forward carrier, selectable ALONGSIDE
+	// HTTP via a MultiTransport that routes "bucket:<prefix>" endpoints to the
+	// bucket and everything else to the HTTP/loopback transport. The OSS module
+	// ships an in-memory bucket client; a real S3 client drops in via the
+	// peering.BucketClient seam (FLAGGED — no SDK bundled, build stays CGO=0).
+	var bucketClient peering.BucketClient
+	if cfg.PeeringBucketEnable {
+		bucketClient = peering.NewMemBucket()
+		transport = peering.NewMultiTransport(transport, peering.NewBucketTransport(bucketClient))
+		log.Printf("relay: bucket (S3/Tigris) peer carrier ENABLED alongside HTTP — bucket:<prefix> endpoints route to the object store")
+		log.Printf("relay: bucket carrier NOTE — OSS build uses an IN-MEMORY bucket client (standalone/tests); wire a real S3/Tigris client via peering.BucketClient for cross-host store-and-forward")
+	}
 	peerSender := peering.NewPeerSender(peerIdentity, resolver, transport)
 
 	// Wire RoutingSender: peer path wraps SMTP path.
@@ -858,6 +945,26 @@ Environment variables:
 		}
 		log.Printf("relay: peering ingress authoritative for domains %v (identity_pub=%s)",
 			domList, peering.EncodeKey(peerIdentity.SignPub))
+	}
+
+	// Start the bucket ingestor: poll this node's inbox prefix and run each
+	// stored envelope through the SAME §7–§8 receiver checks (two-phase replay
+	// so a transient local failure is retried, not lost). Shares the same
+	// in-memory bucket client as the bucket transport in this process; with a
+	// real S3 client wired via peering.BucketClient it becomes cross-host.
+	if cfg.PeeringBucketEnable && peerReceiver != nil && bucketClient != nil {
+		if cfg.PeeringBucketInbox == "" {
+			log.Printf("relay: RELAY_PEERING_BUCKET_ENABLE set but RELAY_PEERING_BUCKET_INBOX is empty — bucket carrier can SEND to peers but will NOT ingest (no inbox prefix)")
+		} else {
+			ingestor := &peering.BucketIngestor{
+				Client:   bucketClient,
+				Prefix:   cfg.PeeringBucketInbox,
+				Receiver: peerReceiver,
+				Logf:     log.Printf,
+			}
+			go ingestor.Run(ctx)
+			log.Printf("relay: bucket ingestor polling inbox prefix %q", cfg.PeeringBucketInbox)
+		}
 	}
 
 	// Build the recipient suppression list (DSN hard-bounce + ARF/FBL

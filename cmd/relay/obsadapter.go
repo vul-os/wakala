@@ -54,6 +54,14 @@ func (metricsObserver) DKIMSigned() {
 	obs.DKIMSignCount.Inc()
 }
 
+func (metricsObserver) DANEEnforced(_ string) {
+	obs.DANEEvents.WithLabelValues("enforced").Inc()
+}
+
+func (metricsObserver) DANEDeferred(_ string, _ string) {
+	obs.DANEEvents.WithLabelValues("deferred").Inc()
+}
+
 // ── relay.SubmitObserver ──────────────────────────────────────────────────────
 
 func (metricsObserver) Submission(ip, outcome string) {

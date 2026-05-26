@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 // DeliverySink receives a successfully-opened, fully-authenticated peer message
@@ -141,16 +142,38 @@ func (rc *Receiver) Accept(ctx context.Context, wire []byte) error {
 		return nil
 	}
 
-	// Mail envelope path.
+	// Mail envelope path (committing replay check — each HTTP/loopback retry is
+	// a freshly-sealed envelope).
+	return rc.acceptMail(ctx, wire, false)
+}
+
+// AcceptStored processes one inbound wire blob from a store-and-forward carrier
+// (the bucket ingestor) using a TWO-PHASE replay check: the §7 replay pair is
+// only committed after the envelope is successfully delivered locally. This
+// makes a transient local-delivery failure retryable (the carrier re-presents
+// the identical stored object) without burning the nonce, while a genuine
+// attacker replay is still rejected once a prior delivery has committed. Side
+// channels (reputation/rotation) are handled identically to Accept.
+func (rc *Receiver) AcceptStored(ctx context.Context, wire []byte) error {
+	if IsReputationFrame(wire) || IsRotationFrame(wire) {
+		return rc.Accept(ctx, wire)
+	}
+	return rc.acceptMail(ctx, wire, true)
+}
+
+// acceptMail runs the mail-envelope receiver path. When deferReplay is true the
+// replay pair is committed only on successful delivery (two-phase).
+func (rc *Receiver) acceptMail(ctx context.Context, wire []byte, deferReplay bool) error {
 	env, err := UnmarshalEnvelope(wire)
 	if err != nil {
 		rc.observeReject("corrupt")
 		return ErrCorrupt
 	}
 	plain, err := Open(env, OpenParams{
-		Receiver:         rc.Identity,
-		AuthorizedDomain: rc.Authorized,
-		PinnedSenderKey:  rc.PinnedKey,
+		Receiver:          rc.Identity,
+		AuthorizedDomain:  rc.Authorized,
+		PinnedSenderKey:   rc.PinnedKey,
+		DeferReplayCommit: deferReplay,
 	}, rc.Guard)
 	if err != nil {
 		rc.logf("peering: rejected envelope from %q: %v", env.Header.SenderDomain, err)
@@ -160,10 +183,17 @@ func (rc *Receiver) Accept(ctx context.Context, wire []byte) error {
 
 	// All §7–§8 checks passed; hand to local delivery.
 	if err := rc.Sink.Deliver(ctx, env.Header.MailFrom, env.Header.RcptTo, plain); err != nil {
-		// Local delivery failed — transient; the sending peer should retry.
+		// Local delivery failed — transient; the sending peer should retry. With
+		// deferReplay the nonce was NOT committed, so the retry is accepted.
 		rc.logf("peering: local delivery failed for %q: %v", env.Header.MailFrom, err)
 		rc.observeReject("local_delivery_failed")
 		return err
+	}
+	// Commit the replay pair now that delivery succeeded (two-phase path only;
+	// the committing check already recorded it in the one-phase path).
+	if deferReplay && rc.Guard != nil {
+		h := env.Header
+		rc.Guard.Commit(h.SenderIdentityPub, h.Nonce, time.Unix(h.Timestamp, 0))
 	}
 	if rc.Observer != nil {
 		rc.Observer.PeerDelivered()
