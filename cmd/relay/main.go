@@ -143,12 +143,21 @@ type config struct {
 	// or missing TLS DEFERS. DANE takes precedence over MTA-STS for that MX.
 	DANEEnable bool
 
-	// RELAY_DANE_RESOLVER: address (host[:port]) of a DNSSEC-VALIDATING upstream
-	// resolver used for TLSA lookups. DANE security depends on this resolver
-	// validating DNSSEC and on the path to it being trusted (see dane.go). On an
-	// untrusted network point this at a localhost validating resolver. Empty =
-	// auto-detect from /etc/resolv.conf (only safe if that resolver validates).
+	// RELAY_DANE_RESOLVER: address (host[:port]) of an upstream recursive
+	// resolver used for TLSA lookups. With the default validating mode this need
+	// only be a recursive *transport* — the relay verifies the DNSSEC chain
+	// locally against the baked IANA root anchor (see dane_validating.go). With
+	// RELAY_DANE_VALIDATE=ad-bit it must itself be a DNSSEC-validating resolver
+	// reached over a trusted path. Empty = auto-detect from /etc/resolv.conf.
 	DANEResolver string
+
+	// RELAY_DANE_VALIDATE: DNSSEC validation mode for DANE.
+	//   "local"  (default) — self-contained validator: verify the DNSSEC chain
+	//                          from the baked IANA root trust anchor down to the
+	//                          TLSA RRSIG locally (does not trust the upstream).
+	//   "ad-bit"           — legacy: trust the upstream resolver's AD bit only.
+	//                          Requires a validating resolver on a trusted path.
+	DANEValidate string
 
 	// Warm-IP pool / ramp / blocklist wiring (RELAY-11/RELAY-09/RELAY-12).
 	// RELAY_POOL_IPS: comma-separated list of source IPs to warm and rotate.
@@ -242,6 +251,7 @@ func parseConfig() config {
 		MTASTSEnable:                  envBool("RELAY_MTASTS_ENABLE", false),
 		DANEEnable:                    envBool("RELAY_DANE_ENABLE", false),
 		DANEResolver:                  envString("RELAY_DANE_RESOLVER", ""),
+		DANEValidate:                  envString("RELAY_DANE_VALIDATE", "local"),
 		PoolIPs:                       envString("RELAY_POOL_IPS", ""),
 		RampEnable:                    envBool("RELAY_RAMP_ENABLE", false),
 		BlocklistEnable:               envBool("RELAY_BLOCKLIST_ENABLE", false),
@@ -443,20 +453,36 @@ func buildSMTPSender(cfg config, signer sending.MessageSigner) *sending.SMTPSend
 	// DNSSEC-validated TLSA record require TLS + a matching cert chain or
 	// delivery defers; DANE takes precedence over MTA-STS for that MX.
 	//
-	// FLAG: the resolver only TRUSTS a TLSA answer when the configured upstream
-	// returns the AD (Authenticated Data) bit, i.e. the upstream did the DNSSEC
-	// validation. This build does NOT ship a self-contained validator with a
-	// baked IANA trust anchor — the security depends on the upstream validating
-	// AND the path to it being trusted (RFC 7672 §2.1). Point RELAY_DANE_RESOLVER
-	// at a localhost validating resolver on untrusted networks.
+	// Two validation modes (RELAY_DANE_VALIDATE):
+	//   "local" (default): self-contained validator — the relay verifies the
+	//      DNSSEC chain from a baked IANA root trust anchor down to the TLSA
+	//      RRSIG locally; the upstream resolver is just a recursive transport and
+	//      need not be trusted to validate. PRESENCE of a TLSA record is fully
+	//      chain-verified before TLS is mandated (RFC 7672 §2.1).
+	//   "ad-bit": legacy — trust the upstream resolver's AD bit only. The path to
+	//      that validating resolver must itself be trusted; use a localhost
+	//      validator on untrusted networks.
 	if cfg.DANEEnable {
-		s.DANE = sending.NewMiekgDNSSECResolver(cfg.DANEResolver)
 		resolverDesc := cfg.DANEResolver
 		if resolverDesc == "" {
 			resolverDesc = "(auto from /etc/resolv.conf)"
 		}
-		log.Printf("relay: DANE/TLSA enforcement ENABLED (RFC 7672) via validating upstream %s — MX with DNSSEC-validated TLSA requires matching cert or delivery defers", resolverDesc)
-		log.Printf("relay: DANE TRUST NOTE — TLSA answers are trusted only when the upstream sets the AD bit; ensure %s is a DNSSEC-validating resolver reached over a trusted path (no local trust-anchor validation in this build)", resolverDesc)
+		switch strings.ToLower(strings.TrimSpace(cfg.DANEValidate)) {
+		case "ad-bit", "adbit", "ad":
+			s.DANE = sending.NewMiekgDNSSECResolver(cfg.DANEResolver)
+			log.Printf("relay: DANE/TLSA enforcement ENABLED (RFC 7672), AD-BIT mode via validating upstream %s — MX with DNSSEC-validated TLSA requires matching cert or delivery defers", resolverDesc)
+			log.Printf("relay: DANE TRUST NOTE (ad-bit) — TLSA answers are trusted only when the upstream sets the AD bit; ensure %s is a DNSSEC-validating resolver reached over a trusted path", resolverDesc)
+		default: // "local" and anything unrecognized → secure default
+			vr, verr := sending.NewValidatingDNSSECResolver(cfg.DANEResolver)
+			if verr != nil {
+				log.Fatalf("relay: DANE validating resolver init (baked root anchor): %v", verr)
+			}
+			s.DANE = vr
+			if cfg.DANEValidate != "" && strings.ToLower(strings.TrimSpace(cfg.DANEValidate)) != "local" {
+				log.Printf("relay: unrecognized RELAY_DANE_VALIDATE=%q, using secure default 'local'", cfg.DANEValidate)
+			}
+			log.Printf("relay: DANE/TLSA enforcement ENABLED (RFC 7672), LOCAL-VALIDATION mode — DNSSEC chain verified from the baked IANA root trust anchor to the TLSA RRSIG; upstream %s used only as a recursive transport", resolverDesc)
+		}
 	} else {
 		log.Printf("relay: DANE/TLSA enforcement DISABLED (set RELAY_DANE_ENABLE=1 to honor recipient DANE/TLSA records)")
 	}
@@ -812,6 +838,12 @@ Environment variables:
   RELAY_PEERING_KEY_DIR        Directory to persist this node's peer identity keypair (default: ephemeral)
   RELAY_PEERING_BUCKET_ENABLE  Enable the S3/Tigris store-and-forward peer carrier alongside HTTP (1/true; in-memory client in OSS build)
   RELAY_PEERING_BUCKET_INBOX   This node's inbox prefix in the shared bucket (required to ingest bucket-delivered envelopes)
+  RELAY_BUCKET_S3_ENDPOINT     S3/Tigris endpoint host (e.g. t3.storage.dev); enables the REAL S3 bucket client (else in-memory)
+  RELAY_BUCKET_S3_BUCKET       S3 bucket name (required when S3 endpoint is set)
+  RELAY_BUCKET_S3_REGION       S3 region (default: "auto"; works for Tigris)
+  RELAY_BUCKET_S3_ACCESS_KEY   S3 access key id (required when S3 endpoint is set)
+  RELAY_BUCKET_S3_SECRET_KEY   S3 secret access key (required when S3 endpoint is set)
+  RELAY_BUCKET_S3_INSECURE     Set 1/true to use plain HTTP to the S3 endpoint (default: HTTPS)
   RELAY_WORKERS                Concurrent delivery workers (default: 4)
   RELAY_SUBMIT_ADDR            HTTP submission listener address (default: ":8025")
   RELAY_SUBMIT_DISABLE         Set to 1 to skip binding the submission listener
@@ -823,7 +855,8 @@ Environment variables:
   RELAY_SMTP_TLS_POLICY        "required" (secure default) or "opportunistic"
   RELAY_MTASTS_ENABLE          Enforce RFC 8461 MTA-STS on outbound SMTP (1/true)
   RELAY_DANE_ENABLE            Enforce RFC 7672 DANE/TLSA on outbound SMTP (1/true; takes precedence over MTA-STS per MX)
-  RELAY_DANE_RESOLVER          DNSSEC-VALIDATING upstream resolver host[:port] for TLSA lookups (empty = /etc/resolv.conf; use localhost validator on untrusted nets)
+  RELAY_DANE_RESOLVER          Upstream recursive resolver host[:port] for TLSA lookups (empty = /etc/resolv.conf; ad-bit mode needs a validating resolver on a trusted path)
+  RELAY_DANE_VALIDATE          DNSSEC mode: "local" (default; verify chain to baked IANA root anchor) or "ad-bit" (trust upstream AD bit)
   RELAY_SUPPRESSION_ENABLE     Recipient suppression list + DSN/ARF intake (default: on)
   RELAY_POOL_IPS               Comma-list of warm-IP pool entries: ip[@helo[@segment]]
   RELAY_RAMP_ENABLE            Enable warm-up ramp caps over pool IPs (1/true)
@@ -907,10 +940,30 @@ Environment variables:
 	// peering.BucketClient seam (FLAGGED — no SDK bundled, build stays CGO=0).
 	var bucketClient peering.BucketClient
 	if cfg.PeeringBucketEnable {
-		bucketClient = peering.NewMemBucket()
+		// Select the bucket backend: a real S3/Tigris/MinIO client when
+		// RELAY_BUCKET_S3_ENDPOINT (+ bucket/keys) is configured, else the
+		// in-memory client (standalone/tests). The real client is pure-Go
+		// (minio-go), so the build stays CGO_ENABLED=0.
+		s3cfg, useS3, s3err := peering.S3ConfigFromEnv()
+		if s3err != nil {
+			log.Fatalf("relay: bucket S3 config: %v", s3err)
+		}
+		if useS3 {
+			s3, berr := peering.NewS3Bucket(s3cfg)
+			if berr != nil {
+				log.Fatalf("relay: bucket S3 client: %v", berr)
+			}
+			bucketClient = s3
+			scheme := "https"
+			if !s3cfg.UseSSL {
+				scheme = "http"
+			}
+			log.Printf("relay: bucket peer carrier ENABLED alongside HTTP — REAL S3/Tigris client (%s://%s, bucket=%q, region=%q) for cross-host store-and-forward", scheme, s3cfg.Endpoint, s3cfg.Bucket, s3cfg.Region)
+		} else {
+			bucketClient = peering.NewMemBucket()
+			log.Printf("relay: bucket peer carrier ENABLED alongside HTTP — IN-MEMORY client (standalone/tests); set RELAY_BUCKET_S3_ENDPOINT (+ _BUCKET/_ACCESS_KEY/_SECRET_KEY) for a real S3/Tigris backend")
+		}
 		transport = peering.NewMultiTransport(transport, peering.NewBucketTransport(bucketClient))
-		log.Printf("relay: bucket (S3/Tigris) peer carrier ENABLED alongside HTTP — bucket:<prefix> endpoints route to the object store")
-		log.Printf("relay: bucket carrier NOTE — OSS build uses an IN-MEMORY bucket client (standalone/tests); wire a real S3/Tigris client via peering.BucketClient for cross-host store-and-forward")
 	}
 	peerSender := peering.NewPeerSender(peerIdentity, resolver, transport)
 

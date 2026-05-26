@@ -29,30 +29,31 @@ import (
 // TLSA match instead of, or in addition to, the WebPKI name check). When no
 // usable TLSA record exists for an MX, the MTA-STS decision still applies.
 //
-// ── DNSSEC dependency (FLAGGED) ─────────────────────────────────────────────
+// ── DNSSEC validation (two modes behind the DNSSECResolver seam) ─────────────
 // DANE's security rests ENTIRELY on the TLSA lookup being DNSSEC-validated: an
 // unauthenticated TLSA record is attacker-forgeable and MUST NOT be trusted
-// (RFC 7672 §2.1). We do NOT ship a full local validating resolver with a baked
-// IANA trust anchor in this build. Instead:
+// (RFC 7672 §2.1). The matching core (matchTLSA) is mode-agnostic; the seam
+// supplies the validated TLSA set. Two production validators exist:
 //
-//   - TLSA lookup + RFC 7672 certificate matching are implemented for real
-//     (matchTLSA, against a fake resolver in tests and a real resolver in prod).
-//   - The DNSSEC validation itself is delegated to a *validating upstream
-//     resolver* (e.g. a local unbound/knot-resolver, or 1.1.1.1/8.8.8.8 reached
-//     over a trusted channel) via the AD (Authenticated Data) bit: the real
-//     resolver sets DO=1, and treats a TLSA answer as usable ONLY when the
-//     upstream returns AD=1. If AD is not set, the records are treated as
-//     ABSENT (no DANE) rather than trusted — fail safe.
+//   - ValidatingDNSSECResolver (DEFAULT, dane_validating.go): a self-contained
+//     validator that verifies the DNSSEC chain from a BAKED IANA root trust
+//     anchor (dane_anchor.go) down to the TLSA RRSIG — root DS (baked) → root
+//     DNSKEY → (delegation DS → zone DNSKEY)* → TLSA RRSIG, using miekg/dns
+//     RRSIG.Verify and DNSKEY.ToDS. The upstream resolver is just a recursive
+//     TRANSPORT and need not be trusted to validate. The PRESENCE of a TLSA
+//     record is fully chain-verified before TLS is mandated. It does NOT do
+//     NSEC/NSEC3 authenticated-denial proofs, so a *missing* TLSA / *insecure
+//     delegation* is taken at face value as "no DANE" (opportunistic posture) —
+//     this is the one residual trust assumption and matches the AD-bit path.
 //
-// OPERATOR-VISIBLE LIMITATION / TRUST-ANCHOR DEPTH: relying on the upstream AD
-// bit means the path to the validating resolver must itself be trusted (RFC
-// 7672 §2.1 "the validating resolver is part of the trusted computing base").
-// On an untrusted network this should be a localhost validating resolver. A
-// future hardening is a fully self-contained validating resolver with a baked,
-// rotatable IANA KSK trust anchor; that is intentionally deferred here and the
-// dependency is surfaced via MiekgDNSSECResolver.RequireAD + the start-up log.
-// This seam (DNSSECResolver) lets that stronger validator drop in without
-// touching the matching core.
+//   - MiekgDNSSECResolver (legacy/opt-in, dane_resolver.go): delegates DNSSEC
+//     validation to a *validating upstream resolver* via the AD bit. Trust then
+//     rests on the upstream validating AND the path to it being trusted (RFC
+//     7672 §2.1 "the validating resolver is part of the trusted computing
+//     base"); on untrusted networks point it at a localhost validator.
+//
+// The daemon defaults to the local-validation mode (RELAY_DANE_VALIDATE=local)
+// and exposes ad-bit as an explicit opt-in.
 
 // TLSA usage values (RFC 6698 §2.1.1). DANE-EE and DANE-TA are the only modes
 // permitted for SMTP by RFC 7672 §3.1.3; the PKIX-* usages (0/1) are explicitly
