@@ -8,13 +8,8 @@
 // We treat signaling payloads as JSON envelopes:
 //   { kind: 'sdp'|'ice'|'call-meta', to?: peerId, from: peerId, data: {...} }
 import * as _fabricMod from '../fabric.js'
-
-class Emitter {
-  constructor() { this._h = {} }
-  on(ev, cb) { (this._h[ev] = this._h[ev] || []).push(cb); return () => this.off(ev, cb) }
-  off(ev, cb) { this._h[ev] = (this._h[ev] || []).filter(f => f !== cb) }
-  emit(ev, ...a) { (this._h[ev] || []).forEach(f => { try { f(...a) } catch (e) { console.error(e) } }) }
-}
+import { Emitter } from './emitter.js'
+import { fetchIce } from './ice.js'
 
 // BroadcastChannel fallback signaling (in-browser same-origin multi-tab).
 function bcSession(sessionId, identity) {
@@ -80,15 +75,9 @@ export async function joinSignalingSession(sessionId, identity) {
 
 // Fetch TURN/STUN credentials from the cloud (OFFICE-20 path) with a sane
 // public-STUN default. Server endpoint mirrors what the OS fabric uses.
-export async function fetchIceServers() {
-  try {
-    const r = await fetch('/api/turn/credentials', { credentials: 'include' })
-    if (r.ok) {
-      const body = await r.json()
-      if (Array.isArray(body.iceServers) && body.iceServers.length) return body.iceServers
-    }
-  } catch { /* ignore — fall through */ }
-  return [
-    { urls: ['stun:stun.l.google.com:19302'] },
-  ]
+export function fetchIceServers() {
+  return fetchIce('/api/turn/credentials', {
+    responseKey: 'iceServers',
+    fetchOptions: { credentials: 'include' },
+  })
 }

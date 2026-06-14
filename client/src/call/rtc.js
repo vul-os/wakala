@@ -39,13 +39,7 @@
 //   call.leave()                    — tears down
 
 import { joinSignalingSession, fetchIceServers } from './fabricSignaling.js'
-
-class Emitter {
-  constructor() { this._h = {} }
-  on(ev, cb) { (this._h[ev] = this._h[ev] || []).push(cb); return () => this.off(ev, cb) }
-  off(ev, cb) { this._h[ev] = (this._h[ev] || []).filter(f => f !== cb) }
-  emit(ev, ...a) { (this._h[ev] || []).forEach(f => { try { f(...a) } catch (e) { console.error(e) } }) }
-}
+import { Emitter } from './emitter.js'
 
 const ICE_FAIL_GRACE_MS = 6000
 const ACTIVE_SPEAKER_INTERVAL_MS = 400

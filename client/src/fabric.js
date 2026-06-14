@@ -26,6 +26,7 @@
  */
 
 import { SignalingClient } from './signaling.js'
+import { fetchIce } from './call/ice.js'
 
 const DATA_CHANNEL_LABEL = 'vulos-office-fabric'
 const RELAY_TIMEOUT_MS = 8_000        // give P2P this long before falling back
@@ -121,16 +122,11 @@ export class FabricClient extends EventTarget {
   // ─── ICE / TURN ────────────────────────────────────────────────────────────
 
   async _fetchICE() {
-    try {
-      const headers = this._authToken ? { Authorization: `Bearer ${this._authToken}` } : {}
-      const res = await fetch(this._iceUrl, { headers })
-      if (!res.ok) throw new Error(`ICE fetch ${res.status}`)
-      const body = await res.json()
-      return body.ice_servers || []
-    } catch (err) {
-      console.warn('[fabric] ICE fetch failed, using STUN only:', err.message)
-      return [{ urls: ['stun:stun.l.google.com:19302'] }]
-    }
+    const headers = this._authToken ? { Authorization: `Bearer ${this._authToken}` } : {}
+    return fetchIce(this._iceUrl, {
+      responseKey: 'ice_servers',
+      fetchOptions: { headers },
+    })
   }
 
   // ─── Peer management ───────────────────────────────────────────────────────
