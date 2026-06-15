@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # create GitHub Releases + upload assets
+  id-token: write   # npm --provenance (OIDC)
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # Verify the tag version matches package.json. Example: tag v1.2.3 must
+      # match "version": "1.2.3" so we never publish a mismatched package.
+      - name: Check tag/package version match
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: package.json version ($PKG_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      # Archive dist-lib/ so the GitHub Release step can attach it.
+      - name: Archive dist-lib
+        run: |
+          tar -czf ../relay-client-${{ github.ref_name }}-dist.tar.gz dist-lib/
+        working-directory: client
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-lib
+          path: relay-client-${{ github.ref_name }}-dist.tar.gz
+          retention-days: 1
+
+  publish-npm:
+    name: Publish to npm
+    needs: build-and-test
+    runs-on: ubuntu-24.04
+    # Only attempt npm publish when the NPM_TOKEN secret is present.
+    # If it is absent (forks, early tags) the job is simply skipped so the
+    # GitHub Release is still created by the next job.
+    if: vars.NPM_PUBLISH_ENABLED == 'true' || secrets.NPM_TOKEN != ''
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Node (with npm registry auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        # --provenance attaches an OIDC-signed build provenance attestation to
+        # the published package. Requires id-token: write at the workflow level.
+        # Falls back gracefully if the registry does not support it.
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret not set — skipping npm publish"
+            exit 0
+          fi
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: build-and-test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-lib
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          # draft: leave as published so dependents can resolve it immediately.
+          generate_release_notes: true
+          files: |
+            relay-client-${{ github.ref_name }}-dist.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

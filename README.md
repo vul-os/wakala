@@ -4,6 +4,7 @@
 
 **`@vulos/relay-client` — the peer-fabric client SDK for Vulos web surfaces**
 
+[![npm](https://img.shields.io/npm/v/%40vulos%2Frelay-client?label=%40vulos%2Frelay-client)](https://www.npmjs.com/package/@vulos/relay-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/vul-os/vulos-relay/pulls)
 
@@ -42,8 +43,33 @@ It talks to the **host application's own peering backend** (e.g. the Vulos OS
 npm install @vulos/relay-client   # or file:../vulos-relay/client in the monorepo
 ```
 
-See [`client/`](client/) for the source, build (`npm run build`), and tests
-(`npm test`).
+See [`client/`](client/) for the full API, subpath exports, and migration notes.
+
+## Versioning and releases
+
+This package follows [Semantic Versioning](https://semver.org/).
+
+Releases are cut by pushing a `v*` tag:
+
+```bash
+# bump version in client/package.json first, then:
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The [release workflow](.github/workflows/release.yml) will:
+
+1. Install, build, and run tests.
+2. Verify the tag matches the version in `client/package.json`.
+3. Publish to npm (`--access public --provenance`) if `NPM_TOKEN` is set as a
+   repository secret.
+4. Create a GitHub Release with the `dist-lib/` tarball attached.
+
+npm publish is gated on the `NPM_TOKEN` secret — if it is absent the GitHub
+Release is still created and the workflow succeeds.
+
+See [CHANGELOG.md](CHANGELOG.md) for the history and [ROADMAP.md](ROADMAP.md)
+for planned directions.
 
 ## License
 

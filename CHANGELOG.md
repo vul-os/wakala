@@ -1,0 +1,61 @@
+# Changelog
+
+All notable changes to `@vulos/relay-client` are documented here.
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)  
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+---
+
+## [1.0.0] — 2026-06-15
+
+### Added
+
+- **`@vulos/relay-client` JS SDK** — the repo's sole deliverable after the Go
+  daemon retirement. Shared by every Vulos web surface (the OS shell,
+  `vulos-office`, `vulos-mail`).
+- **Endpoint failover** (`/endpoints`) — cloud ↔ LAN backend selection with
+  health probing, configurable localStorage key prefix, and configurable health
+  path per consumer (`configure()`).
+- **Offline bootstrap** (`/offlineBootstrap`) — offline-first shell boot with
+  an IndexedDB write queue, optional `tierHint` callback for per-surface Pro
+  tier injection.
+- **WebRTC signaling** (`/signaling`) — `SignalingClient` over the host's
+  `/api/peering/stream` WebSocket with reconnect and exponential back-off.
+- **Fabric sessions** (`/fabric`) — `FabricClient` providing per-document P2P
+  data channels with a relay-circuit fallback.
+- **Presence & live cursors** (`/presence`, `/useLiveCursors`) —
+  `PresenceManager`, `usePresence` React hook, and `useLiveCursors` for
+  multi-peer awareness.
+- **Call** (`/call`) — `createCall` (mesh WebRTC) + `createLiveKitRoom`
+  (SFU/Pro) with shared `Emitter` and ICE-fetch helpers; Bearer JWT fix on
+  relay pickup.
+- **Round-trip check** (`/roundTripCheck`) — `runRoundTripChecks` fixture
+  runner for integration testing.
+- Dual ESM + CJS build via `vite build --config vite.config.lib.js`.
+- Release pipeline: `.github/workflows/release.yml` — tag `v*` triggers build
+  + test, optional npm publish with OIDC provenance, and a GitHub Release
+  attaching the `dist-lib/` tarball.
+
+### Changed
+
+- **Go mail-delivery daemon retired** (commit `54769ad`). The standalone
+  SMTP/DKIM/MTA-STS/federation daemon that previously lived in this repo has
+  been removed. Mail delivery is now owned by
+  [vulos-mail](https://github.com/vul-os/vulos-mail) (a Mox fork). The
+  `vulos-relay` repo is now a pure JS SDK.
+- Deduplicated `src/lib/{endpoints,offlineBootstrap,signaling,fabric,presence,
+  call,useLiveCursors,roundTripCheck}.js` that had been copy-pasted across
+  `vulos`, `vulos-office`, and `vulos-mail` into this single package
+  (`RELAY-CLIENT-01`).
+
+### Security
+
+- Call: Bearer JWT was being overwritten by a dead-code path before relay
+  pickup; fixed (commit `ae25886`).
+- CRDT quorum-voting: added per-instance signed quorum to block multi-forged
+  origin attacks (`CRDT-QUORUM-01`); observation GC added.
+
+---
+
+[1.0.0]: https://github.com/vul-os/vulos-relay/releases/tag/v1.0.0
