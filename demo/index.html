@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>@vulos/relay-client — Interactive Demo</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3e;
+      --accent: #6c63ff;
+      --accent2: #00c9a7;
+      --warn: #f7b731;
+      --err: #ff4757;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --radius: 10px;
+      --font: 'Inter', system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px 24px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    header p {
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+      margin: 4px;
+    }
+
+    .badge-npm  { background: #cc3534; color: #fff; }
+    .badge-mit  { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .badge-sdk  { background: #1e293b; color: var(--accent2); border: 1px solid #1e3a32; }
+
+    .badges { margin: 12px 0; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* Endpoint failover panel */
+
+    .endpoint-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 7px;
+      background: #13151f;
+      border: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+
+    .endpoint-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      min-width: 48px;
+    }
+
+    .endpoint-url {
+      font-family: 'SFMono-Regular', 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--text);
+      flex: 1;
+      padding: 0 10px;
+      word-break: break-all;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-green  { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+    .dot-red    { background: var(--err); }
+    .dot-yellow { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+    .dot-gray   { background: #4a5568; }
+
+    .selected-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: 1px solid #1e3a32;
+      background: #0d2620;
+      margin: 12px 0 16px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .selected-chip .label { color: var(--muted); font-family: var(--font); }
+
+    .btn {
+      padding: 7px 14px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-sm { padding: 5px 11px; font-size: 11px; }
+
+    .probe-log {
+      background: #0b0d13;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px 12px;
+      font-family: monospace;
+      font-size: 11px;
+      height: 120px;
+      overflow-y: auto;
+      color: var(--muted);
+    }
+
+    .probe-log .ts { color: #4a5568; }
+    .probe-log .ok { color: var(--accent2); }
+    .probe-log .fail { color: var(--err); }
+    .probe-log .info { color: var(--accent); }
+    .probe-log .warn { color: var(--warn); }
+
+    /* Presence panel */
+
+    .roster {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .peer-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      background: #13151f;
+      border: 1px solid var(--border);
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+    .avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .peer-name { font-size: 13px; font-weight: 500; }
+    .peer-status { font-size: 10px; color: var(--muted); font-family: monospace; }
+    .self-tag {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 99px;
+      background: #1e293b;
+      color: #64748b;
+      margin-left: 2px;
+    }
+
+    /* Fabric state */
+
+    .fabric-states {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .peer-state-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 7px;
+      background: #13151f;
+      border: 1px solid var(--border);
+    }
+
+    .state-badge {
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .state-connected   { background: #0d2620; color: var(--accent2); border: 1px solid #1e3a32; }
+    .state-connecting  { background: #1e1a0a; color: var(--warn);    border: 1px solid #3a2a0a; }
+    .state-relay       { background: #1a0e1e; color: #c084fc;        border: 1px solid #3a1a4a; }
+    .state-disconnected{ background: #1a0e0e; color: var(--err);     border: 1px solid #3a1010; }
+
+    /* Message log */
+
+    .msg-log {
+      background: #0b0d13;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px 12px;
+      font-family: monospace;
+      font-size: 11px;
+      height: 100px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+
+    .msg-log .from { color: var(--accent); }
+    .msg-log .data { color: var(--text); }
+    .msg-log .ts { color: #4a5568; }
+
+    .send-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .send-row input {
+      flex: 1;
+      background: #0b0d13;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+    }
+
+    .send-row input:focus { border-color: var(--accent); }
+
+    /* Architecture diagram */
+
+    .diagram-card {
+      grid-column: 1 / -1;
+    }
+
+    .diagram-wrap {
+      background: #0b0d13;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 20px;
+      overflow-x: auto;
+      text-align: center;
+    }
+
+    svg.diagram {
+      max-width: 100%;
+      height: auto;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 36px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+
+    /* Demo-ready signal for Playwright */
+    .demo-ready-marker { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><span>@vulos/relay-client</span> — Interactive Demo</h1>
+  <p>Peer-fabric SDK for Vulos web surfaces: endpoint failover, offline bootstrap, WebRTC signaling, presence &amp; live cursors</p>
+  <div class="badges">
+    <span class="badge badge-npm">npm v1.0.0</span>
+    <span class="badge badge-mit">MIT</span>
+    <span class="badge badge-sdk">headless JS SDK</span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- ── Endpoint Failover Panel ────────────────────────────── -->
+  <div class="card" id="panel-endpoints">
+    <div class="card-title">Endpoint Failover</div>
+
+    <div class="endpoint-row">
+      <span class="endpoint-label">Cloud</span>
+      <span class="endpoint-url" id="ep-cloud">https://box.vulos.org</span>
+      <span class="dot" id="dot-cloud"></span>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="endpoint-label">LAN</span>
+      <span class="endpoint-url" id="ep-lan">https://box.local.vulos.org</span>
+      <span class="dot" id="dot-lan"></span>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="endpoint-label">Same-origin</span>
+      <span class="endpoint-url" style="color:var(--muted)">(fallback)</span>
+      <span class="dot dot-green"></span>
+    </div>
+
+    <div class="selected-chip">
+      <span class="label">Selected:</span>
+      <span id="ep-selected" style="color:var(--accent2)">probing…</span>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button class="btn btn-primary btn-sm" onclick="runProbe()">Force re-probe</button>
+      <button class="btn btn-sm" style="background:#1a1d27;border:1px solid var(--border);color:var(--text);" onclick="simulateFailover()">Simulate cloud failure</button>
+    </div>
+
+    <div class="probe-log" id="probe-log"></div>
+  </div>
+
+  <!-- ── Presence / Fabric Panel ───────────────────────────── -->
+  <div class="card" id="panel-presence">
+    <div class="card-title">Fabric &amp; Presence (simulated session)</div>
+
+    <div class="roster" id="roster"></div>
+
+    <div class="fabric-states" id="fabric-states"></div>
+
+    <div class="msg-log" id="msg-log"></div>
+
+    <div class="send-row">
+      <input id="msg-input" type="text" placeholder="Broadcast message to all peers…" value='{"op":"insert","pos":0,"text":"hello"}' />
+      <button class="btn btn-primary btn-sm" onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+  <!-- ── Architecture Diagram ──────────────────────────────── -->
+  <div class="card diagram-card" id="panel-arch">
+    <div class="card-title">Architecture — signaling &amp; relay-fallback flow</div>
+    <div class="diagram-wrap">
+      <!-- SVG architecture / sequence diagram, self-contained -->
+      <svg class="diagram" viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg"
+           style="font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px;">
+
+        <defs>
+          <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#6c63ff"/>
+          </marker>
+          <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#00c9a7"/>
+          </marker>
+          <marker id="arr3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#c084fc"/>
+          </marker>
+        </defs>
+
+        <!-- Lifeline headers -->
+        <rect x="20"  y="10" width="120" height="32" rx="6" fill="#1a1d27" stroke="#2a2d3e"/>
+        <text x="80"  y="31" fill="#e2e8f0" text-anchor="middle" font-weight="600">Peer A</text>
+
+        <rect x="390" y="10" width="120" height="32" rx="6" fill="#1a1d27" stroke="#2a2d3e"/>
+        <text x="450" y="31" fill="#e2e8f0" text-anchor="middle" font-weight="600">Signaling Hub</text>
+
+        <rect x="760" y="10" width="120" height="32" rx="6" fill="#1a1d27" stroke="#2a2d3e"/>
+        <text x="820" y="31" fill="#e2e8f0" text-anchor="middle" font-weight="600">Peer B</text>
+
+        <!-- Lifelines -->
+        <line x1="80"  y1="42" x2="80"  y2="430" stroke="#2a2d3e" stroke-dasharray="4,4"/>
+        <line x1="450" y1="42" x2="450" y2="430" stroke="#2a2d3e" stroke-dasharray="4,4"/>
+        <line x1="820" y1="42" x2="820" y2="430" stroke="#2a2d3e" stroke-dasharray="4,4"/>
+
+        <!-- Phase 1: join -->
+        <text x="10" y="68" fill="#4a5568" font-size="10" font-style="italic">1. join</text>
+        <line x1="80" y1="75" x2="444" y2="75" stroke="#6c63ff" marker-end="url(#arr)"/>
+        <text x="230" y="70" fill="#8892a4" text-anchor="middle">join (sessionId)</text>
+
+        <line x1="456" y1="90" x2="820" y2="90" stroke="#6c63ff" marker-end="url(#arr)"/>
+        <text x="638" y="85" fill="#8892a4" text-anchor="middle">join (sessionId)</text>
+
+        <!-- Phase 2: offer/answer -->
+        <text x="10" y="115" fill="#4a5568" font-size="10" font-style="italic">2. offer/answer</text>
+        <line x1="80" y1="120" x2="444" y2="120" stroke="#00c9a7" marker-end="url(#arr2)"/>
+        <text x="230" y="115" fill="#8892a4" text-anchor="middle">offer (SDP)</text>
+
+        <line x1="456" y1="135" x2="820" y2="135" stroke="#00c9a7" marker-end="url(#arr2)"/>
+        <text x="638" y="130" fill="#8892a4" text-anchor="middle">offer (SDP) →</text>
+
+        <line x1="820" y1="155" x2="456" y2="155" stroke="#00c9a7" marker-end="url(#arr2)"/>
+        <text x="638" y="150" fill="#8892a4" text-anchor="middle">← answer (SDP)</text>
+
+        <line x1="444" y1="170" x2="80" y2="170" stroke="#00c9a7" marker-end="url(#arr2)"/>
+        <text x="230" y="165" fill="#8892a4" text-anchor="middle">answer (SDP)</text>
+
+        <!-- Phase 3: ICE -->
+        <text x="10" y="195" fill="#4a5568" font-size="10" font-style="italic">3. ICE</text>
+        <line x1="80" y1="200" x2="820" y2="200" stroke="#f7b731" stroke-dasharray="5,3"/>
+        <text x="450" y="195" fill="#8892a4" text-anchor="middle">ICE candidates (concurrent, via hub)</text>
+
+        <!-- Phase 4: P2P connected -->
+        <text x="10" y="230" fill="#4a5568" font-size="10" font-style="italic">4. P2P</text>
+        <rect x="60" y="235" width="780" height="22" rx="4" fill="#0d2620" stroke="#1e3a32"/>
+        <text x="450" y="250" fill="#00c9a7" text-anchor="middle" font-weight="600">RTCDataChannel — P2P (direct, DTLS-SRTP)</text>
+
+        <!-- Phase 5: relay fallback -->
+        <text x="10" y="285" fill="#4a5568" font-size="10" font-style="italic">5. relay fallback</text>
+        <text x="450" y="285" fill="#8892a4" text-anchor="middle" font-size="11">(if P2P fails within 8 s — symmetric NAT, firewall)</text>
+
+        <rect x="320" y="295" width="260" height="22" rx="4" fill="#1a0e1e" stroke="#3a1a4a"/>
+        <text x="450" y="310" fill="#c084fc" text-anchor="middle" font-weight="600">Relay Circuit (HTTP poll)</text>
+
+        <line x1="80"  y1="325" x2="314" y2="325" stroke="#c084fc" marker-end="url(#arr3)" stroke-dasharray="5,3"/>
+        <text x="197" y="320" fill="#8892a4" text-anchor="middle">deposit (signed)</text>
+
+        <line x1="820" y1="340" x2="586" y2="340" stroke="#c084fc" marker-end="url(#arr3)" stroke-dasharray="5,3"/>
+        <text x="703" y="335" fill="#8892a4" text-anchor="middle">pickup (poll)</text>
+
+        <!-- Phase 6: presence -->
+        <text x="10" y="375" fill="#4a5568" font-size="10" font-style="italic">6. presence</text>
+        <rect x="60" y="380" width="780" height="22" rx="4" fill="#13151f" stroke="#2a2d3e"/>
+        <text x="450" y="395" fill="#8892a4" text-anchor="middle">PresenceManager — heartbeat every 10 s on fabric channel</text>
+
+        <!-- Legend -->
+        <line x1="20"  y1="425" x2="50"  y2="425" stroke="#6c63ff"/>
+        <text x="55"  y="429" fill="#8892a4" font-size="10">signaling</text>
+
+        <line x1="130" y1="425" x2="160" y2="425" stroke="#00c9a7"/>
+        <text x="165" y="429" fill="#8892a4" font-size="10">P2P / SDP</text>
+
+        <line x1="250" y1="425" x2="280" y2="425" stroke="#f7b731" stroke-dasharray="5,3"/>
+        <text x="285" y="429" fill="#8892a4" font-size="10">ICE</text>
+
+        <line x1="340" y1="425" x2="370" y2="425" stroke="#c084fc" stroke-dasharray="5,3"/>
+        <text x="375" y="429" fill="#8892a4" font-size="10">relay circuit</text>
+      </svg>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>
+    <a href="https://github.com/vul-os/vulos-relay">github.com/vul-os/vulos-relay</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.npmjs.com/package/@vulos/relay-client">npm</a>
+    &nbsp;·&nbsp;
+    MIT License
+  </p>
+</footer>
+
+<!-- Invisible marker read by Playwright to know the demo is ready -->
+<span class="demo-ready-marker" id="demo-ready" aria-hidden="true">ready</span>
+
+<script type="module">
+// ─── Demo harness ──────────────────────────────────────────────────────────
+// Exercises the SDK's endpoint + presence layers without a real backend.
+// Uses in-memory stubs so the demo is fully self-contained.
+
+// ── Endpoint failover simulation ──
+
+const ENDPOINTS = {
+  cloud: 'https://box.vulos.org',
+  lan:   'https://box.local.vulos.org',
+}
+
+let cloudAlive = true
+let lanAlive = true
+
+function setDot(id, state) {
+  const el = document.getElementById(id)
+  el.className = 'dot ' + ({
+    ok:   'dot-green',
+    fail: 'dot-red',
+    probe:'dot-yellow',
+    idle: 'dot-gray',
+  }[state] || 'dot-gray')
+}
+
+function logProbe(msg, cls = '') {
+  const log = document.getElementById('probe-log')
+  const ts = new Date().toLocaleTimeString()
+  const line = document.createElement('div')
+  line.innerHTML = `<span class="ts">[${ts}]</span> <span class="${cls}">${msg}</span>`
+  log.appendChild(line)
+  log.scrollTop = log.scrollHeight
+}
+
+async function runProbe() {
+  logProbe('Starting endpoint probe…', 'info')
+  setDot('dot-cloud', 'probe')
+  setDot('dot-lan', 'probe')
+  document.getElementById('ep-selected').textContent = 'probing…'
+  document.getElementById('ep-selected').style.color = 'var(--warn)'
+
+  // Simulate async probe (150–350 ms)
+  await new Promise(r => setTimeout(r, 150 + Math.random() * 200))
+
+  if (lanAlive) {
+    logProbe('LAN probe OK → ' + ENDPOINTS.lan, 'ok')
+    setDot('dot-lan', 'ok')
+  } else {
+    logProbe('LAN probe FAILED (simulated)', 'fail')
+    setDot('dot-lan', 'fail')
+  }
+
+  await new Promise(r => setTimeout(r, 80 + Math.random() * 120))
+
+  if (cloudAlive) {
+    logProbe('Cloud probe OK → ' + ENDPOINTS.cloud, 'ok')
+    setDot('dot-cloud', 'ok')
+  } else {
+    logProbe('Cloud probe FAILED (simulated)', 'fail')
+    setDot('dot-cloud', 'fail')
+  }
+
+  // Selection: LAN preferred
+  let selected
+  if (lanAlive) {
+    selected = ENDPOINTS.lan
+    logProbe('Selected: LAN (preferred for latency)', 'ok')
+  } else if (cloudAlive) {
+    selected = ENDPOINTS.cloud
+    logProbe('Fell back to cloud endpoint', 'warn')
+  } else {
+    selected = '(same-origin)'
+    logProbe('All endpoints down — using same-origin fallback', 'fail')
+  }
+
+  const el = document.getElementById('ep-selected')
+  el.textContent = selected
+  el.style.color = lanAlive ? 'var(--accent2)' : cloudAlive ? 'var(--warn)' : 'var(--err)'
+}
+
+function simulateFailover() {
+  if (lanAlive) {
+    lanAlive = false
+    logProbe('Simulating LAN failure…', 'warn')
+  } else if (cloudAlive) {
+    cloudAlive = false
+    logProbe('Simulating cloud failure (all down)…', 'warn')
+  } else {
+    lanAlive = true
+    cloudAlive = true
+    logProbe('Restoring all endpoints…', 'info')
+  }
+  runProbe()
+}
+
+// Expose to onclick
+window.runProbe = runProbe
+window.simulateFailover = simulateFailover
+
+// ── Presence / Fabric simulation ──
+
+// We simulate a 3-peer session using plain in-memory state (no real WebRTC).
+// The "SDK" behaviour shown: roster updates, peer state transitions, message bus.
+
+const PEERS = [
+  { accountId: 'user-alice', displayName: 'Alice',    color: 'hsl(256, 65%, 50%)', status: 'online',  isSelf: true },
+  { accountId: 'user-bob',   displayName: 'Bob',      color: 'hsl(152, 65%, 50%)', status: 'online',  isSelf: false },
+  { accountId: 'user-carol', displayName: 'Carol',    color: 'hsl(24,  65%, 50%)', status: 'away',    isSelf: false },
+]
+
+const FABRIC_STATES = {
+  'user-bob':   'connected',
+  'user-carol': 'connecting',
+}
+
+function initials(name) { return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() }
+
+function renderRoster() {
+  const roster = document.getElementById('roster')
+  roster.innerHTML = ''
+  for (const p of PEERS) {
+    const chip = document.createElement('div')
+    chip.className = 'peer-chip'
+    chip.innerHTML = `
+      <div class="avatar" style="background:${p.color}">${initials(p.displayName)}</div>
+      <div>
+        <div class="peer-name">${p.displayName}${p.isSelf ? '<span class="self-tag">you</span>' : ''}</div>
+        <div class="peer-status">${p.status}</div>
+      </div>
+    `
+    roster.appendChild(chip)
+  }
+}
+
+function renderFabricStates() {
+  const el = document.getElementById('fabric-states')
+  el.innerHTML = ''
+  for (const [peerId, state] of Object.entries(FABRIC_STATES)) {
+    const peer = PEERS.find(p => p.accountId === peerId)
+    if (!peer) continue
+    const row = document.createElement('div')
+    row.className = 'peer-state-row'
+    row.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="avatar" style="background:${peer.color};width:20px;height:20px;font-size:9px">${initials(peer.displayName)}</div>
+        <span style="font-size:12px">${peer.displayName}</span>
+      </div>
+      <span class="state-badge state-${state}">${state}</span>
+    `
+    el.appendChild(row)
+  }
+}
+
+function logMsg(from, data) {
+  const log = document.getElementById('msg-log')
+  const ts = new Date().toLocaleTimeString()
+  const peer = PEERS.find(p => p.accountId === from) || { displayName: from, color: 'hsl(0,0%,50%)' }
+  const line = document.createElement('div')
+  line.innerHTML = `<span class="ts">[${ts}]</span> <span class="from" style="color:${peer.color}">${peer.displayName}</span>: <span class="data">${data}</span>`
+  log.appendChild(line)
+  log.scrollTop = log.scrollHeight
+}
+
+function sendMsg() {
+  const input = document.getElementById('msg-input')
+  const text = input.value.trim()
+  if (!text) return
+  logMsg('user-alice', text)
+  // Simulate peer echo after a short delay
+  if (FABRIC_STATES['user-bob'] === 'connected') {
+    setTimeout(() => {
+      try {
+        const parsed = JSON.parse(text)
+        logMsg('user-bob', JSON.stringify({ ...parsed, ack: true }))
+      } catch {
+        logMsg('user-bob', '(echo) ' + text)
+      }
+    }, 80 + Math.random() * 160)
+  }
+}
+
+window.sendMsg = sendMsg
+
+// Simulate Carol connecting after 1.8 s
+setTimeout(() => {
+  FABRIC_STATES['user-carol'] = 'connected'
+  renderFabricStates()
+  logMsg('user-carol', JSON.stringify({ type: 'presence-join', displayName: 'Carol', status: 'away' }))
+}, 1800)
+
+// Simulate Bob's relay state after 3 s (P2P degraded)
+setTimeout(() => {
+  FABRIC_STATES['user-bob'] = 'relay'
+  renderFabricStates()
+  logMsg('system', '⚠ P2P failed for Bob — switched to relay circuit')
+}, 3200)
+
+// Simulate Bob recovery after 6 s
+setTimeout(() => {
+  FABRIC_STATES['user-bob'] = 'connected'
+  renderFabricStates()
+  logMsg('system', '✓ P2P recovered for Bob — relay circuit deactivated')
+}, 6200)
+
+// ── Bootstrap ──
+
+renderRoster()
+renderFabricStates()
+logProbe('Initialising endpoint probe…', 'info')
+runProbe()
+
+// Initial messages in the log
+setTimeout(() => {
+  logMsg('user-alice', JSON.stringify({ op: 'insert', pos: 0, text: 'hello' }))
+}, 400)
+setTimeout(() => {
+  logMsg('user-bob', JSON.stringify({ op: 'insert', pos: 5, text: ' world' }))
+}, 950)
+
+// Mark demo as ready for Playwright
+setTimeout(() => {
+  document.getElementById('demo-ready').style.display = 'block'
+}, 800)
+</script>
+</body>
+</html>
