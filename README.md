@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" width="76" alt="Vulos Relay" />
+<img src="logo.png" width="76" alt="Vulos Relay" />
 
 # Vulos Relay
 
