@@ -44,6 +44,12 @@ export class FabricClient extends EventTarget {
    * @param {string}  [opts.relayBaseUrl]  - base URL for relay deposit/pickup
    *                                         defaults to '' (same origin)
    * @param {string}  [opts.authToken]     - Bearer JWT (optional)
+   * @param {boolean} [opts.allowUnsignedRelayAuth]
+   *        - opt in to the unsigned "Vula-Relay <peerId>.<ts>" fallback auth
+   *          header when no authToken is configured. This header is forgeable
+   *          (anyone can claim any peerId), so it is OFF by default; without it
+   *          and without a JWT, the relay request is sent with no Authorization
+   *          header and the server's accept policy decides.
    */
   constructor({
     sessionId,
@@ -52,6 +58,7 @@ export class FabricClient extends EventTarget {
     iceUrl = '/api/peering/ice',
     relayBaseUrl = '',
     authToken = null,
+    allowUnsignedRelayAuth = false,
   }) {
     super()
     this._session = sessionId
@@ -59,6 +66,7 @@ export class FabricClient extends EventTarget {
     this._iceUrl = iceUrl
     this._relayBase = relayBaseUrl
     this._authToken = authToken
+    this._allowUnsignedRelayAuth = allowUnsignedRelayAuth
 
     /** @type {Map<string, PeerState>} */
     this._peers = new Map()
@@ -70,7 +78,15 @@ export class FabricClient extends EventTarget {
     /** @type {string|null} — base64 raw public key for signaling announce */
     this._depositPubKeyB64 = null
 
-    this._signaling = new SignalingClient({ signalingUrl, sessionId, peerId, authToken })
+    this._signaling = new SignalingClient({
+      signalingUrl,
+      sessionId,
+      peerId,
+      authToken,
+      // Publish the deposit signing public key in the join frame so the relay
+      // server can bind it to our authenticated peerId and verify deposit sigs.
+      getDepositPubKey: () => this._depositPubKeyB64,
+    })
     this._signaling.addEventListener('signal', (ev) => this._onSignal(ev.detail))
     this._signaling.addEventListener('signaling-open', () => {
       // Re-offer to any existing peers after a reconnect.
@@ -88,6 +104,9 @@ export class FabricClient extends EventTarget {
   /** Connect to the fabric session.  Resolves once signaling is up. */
   async join() {
     this._iceServers = await this._fetchICE()
+    // Generate the deposit signing key up front so its public key is available
+    // for the signaling "join" frame (the server binds it to our peerId).
+    await this._ensureDepositKey()
     this._signaling.connect()
   }
 
@@ -320,12 +339,12 @@ export class FabricClient extends EventTarget {
     try {
       const headers = { 'Content-Type': 'application/json' }
       if (this._authToken) {
-        // Bearer JWT takes precedence when present; fall back to the unauthenticated
-        // Vula-Relay scheme (peerId.timestamp) only when no JWT is configured.
+        // Bearer JWT takes precedence when present.
         headers['Authorization'] = `Bearer ${this._authToken}`
-      } else {
-        // Relay auth header: "Vula-Relay <peerId>.<ts>" (simplified for browser;
-        // unsigned — relay accept policy depends on server trust config).
+      } else if (this._allowUnsignedRelayAuth) {
+        // Forgeable unsigned fallback: "Vula-Relay <peerId>.<ts>" (anyone can
+        // claim any peerId). Only emitted when the caller has explicitly opted
+        // in via allowUnsignedRelayAuth; relay accept policy decides the rest.
         headers['Authorization'] = `Vula-Relay ${this._peerId}.${Math.floor(Date.now() / 1000)}`
       }
 
@@ -365,7 +384,8 @@ export class FabricClient extends EventTarget {
    * Integrity signature: the deposit payload (blob_b64 + nonce + to + from)
    * is signed with a per-session ECDSA P-256 key held in memory.  The relay
    * server SHOULD verify this signature using the public key exchanged during
-   * the signaling join — see `depositSignKey` in the join payload.  If the
+   * the signaling join — see `depositPubKey` in the join payload (published by
+   * signaling.js, bound server-side to the authenticated peerId).  If the
    * relay does not yet enforce signature verification it MUST at minimum check
    * that the `from` field matches the authenticated peerId (JWT sub or
    * Vula-Relay header).
@@ -413,26 +433,34 @@ export class FabricClient extends EventTarget {
   }
 
   /**
-   * Lazily generate (or reuse) a per-session ECDSA P-256 signing key and
-   * return a base64url signature over `message`.
+   * Lazily generate (or reuse) a per-session ECDSA P-256 signing key and export
+   * its raw public key as base64 into `_depositPubKeyB64`.
    *
-   * The public key is exported on first use so callers can include it in the
-   * signaling join announcement (server-side enforcement of deposit integrity).
+   * Called eagerly from join() so the public key is available for the signaling
+   * "join" announcement — the server binds it to the authenticated peerId and
+   * uses it to verify deposit signatures.
+   */
+  async _ensureDepositKey() {
+    if (this._depositKeyPair) return
+    this._depositKeyPair = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,       // extractable so the public key can be exported
+      ['sign', 'verify'],
+    )
+    // Export the public key for signaling announcement.
+    const rawPub = await crypto.subtle.exportKey('raw', this._depositKeyPair.publicKey)
+    this._depositPubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
+  }
+
+  /**
+   * Sign `message` with the per-session ECDSA P-256 signing key and return a
+   * base64 signature. Ensures the key exists first.
    *
    * @param {string} message
-   * @returns {Promise<string>} base64url signature
+   * @returns {Promise<string>} base64 signature
    */
   async _signDeposit(message) {
-    if (!this._depositKeyPair) {
-      this._depositKeyPair = await crypto.subtle.generateKey(
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        true,       // extractable so the public key can be exported
-        ['sign', 'verify'],
-      )
-      // Export the public key for signaling announcement.
-      const rawPub = await crypto.subtle.exportKey('raw', this._depositKeyPair.publicKey)
-      this._depositPubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
-    }
+    await this._ensureDepositKey()
     const enc = new TextEncoder()
     const sigBuf = await crypto.subtle.sign(
       { name: 'ECDSA', hash: 'SHA-256' },

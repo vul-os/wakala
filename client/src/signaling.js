@@ -30,13 +30,19 @@ export class SignalingClient extends EventTarget {
    * @param {string}   opts.peerId           - this client's identity token (injected by auth)
    * @param {string}  [opts.authToken]       - Bearer JWT (if auth is enabled)
    * @param {number}  [opts.maxAttempts]     - max reconnect attempts before 'offline' (default 10)
+   * @param {() => (string|null)} [opts.getDepositPubKey]
+   *        - optional callback returning this peer's base64 raw deposit signing
+   *          public key. When it returns a non-null value, the key is published
+   *          in the "join" frame so the server can bind it to the authenticated
+   *          peerId and verify deposit signatures.
    */
-  constructor({ signalingUrl, sessionId, peerId, authToken = null, maxAttempts = RECONNECT_MAX_ATTEMPTS }) {
+  constructor({ signalingUrl, sessionId, peerId, authToken = null, maxAttempts = RECONNECT_MAX_ATTEMPTS, getDepositPubKey = null }) {
     super()
     this._url = signalingUrl
     this._session = sessionId
     this._peerId = peerId
     this._authToken = authToken
+    this._getDepositPubKey = getDepositPubKey
     this._ws = null
     this._reconnectDelay = RECONNECT_BASE_MS
     this._reconnectAttempts = 0
@@ -60,8 +66,13 @@ export class SignalingClient extends EventTarget {
       this._reconnectAttempts = 0
       this._degraded = false
       this.dispatchEvent(new CustomEvent('signaling-open'))
-      // Announce ourselves to the session room.
-      this._send({ type: 'join', session: this._session })
+      // Announce ourselves to the session room. Publish the deposit signing
+      // public key (when available) so the server can bind it to our
+      // authenticated peerId and verify relay deposit signatures.
+      const join = { type: 'join', session: this._session }
+      const depositPubKey = this._getDepositPubKey?.()
+      if (depositPubKey) join.depositPubKey = depositPubKey
+      this._send(join)
     })
 
     ws.addEventListener('message', (ev) => {

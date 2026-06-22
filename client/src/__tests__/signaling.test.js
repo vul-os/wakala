@@ -91,6 +91,37 @@ describe('SignalingClient', () => {
     expect(frame.channel).toBe('signal')
     expect(frame.payload.type).toBe('join')
     expect(frame.payload.session).toBe('doc-1')
+    // No deposit key configured → field is omitted.
+    expect(frame.payload.depositPubKey).toBeUndefined()
+  })
+
+  it('publishes the deposit signing public key in the "join" frame when available', () => {
+    const c = new SignalingClient({
+      signalingUrl: 'ws://x/y',
+      sessionId: 'doc-1',
+      peerId: 'alice',
+      getDepositPubKey: () => 'BASE64_PUBKEY',
+    })
+    c.connect()
+    const ws = FakeWebSocket.instances[0]
+    ws._open()
+    const frame = JSON.parse(ws.sent[0])
+    expect(frame.payload.type).toBe('join')
+    expect(frame.payload.depositPubKey).toBe('BASE64_PUBKEY')
+  })
+
+  it('omits depositPubKey when the callback returns null (key not yet generated)', () => {
+    const c = new SignalingClient({
+      signalingUrl: 'ws://x/y',
+      sessionId: 'doc-1',
+      peerId: 'alice',
+      getDepositPubKey: () => null,
+    })
+    c.connect()
+    const ws = FakeWebSocket.instances[0]
+    ws._open()
+    const frame = JSON.parse(ws.sent[0])
+    expect(frame.payload.depositPubKey).toBeUndefined()
   })
 
   it('dispatches inbound frames addressed to this peer as a "signal" event', () => {
