@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo.svg" width="76" alt="Vulos Relay" />
+
 # Vulos Relay
 
 **`@vulos/relay-client` — the peer-fabric client SDK for Vulos web surfaces**
