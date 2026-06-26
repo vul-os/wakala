@@ -30,48 +30,56 @@
     },
     "./endpoints": {
       "source": "./src/endpoints.js",
+      "types": "./dist-lib/endpoints.d.ts",
       "import": "./dist-lib/endpoints.js",
       "require": "./dist-lib/endpoints.cjs",
       "default": "./dist-lib/endpoints.js"
     },
     "./offlineBootstrap": {
       "source": "./src/offlineBootstrap.js",
+      "types": "./dist-lib/offlineBootstrap.d.ts",
       "import": "./dist-lib/offlineBootstrap.js",
       "require": "./dist-lib/offlineBootstrap.cjs",
       "default": "./dist-lib/offlineBootstrap.js"
     },
     "./signaling": {
       "source": "./src/signaling.js",
+      "types": "./dist-lib/signaling.d.ts",
       "import": "./dist-lib/signaling.js",
       "require": "./dist-lib/signaling.cjs",
       "default": "./dist-lib/signaling.js"
     },
     "./fabric": {
       "source": "./src/fabric.js",
+      "types": "./dist-lib/fabric.d.ts",
       "import": "./dist-lib/fabric.js",
       "require": "./dist-lib/fabric.cjs",
       "default": "./dist-lib/fabric.js"
     },
     "./presence": {
       "source": "./src/presence.js",
+      "types": "./dist-lib/presence.d.ts",
       "import": "./dist-lib/presence.js",
       "require": "./dist-lib/presence.cjs",
       "default": "./dist-lib/presence.js"
     },
     "./call": {
       "source": "./src/call/index.js",
+      "types": "./dist-lib/call/index.d.ts",
       "import": "./dist-lib/call.js",
       "require": "./dist-lib/call.cjs",
       "default": "./dist-lib/call.js"
     },
     "./useLiveCursors": {
       "source": "./src/useLiveCursors.js",
+      "types": "./dist-lib/useLiveCursors.d.ts",
       "import": "./dist-lib/useLiveCursors.js",
       "require": "./dist-lib/useLiveCursors.cjs",
       "default": "./dist-lib/useLiveCursors.js"
     },
     "./roundTripCheck": {
       "source": "./src/roundTripCheck.js",
+      "types": "./dist-lib/roundTripCheck.d.ts",
       "import": "./dist-lib/roundTripCheck.js",
       "require": "./dist-lib/roundTripCheck.cjs",
       "default": "./dist-lib/roundTripCheck.js"
@@ -102,7 +110,6 @@
     "react": "^18.3.1",
     "typescript": "^5.9.3",
     "vite": "^6.3.5",
-    "vitest": "^4.1.7",
-    "xlsx": "^0.18.5"
+    "vitest": "^4.1.7"
   }
 }
