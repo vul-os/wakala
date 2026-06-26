@@ -4,15 +4,13 @@
 
 # Vulos Relay
 
-**`@vulos/relay-client` — the browser peer-fabric client SDK for Vulos web surfaces**
+**`@vulos/relay-client` — the sovereign peer-fabric client SDK for VulOS web surfaces**
 
 [![npm](https://img.shields.io/npm/v/%40vulos%2Frelay-client?label=%40vulos%2Frelay-client)](https://www.npmjs.com/package/@vulos/relay-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml)
 
-<img src="docs/assets/vulos-logo.png" alt="Vulos" width="48" />
-
-Part of the **[Vulos](https://vulos.org)** OS suite
+<sub><img src="docs/assets/vulos-logo.png" height="14" alt="VulOS"> Part of <strong><a href="https://vulos.org">VulOS</a></strong> — the open, self-hostable web OS &amp; app suite. Runs standalone, or combined under one login by <a href="https://vulos.org">Vulos Workspace</a>.</sub>
 
 *Vulos — rooted in **vula**, the Zulu and Xhosa word for **open**.*
 
@@ -20,27 +18,52 @@ Part of the **[Vulos](https://vulos.org)** OS suite
 
 ---
 
-## What is this?
+## What is Vulos Relay?
 
-Relay is the **connectivity fabric for the whole Vulos suite**. The browser-side
-SDK, `@vulos/relay-client`, is consumed directly by every Vulos web surface — the
-[Vulos OS shell](https://github.com/vul-os/vulos), [vulos-office](https://github.com/vul-os/vulos-office),
-and [vulos-talk](https://github.com/vul-os/vulos-talk) — to wire peers together.
-[Vulos Workspace](https://github.com/vul-os/vulos-workspace), the combination
-shell that brings the products under one login, surfaces Relay as a first-class
-app in its launcher, but the products import this client themselves.
-
-The SDK opens **WebRTC peer-to-peer data channels** between collaborators,
-multiplexes signaling, presence, and live cursors over them, and **falls back to
-a relay circuit** whenever a direct connection can't be established.
+Vulos Relay is the **sovereign connectivity fabric** for the VulOS suite. Its
+single deliverable is `@vulos/relay-client` — a browser-side JS SDK that wires
+peers together: it opens **WebRTC peer-to-peer data channels** between
+collaborators, multiplexes signaling, presence, and live cursors over them, and
+**falls back to a relay circuit** whenever a direct connection can't be
+established.
 
 It is a **client only** — no server ships in this package. The SDK talks to its
 host application's `/api/peering/*` endpoints over HTTP and WebSocket for
 signaling and ICE credentials. When P2P fails, deposits and pickups flow through
-the **relay server that lives in vulos-cloud's circuit POP** (the deposit/pickup
-HTTP API). TLS is always terminated at the edge — the cloud POP for cloud-routed
-installs, or the box itself for LAN-direct — so the SDK only ever speaks
-`https`/`wss` to whichever endpoint it has selected.
+the host's relay circuit (the deposit/pickup HTTP API). TLS is always terminated
+at the edge — a cloud POP for cloud-routed installs, or the box itself for
+LAN-direct — so the SDK only ever speaks `https`/`wss` to whichever endpoint it
+has selected.
+
+---
+
+## Part of VulOS
+
+**VulOS** is an open, self-hostable web OS + app suite. Each product is
+self-hostable on its own, and combined under one login by **Vulos Workspace**:
+
+| Product | What it is |
+|---------|------------|
+| **Vulos Mail** | Mail + calendar + contacts |
+| **Vulos Talk** | Team chat + channels/Spaces + huddles |
+| **Vulos Meet** | Video meetings (LiveKit SFU) |
+| **Vulos Office** | Documents: docs, sheets, slides, PDF |
+| **Vulos Relay** | **← this repo** — sovereign connectivity fabric (`@vulos/relay-client`) |
+| **Vulos Workspace** | The open suite shell (one login, app switcher, admin) |
+| **Vulos OS** | The web-native desktop |
+
+**Relay's role:** it is the connectivity fabric the rest of the suite is built
+on. The SDK is consumed directly by the VulOS web surfaces — the
+[Vulos OS shell](https://github.com/vul-os/vulos),
+[Vulos Office](https://github.com/vul-os/vulos-office), and
+[Vulos Talk](https://github.com/vul-os/vulos-talk) — to power real-time
+collaboration. [Vulos Workspace](https://github.com/vul-os/vulos-workspace)
+surfaces Relay as a first-class app in its launcher; it links to and embeds
+products but never imports their code, so the seams stay clean.
+
+Relay runs standalone **and** is combined by Vulos Workspace. The client is a
+plain npm package with no Vulos-specific runtime dependency — point it at any
+backend that implements the peering contract and it works on its own.
 
 ---
 
@@ -51,7 +74,7 @@ installs, or the box itself for LAN-direct — so the SDK only ever speaks
   polite-peer SDP negotiation (the lexicographically smaller `peerId` defers).
 - **Relay fallback** — when a data channel can't be established within 8 s (or a
   live connection fails), the SDK transparently switches that peer to a **relay
-  circuit**: messages are deposited and picked up over the cloud POP's
+  circuit**: messages are deposited and picked up over the host's
   `deposit` / `pickup` / `ack` HTTP API.
 - **Signed deposits** — each peer mints a per-session **ECDSA P-256** key on
   join, publishes the raw public key in its signaling join frame (bound
@@ -76,7 +99,7 @@ installs, or the box itself for LAN-direct — so the SDK only ever speaks
   selections (Docs / Sheets / Slides) on the fabric channel with 80 ms
   pointer-event throttling and token-aware peer colours.
 - **P2P mesh calls** — `createCall` for audio/video mesh sessions (the LiveKit
-  SFU path was removed; the product uses the P2P mesh exclusively).
+  SFU path was removed before 1.0; the product uses the P2P mesh exclusively).
 - **Tree-shakeable subpaths** — import only what you need
   (`@vulos/relay-client/endpoints`, `/fabric`, `/presence`, …); the `xlsx`-using
   `roundTripCheck` is deliberately kept out of the root barrel.
@@ -85,26 +108,36 @@ installs, or the box itself for LAN-direct — so the SDK only ever speaks
 
 ---
 
-## Install
+## Demo
+
+Relay is a headless SDK, so there is **no app UI to screenshot**. Instead, the
+repo ships a self-contained **interactive demo** (`demo/index.html`) that drives
+the real SDK in the browser with in-process stub peers — no backend or
+credentials required. The screenshotter renders it to PNGs:
+
+| | |
+|---|---|
+| ![Demo harness](docs/screenshots/hero.png) | ![Signaling + relay flow](docs/screenshots/architecture.png) |
+| Endpoint failover + fabric/presence panels | Signaling & relay-fallback sequence |
+
+Regenerate with `npm run screenshots` (Playwright). See
+[docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+
+---
+
+## Quick start (standalone)
+
+`@vulos/relay-client` is a plain npm package — install it on its own, point it
+at any backend that implements the peering contract, and use it without the rest
+of VulOS.
 
 ```bash
 npm install @vulos/relay-client
 ```
 
-Or, inside the Vulos monorepo, as a `file:` dependency:
-
-```jsonc
-// package.json
-"@vulos/relay-client": "file:../vulos-relay/client"
-```
-
 `react` and `xlsx` are **optional** peer dependencies — install them only if you
 use the React hooks (`usePresence`, `useLiveCursors`) or the `roundTripCheck`
 subpath.
-
----
-
-## Usage
 
 A minimal fabric session with presence. All exports below are verified against
 `client/src` — `FabricClient` and `PresenceManager` extend `EventTarget`, so you
@@ -161,6 +194,22 @@ const { remoteCursors, broadcastDocCursor } =
   useLiveCursors({ fabric, localIdentity, color })
 ```
 
+Inside the VulOS monorepo, consumers use a `file:` dependency instead of the
+published package:
+
+```jsonc
+// package.json
+"@vulos/relay-client": "file:../vulos-relay/client"
+```
+
+To explore the SDK with **zero setup**, build the client and open the
+interactive demo (it imports the built bundle directly — no backend needed):
+
+```bash
+cd client && npm ci && npm run build   # produces client/dist-lib/
+npm run screenshots                    # or just open demo/index.html in a browser
+```
+
 > The endpoint layer also exposes `configure({ lsKeyPrefix, healthPath })` so a
 > surface can preserve its existing `localStorage` cache and point the health
 > probe at its own auth endpoint. See [`client/README.md`](client/README.md) for
@@ -184,20 +233,64 @@ A fabric session moves through six phases:
    `RTCDataChannel` (`vulos-office-fabric`) per peer.
 5. **Relay fallback** — if a channel can't open within `RELAY_TIMEOUT_MS` (8 s),
    or fails later, that peer flips to `relay`: messages are signed and
-   **deposited**, then **polled** back via the cloud POP's relay HTTP API.
+   **deposited**, then **polled** back via the host's relay HTTP API.
 6. **Presence + cursors** — `PresenceManager` and `useLiveCursors` ride
    dedicated `presence` and `cursors` channels on the same fabric, each with
    their own heartbeat / throttle.
+
+```
+Peer A                    Signaling Hub               Peer B
+  │   join (sessionId)         │                         │
+  │──────────────────────────►│                         │
+  │                            │◄────────────────────────│ join (sessionId)
+  │  offer (SDP)               │                         │
+  │──────────────────────────►│──────────────────────►  │
+  │                            │      answer (SDP)       │
+  │◄──────────────────────────│◄────────────────────────│
+  │  ICE candidates (concurrent, via hub)                │
+  │◄────────────────────────────────────────────────────►│
+  │◄══════════════ RTCDataChannel (P2P) ════════════════►│
+  │                                                      │
+  │ … if P2P fails within 8 s → relay circuit (HTTP) …   │
+  │── deposit (signed) ─► relay ◄─ pickup (poll) ────────│
+```
 
 **Transport stack.** This SDK is built on the browser's native primitives —
 `RTCPeerConnection` / `RTCDataChannel` for P2P, `WebSocket` for signaling, and
 `fetch` for ICE credentials and relay deposit/pickup. There is no proxy/tunnel
 layer; the relay circuit is a plain authenticated HTTP store-and-forward served
-from vulos-cloud's circuit POP.
+by the host backend.
 
 **TLS termination.** The SDK only ever talks to the base URL it selected, over
-`https`/`wss`. TLS is terminated at the edge — the cloud POP for cloud-routed
+`https`/`wss`. TLS is terminated at the edge — a cloud POP for cloud-routed
 installs, or the box itself for LAN-direct — never inside this client.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full layer-by-layer
+design.
+
+---
+
+## Configuration
+
+The SDK is configured through `FabricClient` / `PresenceManager` constructor
+options and the `configure()` seam on the endpoint layer (localStorage key
+prefix, health path). The full list of options — endpoint discovery sources,
+constructor params, and tunables (timeouts, heartbeat, throttle) — is documented
+in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Install + first integration walkthrough |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Fabric / signaling / endpoint-failover design |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All SDK options and constructor params |
+| [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Demo harness + screenshot regeneration |
+| [client/README.md](client/README.md) | Subpath exports + migration notes |
+| [ROADMAP.md](ROADMAP.md) | Planned directions |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ---
 
@@ -229,19 +322,6 @@ tag matches `client/package.json`, and publishes to npm with OIDC provenance.
 # bump version in client/package.json first, then:
 git tag v1.2.3 && git push origin v1.2.3
 ```
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Install + first integration walkthrough |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Fabric / signaling / endpoint-failover design |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All SDK options and constructor params |
-| [client/README.md](client/README.md) | Subpath exports + migration notes |
-| [ROADMAP.md](ROADMAP.md) | Planned directions |
-| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ---
 

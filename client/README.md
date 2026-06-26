@@ -1,7 +1,9 @@
 # @vulos/relay-client
 
+> <img src="../docs/assets/vulos-logo.png" height="14" alt="VulOS"> Part of **[VulOS](https://vulos.org)** — the open, self-hostable web OS &amp; app suite. This is the client SDK for **Vulos Relay**, the suite's connectivity fabric. Runs standalone, or combined under one login by Vulos Workspace.
+
 MIT-licensed JS client for the Vulos peer-fabric relay. Shared by every
-Vulos web surface (the Vulos OS shell, `vulos-office`, `vulos-talk`); previously
+VulOS web surface (the Vulos OS shell, `vulos-office`, `vulos-talk`); previously
 duplicated as `src/lib/{endpoints,offlineBootstrap,signaling,fabric,
 presence,call,useLiveCursors,roundTripCheck}.js` across those repos.
 
@@ -9,10 +11,27 @@ This package runs in the browser and talks to the **host application's peering
 backend** (e.g. the Vulos OS `/api/peering/*` endpoints) over HTTP / WebSocket.
 It does not bundle a server.
 
+## Part of VulOS
+
+**Vulos Relay** is the connectivity fabric of the [VulOS](https://vulos.org)
+suite — open, self-hostable products (Mail, Talk, Meet, Office, Relay,
+Workspace, OS), each usable alone and combined under one login by **Vulos
+Workspace**. This SDK is consumed directly by the suite's web surfaces (the Vulos
+OS shell, Vulos Office, Vulos Talk); Workspace surfaces Relay as a first-class
+app but never imports product code. The package has no Vulos-specific runtime
+dependency — it **runs standalone** against any backend that implements the
+peering contract, **and** slots into the Workspace-combined suite.
+
 ## Install
 
-Consumed as a `file:` dependency from the sibling repos in the monorepo
-layout:
+Published to npm:
+
+```bash
+npm install @vulos/relay-client
+```
+
+Inside the VulOS monorepo, consumed as a `file:` dependency from the sibling
+repos:
 
 ```jsonc
 // vulos/package.json  (sibling, ../vulos-relay/client/)
@@ -20,9 +39,10 @@ layout:
 
 // vulos-office/package.json  (sibling)
 "@vulos/relay-client": "file:../vulos-relay/client"
-```
 
-This package is the Wave C foundation (`RELAY-CLIENT-01`).
+// vulos-talk/package.json  (sibling)
+"@vulos/relay-client": "file:../vulos-relay/client"
+```
 
 ## Subpath exports
 
