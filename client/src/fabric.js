@@ -26,7 +26,7 @@
  */
 
 import { SignalingClient } from './signaling.js'
-import { fetchIce } from './call/ice.js'
+import { fetchIce, resolveStunFallback } from './call/ice.js'
 
 const DATA_CHANNEL_LABEL = 'vulos-office-fabric'
 const RELAY_TIMEOUT_MS = 8_000        // give P2P this long before falling back
@@ -149,6 +149,7 @@ export class FabricClient extends EventTarget {
     return fetchIce(this._iceUrl, {
       responseKey: 'ice_servers',
       fetchOptions: { headers },
+      fallbackIceServers: resolveStunFallback(),
     })
   }
 
@@ -442,9 +443,13 @@ export class FabricClient extends EventTarget {
    */
   async _ensureDepositKey() {
     if (this._depositKeyPair) return
+    // Non-extractable: the private signing key must never leave the crypto
+    // subsystem. Per the WebCrypto spec, generateKey() always marks the public
+    // key of an asymmetric pair as extractable regardless of this flag, so the
+    // public key can still be exported below while the private key cannot.
     this._depositKeyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
-      true,       // extractable so the public key can be exported
+      false,      // private key non-extractable; public key stays exportable
       ['sign', 'verify'],
     )
     // Export the public key for signaling announcement.

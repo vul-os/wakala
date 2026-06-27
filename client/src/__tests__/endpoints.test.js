@@ -254,3 +254,55 @@ describe('configure() — migration seams for the three consumers', () => {
     expect(localStorage.getItem('vulos.custom.endpoints.v1')).toBeNull()
   })
 })
+
+describe('credentialed-probe allowlist (cookie-exfil guard)', () => {
+  const EVIL = 'https://evil.example.com'
+
+  it('drops a non-https / cross-origin cached endpoint on read', async () => {
+    // Poison the cache with a cross-origin http target (and a bogus scheme).
+    localStorage.setItem(DEFAULT_LS_KEY, JSON.stringify({
+      cloud: 'http://evil.example.com',
+      lan: 'javascript:alert(1)',
+    }))
+    const ep = await freshModule()
+    const pair = ep.resolveEndpoints()
+    // Both unsafe values are sanitised away.
+    expect(pair.cloud).toBe('')
+    expect(pair.lan).toBe('')
+  })
+
+  it('never sends a credentialed probe to an off-allowlist https host', async () => {
+    // A poisoned cache supplies a well-formed https host that is NOT configured.
+    localStorage.setItem(DEFAULT_LS_KEY, JSON.stringify({ cloud: EVIL, lan: '' }))
+    const ep = await freshModule()
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const selected = await ep.selectEndpoint({ force: true })
+    // The evil host must never be probed or selected — falls back to same-origin.
+    expect(selected).toBe('')
+    for (const [u] of fetchMock.mock.calls) {
+      expect(String(u)).not.toContain('evil.example.com')
+    }
+  })
+
+  it('configure({ allowedProbeHosts }) re-enables probing a trusted host', async () => {
+    localStorage.setItem(DEFAULT_LS_KEY, JSON.stringify({ cloud: EVIL, lan: '' }))
+    const ep = await freshModule()
+    ep.configure({ allowedProbeHosts: ['.example.com'] })
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const selected = await ep.selectEndpoint({ force: true })
+    expect(selected).toBe(EVIL)
+  })
+
+  it('still probes the configured (injected) cloud/LAN hosts', async () => {
+    setEndpoints()
+    const ep = await freshModule()
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const selected = await ep.selectEndpoint({ force: true })
+    expect(selected).toBe(LAN)
+  })
+})

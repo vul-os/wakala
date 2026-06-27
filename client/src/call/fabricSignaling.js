@@ -21,7 +21,7 @@
 import { SignalingClient } from '../signaling.js'
 import { SignalingError } from '../errors.js'
 import { Emitter } from './emitter.js'
-import { fetchIce } from './ice.js'
+import { fetchIce, resolveStunFallback } from './ice.js'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -273,11 +273,14 @@ export async function joinSignalingSession(sessionId, identity) {
   )
 }
 
-// Fetch TURN/STUN credentials from the cloud (OFFICE-20 path) with a sane
-// public-STUN default. Server endpoint mirrors what the OS fabric uses.
+// Fetch TURN/STUN credentials from the cloud (OFFICE-20 path). Server endpoint
+// mirrors what the OS fabric uses. The fallback is host-provided ICE only (no
+// third-party reach-out) unless the operator opts into a public STUN server —
+// see resolveStunFallback() in ice.js.
 export function fetchIceServers() {
   return fetchIce('/api/turn/credentials', {
     responseKey: 'iceServers',
     fetchOptions: { credentials: 'include' },
+    fallbackIceServers: resolveStunFallback(),
   })
 }

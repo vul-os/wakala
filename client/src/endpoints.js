@@ -63,6 +63,18 @@ const DEFAULT_HEALTH_PATH = '/api/auth/status'
 let _lsKey = DEFAULT_LS_KEY
 let _healthPath = DEFAULT_HEALTH_PATH
 
+// Extra hosts the consumer trusts for *credentialed* health probes, on top of
+// same-origin and the configured (injected/env) cloud+LAN endpoints. Entries
+// may be an exact host[:port] ('box.vulos.org'), a leading-dot suffix
+// ('.vulos.org' → any subdomain of vulos.org), or a '*.suffix' wildcard.
+// See configure({ allowedProbeHosts }).
+let _allowedProbeHosts = []
+
+// Hosts learned from a trusted BackendTarget via seedFromResolveBackend() (the
+// cloud control plane's /api/resolve/backend response). These are as trusted as
+// injected/env endpoints for the purpose of the credentialed-probe allowlist.
+let _seededHosts = []
+
 // How long a health-probe may take before the endpoint is considered down.
 const HEALTH_TIMEOUT_MS = 2_500
 
@@ -107,7 +119,11 @@ export function onEndpointChange(fn) {
  *   configure({ lsKeyPrefix: 'my.app.endpoints.v1',
  *               healthPath:  '/api/health' })                  // custom surface
  *
- * @param {{ lsKeyPrefix?: string, healthPath?: string }} opts
+ *   configure({ allowedProbeHosts: ['.vulos.org'] })           // lock probes
+ *                                                               // to a domain
+ *
+ * @param {{ lsKeyPrefix?: string, healthPath?: string,
+ *           allowedProbeHosts?: string[] }} opts
  */
 export function configure(opts = {}) {
   if (opts && typeof opts === 'object') {
@@ -117,8 +133,127 @@ export function configure(opts = {}) {
     if (typeof opts.healthPath === 'string' && opts.healthPath) {
       _healthPath = opts.healthPath
     }
+    if (Array.isArray(opts.allowedProbeHosts)) {
+      _allowedProbeHosts = opts.allowedProbeHosts.filter(
+        (h) => typeof h === 'string' && h,
+      )
+    }
   }
-  return { lsKeyPrefix: _lsKey, healthPath: _healthPath }
+  return {
+    lsKeyPrefix: _lsKey,
+    healthPath: _healthPath,
+    allowedProbeHosts: _allowedProbeHosts.slice(),
+  }
+}
+
+// ─── Endpoint URL validation (audit MED — cookie exfil via unvalidated probe
+//     targets) ──────────────────────────────────────────────────────────────
+//
+// Endpoint base URLs come from three sources, two of which an attacker could
+// influence: window.__VULOS_ENDPOINTS__ / VITE_* (set by the trusted host) and
+// the localStorage cache (poisonable via XSS or a shared origin). Because the
+// reachability probe sends `credentials: 'include'`, an unvalidated base URL
+// would let a poisoned cache exfiltrate the session cookie to an arbitrary
+// host. We therefore:
+//   1. Sanitise cached endpoints on read — drop anything that isn't '' or a
+//      well-formed https:// (or same-origin) URL.
+//   2. Gate the credentialed probe — only fetch with credentials against
+//      same-origin OR an https host on the allowlist (same-origin host + the
+//      configured injected/env endpoint hosts + configure({ allowedProbeHosts })).
+
+/** Parse a base URL (origin or origin+path prefix) into a URL, or null. */
+function parseBase(base) {
+  if (typeof base !== 'string' || base === '') return null
+  try {
+    const ref =
+      typeof location !== 'undefined' && location.href ? location.href : undefined
+    return new URL(base, ref)
+  } catch {
+    return null
+  }
+}
+
+/** This document's host ('' when not in a browser). */
+function sameOriginHost() {
+  try {
+    if (typeof location !== 'undefined' && location.host) return location.host
+  } catch { /* ignore */ }
+  return ''
+}
+
+/** True when `base` is '' (same-origin) or a well-formed https/same-origin URL. */
+function isSafeEndpointScheme(base) {
+  if (base === '') return true
+  const u = parseBase(base)
+  if (!u) return false
+  if (u.protocol === 'https:') return true
+  // Allow a same-origin absolute URL even over http (dev / localhost).
+  try {
+    if (typeof location !== 'undefined' && location.origin && u.origin === location.origin) {
+      return true
+    }
+  } catch { /* ignore */ }
+  return false
+}
+
+/** Keep a cached endpoint only if it passes scheme validation; else ''. */
+function sanitizeEndpoint(base) {
+  return isSafeEndpointScheme(base) ? base : ''
+}
+
+/** Hosts of the configured (injected/env) cloud+LAN endpoints — trusted config. */
+function configuredHosts() {
+  const out = []
+  const inj = readInjected()
+  const candidates = [
+    inj && inj.cloud,
+    inj && inj.lan,
+    readEnv('VITE_CLOUD_ENDPOINT'),
+    readEnv('VITE_LAN_ENDPOINT'),
+  ]
+  for (const c of candidates) {
+    const u = c && parseBase(c)
+    if (u && u.host) out.push(u.host)
+  }
+  for (const h of _seededHosts) out.push(h)
+  return out
+}
+
+/** Match a host against one allowlist entry (exact, '.suffix', or '*.suffix'). */
+function hostMatches(host, entry) {
+  if (host === entry) return true
+  if (entry.startsWith('.')) return host.endsWith(entry) || host === entry.slice(1)
+  if (entry.startsWith('*.')) {
+    const suffix = entry.slice(1) // '.suffix'
+    return host.endsWith(suffix) || host === entry.slice(2)
+  }
+  return false
+}
+
+/**
+ * May we send a *credentialed* probe to this base URL? Same-origin is always
+ * allowed; cross-origin requires https AND a host on the allowlist (configured
+ * endpoint hosts + explicit allowedProbeHosts). Empty base = same-origin.
+ */
+function isCredentialedProbeAllowed(base) {
+  if (base === '') return true
+  const u = parseBase(base)
+  if (!u) return false
+  try {
+    if (typeof location !== 'undefined' && location.origin && u.origin === location.origin) {
+      return true
+    }
+  } catch { /* ignore */ }
+  if (u.protocol !== 'https:') return false
+  const host = u.host
+  if (host && host === sameOriginHost()) return true
+  for (const h of configuredHosts()) {
+    if (host === h) return true
+  }
+  for (const entry of _allowedProbeHosts) {
+    if (hostMatches(host, entry)) return true
+  }
+  return false
 }
 
 function readEnv(name) {
@@ -142,7 +277,15 @@ function readCache() {
     const raw = typeof localStorage !== 'undefined' && localStorage.getItem(_lsKey)
     if (!raw) return null
     const v = JSON.parse(raw)
-    if (v && typeof v === 'object') return { cloud: v.cloud || '', lan: v.lan || '' }
+    if (v && typeof v === 'object') {
+      // Validate on read: a poisoned cache must not feed an unsafe base URL into
+      // the credentialed probe. Anything that isn't '' or a well-formed
+      // https/same-origin URL is dropped.
+      return {
+        cloud: sanitizeEndpoint(v.cloud || ''),
+        lan: sanitizeEndpoint(v.lan || ''),
+      }
+    }
   } catch { /* ignore */ }
   return null
 }
@@ -208,6 +351,12 @@ export function seedFromResolveBackend(target) {
     (lanCand && (lanCand.Endpoint || lanCand.endpoint)) || cached.lan || ''
   _state.pair = { cloud, lan }
   if (cloud || lan) writeCache(_state.pair)
+  // Trust the seeded hosts for credentialed probes — this is a control-plane
+  // response, as authoritative as an injected/env endpoint.
+  for (const b of [cloud, lan]) {
+    const u = b && parseBase(b)
+    if (u && u.host && !_seededHosts.includes(u.host)) _seededHosts.push(u.host)
+  }
   // Force a re-probe — the freshly-seeded pair should be exercised now, not
   // after the cached selection's TTL.
   invalidateEndpoint()
@@ -225,6 +374,12 @@ export async function probe(base) {
   // online, and trivially reachable when offline reads come from the SW cache.
   if (base === '') {
     return typeof navigator === 'undefined' || navigator.onLine !== false
+  }
+  // Refuse to send a credentialed request to an unvalidated / off-allowlist
+  // target — this is the cookie-exfil guard. Such a candidate is treated as
+  // unreachable so selection falls through to a safe endpoint.
+  if (!isCredentialedProbeAllowed(base)) {
+    return false
   }
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
   const timer = ctrl ? setTimeout(() => ctrl.abort(), HEALTH_TIMEOUT_MS) : null

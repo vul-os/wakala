@@ -21,10 +21,12 @@ class FakeWebSocket {
   static OPEN = 1
   static CLOSED = 3
   static CONNECTING = 0
-  constructor(url) {
+  constructor(url, protocols) {
     FakeWebSocket.lastUrl = url
+    FakeWebSocket.lastProtocols = protocols
     FakeWebSocket.instances.push(this)
     this.url = url
+    this.protocols = protocols
     this.readyState = FakeWebSocket.CONNECTING
     this.sent = []
     this._listeners = {}
@@ -57,6 +59,7 @@ FakeWebSocket.lastUrl = null
 beforeEach(() => {
   FakeWebSocket.instances = []
   FakeWebSocket.lastUrl = null
+  FakeWebSocket.lastProtocols = undefined
   vi.stubGlobal('WebSocket', FakeWebSocket)
 })
 
@@ -65,7 +68,7 @@ afterEach(() => {
 })
 
 describe('SignalingClient', () => {
-  it('opens a WebSocket to the signaling URL with the auth token', () => {
+  it('carries the auth token as a WebSocket subprotocol, not in the URL (default)', () => {
     const c = new SignalingClient({
       signalingUrl: 'ws://localhost:8080/api/peering/stream',
       sessionId: 'doc-1',
@@ -73,7 +76,37 @@ describe('SignalingClient', () => {
       authToken: 'jwt-token',
     })
     c.connect()
+    // URL must be clean — the JWT must NOT leak into the query string.
+    expect(FakeWebSocket.lastUrl).toBe('ws://localhost:8080/api/peering/stream')
+    expect(FakeWebSocket.lastUrl).not.toContain('token')
+    // The JWT rides on the Sec-WebSocket-Protocol header instead.
+    expect(FakeWebSocket.lastProtocols).toEqual(['vula.token.jwt-token'])
+    c.close()
+  })
+
+  it('legacy tokenTransport:"query" appends ?token= for backends that need it', () => {
+    const c = new SignalingClient({
+      signalingUrl: 'ws://localhost:8080/api/peering/stream',
+      sessionId: 'doc-1',
+      peerId: 'alice',
+      authToken: 'jwt-token',
+      tokenTransport: 'query',
+    })
+    c.connect()
     expect(FakeWebSocket.lastUrl).toBe('ws://localhost:8080/api/peering/stream?token=jwt-token')
+    expect(FakeWebSocket.lastProtocols).toBeUndefined()
+    c.close()
+  })
+
+  it('opens with no token transport when unauthenticated', () => {
+    const c = new SignalingClient({
+      signalingUrl: 'ws://x/y',
+      sessionId: 'doc-1',
+      peerId: 'alice',
+    })
+    c.connect()
+    expect(FakeWebSocket.lastUrl).toBe('ws://x/y')
+    expect(FakeWebSocket.lastProtocols).toBeUndefined()
     c.close()
   })
 
