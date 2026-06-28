@@ -26,6 +26,7 @@ const entries = {
   call:              resolve(dir, 'src/call/index.js'),
   useLiveCursors:    resolve(dir, 'src/useLiveCursors.js'),
   roundTripCheck:    resolve(dir, 'src/roundTripCheck.js'),
+  regionPop:         resolve(dir, 'src/regionPop.js'),
 }
 
 export default defineConfig({

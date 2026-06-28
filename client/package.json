@@ -92,6 +92,13 @@
       "require": "./dist-lib/roundTripCheck.cjs",
       "default": "./dist-lib/roundTripCheck.js"
     },
+    "./regionPop": {
+      "source": "./src/regionPop.js",
+      "types": "./dist-lib/regionPop.d.ts",
+      "import": "./dist-lib/regionPop.js",
+      "require": "./dist-lib/regionPop.cjs",
+      "default": "./dist-lib/regionPop.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
