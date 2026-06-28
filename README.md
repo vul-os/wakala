@@ -238,21 +238,23 @@ A fabric session moves through six phases:
    dedicated `presence` and `cursors` channels on the same fabric, each with
    their own heartbeat / throttle.
 
-```
-Peer A                    Signaling Hub               Peer B
-  │   join (sessionId)         │                         │
-  │──────────────────────────►│                         │
-  │                            │◄────────────────────────│ join (sessionId)
-  │  offer (SDP)               │                         │
-  │──────────────────────────►│──────────────────────►  │
-  │                            │      answer (SDP)       │
-  │◄──────────────────────────│◄────────────────────────│
-  │  ICE candidates (concurrent, via hub)                │
-  │◄────────────────────────────────────────────────────►│
-  │◄══════════════ RTCDataChannel (P2P) ════════════════►│
-  │                                                      │
-  │ … if P2P fails within 8 s → relay circuit (HTTP) …   │
-  │── deposit (signed) ─► relay ◄─ pickup (poll) ────────│
+```mermaid
+sequenceDiagram
+    participant A as Peer A
+    participant Hub as Signaling Hub
+    participant B as Peer B
+    participant Relay
+    A->>Hub: join (sessionId)
+    B->>Hub: join (sessionId)
+    A->>Hub: offer (SDP)
+    Hub->>B: offer (SDP)
+    B->>Hub: answer (SDP)
+    Hub->>A: answer (SDP)
+    A-->>B: ICE candidates (concurrent, via hub)
+    A->>B: RTCDataChannel (P2P, bidirectional)
+    Note over A,B: if P2P fails within 8 s → relay circuit (HTTP)
+    A->>Relay: deposit (signed)
+    Relay->>B: pickup (poll)
 ```
 
 **Transport stack.** This SDK is built on the browser's native primitives —
