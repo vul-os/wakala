@@ -167,6 +167,7 @@ export class SignalingClient extends EventTarget {
     maxAttempts = RECONNECT_MAX_ATTEMPTS,
     getDepositPubKey = null,
     getBoxPubKey = null,
+    getSignedPreKey = null,
     signFrame = null,
     requirePeerAuth = false,
   }) {
@@ -178,6 +179,7 @@ export class SignalingClient extends EventTarget {
     this._tokenTransport = tokenTransport === 'query' ? 'query' : 'subprotocol'
     this._getDepositPubKey = getDepositPubKey
     this._getBoxPubKey = getBoxPubKey
+    this._getSignedPreKey = getSignedPreKey
     this._signFrame = signFrame
     this._requirePeerAuth = requirePeerAuth
     this._ws = null
@@ -201,6 +203,15 @@ export class SignalingClient extends EventTarget {
     // payloads to the peer.  First key seen wins (same TOFU model as _peerKeys).
     /** @type {Map<string, string>} */
     this._peerBoxKeys = new Map()
+
+    // ── E2E peer signed-prekey registry (TOFU + ECDSA-verified) ──────────────
+    // Maps peerId → { id, pub, sig } (base64), announced via the peer's 'join'
+    // frame (signedPreKey).  Stored ONLY after the signature verifies against the
+    // peer's ECDSA deposit key, so a forged signed prekey is rejected (the JS
+    // analog of prekeys.go VerifySignedPreKey).  Enables the forward-secret v2
+    // (X3DH) relay path: senders run X3DHInitiate against this signed prekey.
+    /** @type {Map<string, { id: string, pub: string, sig: string }>} */
+    this._peerSignedPreKeys = new Map()
 
     // ── Replay protection: bounded seen-(from,nonce) cache ───────────────────
     // Stores composite keys "<from>:<nonce>" for every successfully-verified
@@ -241,6 +252,11 @@ export class SignalingClient extends EventTarget {
       if (depositPubKey) join.depositPubKey = depositPubKey
       const boxPubKey = this._getBoxPubKey?.()
       if (boxPubKey) join.boxPubKey = boxPubKey
+      // Publish the signed prekey {id, pub, sig} so peers can establish a
+      // forward-secret (X3DH/v2) relay session. The pub is signed by our ECDSA
+      // identity (mirroring boxPubKey/depositPubKey); peers verify it before use.
+      const signedPreKey = this._getSignedPreKey?.()
+      if (signedPreKey) join.signedPreKey = signedPreKey
       this._send(join)
     })
 
@@ -276,6 +292,24 @@ export class SignalingClient extends EventTarget {
       if (p.type === 'join' && p.boxPubKey) {
         if (!this._peerBoxKeys.has(senderPeerId)) {
           this._peerBoxKeys.set(senderPeerId, p.boxPubKey)
+        }
+      }
+
+      // ── Signed-prekey import on 'join' (ECDSA-verified, TOFU) ───────────────
+      // Store the peer's signed prekey for the forward-secret v2 (X3DH) relay
+      // path — but ONLY if its signature verifies against the peer's ECDSA
+      // deposit key (which must already be stored from depositPubKey above).
+      // Fail closed: a signed prekey we cannot verify is dropped, so a malicious
+      // server cannot inject a prekey it controls to weaken FS.
+      if (p.type === 'join' && p.signedPreKey && !this._peerSignedPreKeys.has(senderPeerId)) {
+        const spk = p.signedPreKey
+        const ecdsaKey = this._peerKeys.get(senderPeerId)
+        if (ecdsaKey && spk && typeof spk.pub === 'string' && typeof spk.sig === 'string') {
+          try {
+            const pubBytes = Uint8Array.from(atob(spk.pub), c => c.charCodeAt(0))
+            const ok = await this._verifyRaw(ecdsaKey, pubBytes, spk.sig)
+            if (ok) this._peerSignedPreKeys.set(senderPeerId, { id: spk.id, pub: spk.pub, sig: spk.sig })
+          } catch { /* malformed — drop */ }
         }
       }
 
@@ -450,6 +484,43 @@ export class SignalingClient extends EventTarget {
   }
 
   /**
+   * Return the stored, ECDSA-verified signed prekey {id, pub, sig} for `peerId`
+   * (announced in their 'join' frame), or null if none is known/verified yet.
+   *
+   * Used by FabricClient to establish a forward-secret (X3DH/v2) relay session.
+   *
+   * @param {string} peerId
+   * @returns {{ id: string, pub: string, sig: string }|null}
+   */
+  getPeerSignedPreKey(peerId) {
+    return this._peerSignedPreKeys.get(peerId) ?? null
+  }
+
+  /**
+   * Verify a signed prekey {pub, sig} (base64) against the stored ECDSA key for
+   * `peerId`. Returns false if no key is held or the signature is invalid (fail
+   * closed). Used for prekeys obtained via the claim endpoint (Contract A), which
+   * did not pass through the join-frame verification path.
+   *
+   * @param {string} peerId
+   * @param {{ pub: string, sig: string }} signedPreKey
+   * @returns {Promise<boolean>}
+   */
+  async verifyPeerSignedPreKey(peerId, signedPreKey) {
+    const key = this._peerKeys.get(peerId)
+    if (!key || !signedPreKey || typeof signedPreKey.pub !== 'string' || typeof signedPreKey.sig !== 'string') {
+      return false
+    }
+    try {
+      const pubBytes = Uint8Array.from(atob(signedPreKey.pub), c => c.charCodeAt(0))
+      if (pubBytes.length !== 32) return false
+      return await this._verifyRaw(key, pubBytes, signedPreKey.sig)
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Verify a relay-deposit blob signature using the stored public key for
    * `fromPeerId` (populated via signaling join / TOFU).
    *
@@ -531,14 +602,27 @@ export class SignalingClient extends EventTarget {
    * @returns {Promise<boolean>}
    */
   async _verifyFrame(pubKey, canonical, sigB64) {
+    return this._verifyRaw(pubKey, new TextEncoder().encode(canonical), sigB64)
+  }
+
+  /**
+   * Verify a base64 ECDSA P-256 signature over RAW message bytes using `pubKey`.
+   * Used both for canonical-string frame sigs and for the signed-prekey sig
+   * (which is over the 32-byte X25519 public key). Returns false on any error.
+   *
+   * @param {CryptoKey} pubKey
+   * @param {Uint8Array} msgBytes
+   * @param {string} sigB64
+   * @returns {Promise<boolean>}
+   */
+  async _verifyRaw(pubKey, msgBytes, sigB64) {
     try {
       const sigBuf = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0))
-      const msgBuf = new TextEncoder().encode(canonical)
       return await crypto.subtle.verify(
         { name: 'ECDSA', hash: 'SHA-256' },
         pubKey,
         sigBuf,
-        msgBuf,
+        msgBytes,
       )
     } catch {
       return false

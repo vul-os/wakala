@@ -27,7 +27,12 @@
 
 import { SignalingClient } from './signaling.js'
 import { fetchIce, resolveStunFallback } from './call/ice.js'
-import { generateBoxKeyPair, sealRelayBlob, openRelayBlob } from './relayBox.js'
+import {
+  generateBoxKeyPair, sealRelayBlob, openRelayBlob,
+  bytesToB64, b64ToBytes,
+  relayBlobVersion, sealRelayBlobV2, parseRelayBlobV2, openRelayBlobV2,
+} from './relayBox.js'
+import { PreKeyStore, x3dhInitiate, x3dhRespond } from './prekeys.js'
 
 /**
  * Byte-length of a relay payload datum.  Used by the billing meter to count
@@ -52,6 +57,8 @@ const DATA_CHANNEL_LABEL = 'vulos-office-fabric'
 const RELAY_TIMEOUT_MS = 8_000        // give P2P this long before falling back
 const RELAY_POLL_MS = 2_000           // relay pickup polling interval
 const RELAY_TTL_HOURS = 1
+// Size of the one-time-prekey pool published per session (forward secrecy).
+const ONE_TIME_PREKEY_POOL = 16
 
 // ── DoS / resource caps ───────────────────────────────────────────────────────
 const MAX_PENDING_CANDIDATES = 50     // per-peer ICE candidate queue (MED-DoS)
@@ -129,6 +136,17 @@ export class FabricClient extends EventTarget {
     /** @type {string|null} — base64 raw X25519 box public key */
     this._boxPubKeyB64 = null
 
+    /**
+     * Per-session X3DH prekey store: a signed prekey (signed by the ECDSA
+     * identity) plus a pool of one-time prekeys.  Used to derive FORWARD-SECRET
+     * per-message content keys on the relay-fallback path (v2), replacing the
+     * static-static ECDH of v1.  Lazily created in _ensurePreKeys().
+     * @type {PreKeyStore|null}
+     */
+    this._preKeys = null
+    /** @type {{id,pub,sig}|null} — our signed prekey public, announced via join */
+    this._signedPreKeyPublic = null
+
     // ── Billing G-1: authoritative relay byte meter ───────────────────────────
     // Counts payload bytes transported via the relay fallback path.  These are
     // the bytes of the application `data` argument (not HTTP framing or base64
@@ -150,6 +168,10 @@ export class FabricClient extends EventTarget {
       // Publish the X25519 box (encryption) public key in the join frame so
       // peers can seal relay-fallback payloads to us end-to-end.
       getBoxPubKey: () => this._boxPubKeyB64,
+      // Publish the X3DH signed prekey {id,pub,sig} so peers can establish a
+      // FORWARD-SECRET (v2) relay session.  The pub is signed by our ECDSA
+      // identity; peers verify it before use (prekeys.go VerifySignedPreKey).
+      getSignedPreKey: () => this._signedPreKeyPublic,
       // ── E2E peer authentication (security audit MEDIUM) ────────────────────
       // Wire the per-session ECDSA signing key into the signaling layer so that
       // all outgoing offer/answer/ice frames are signed.  The canonical signing
@@ -183,6 +205,12 @@ export class FabricClient extends EventTarget {
     // Generate the deposit signing key up front so its public key is available
     // for the signaling "join" frame (the server binds it to our peerId).
     await this._ensureDepositKey()
+    // Generate + sign the X3DH prekey bundle so its signed prekey can be
+    // announced in the same "join" frame (forward-secret v2 relay path).
+    await this._ensurePreKeys()
+    // Publish the one-time-prekey pool so peers can CLAIM a per-sender OPK for
+    // full forward secrecy (best-effort; v2 still works signed-prekey-only).
+    this._publishPreKeys().catch(() => { /* server may not host the endpoint */ })
     this._signaling.connect()
   }
 
@@ -539,17 +567,49 @@ export class FabricClient extends EventTarget {
           }
 
           // ── Decrypt end-to-end ──────────────────────────────────────────────
-          // openRelayBlob throws on tamper / wrong key (AEAD failure) or a
+          // openRelayBlob* throws on tamper / wrong key (AEAD failure) or a
           // version/length mismatch → caught below and the blob is skipped.
-          await this._ensureDepositKey()
-          const plaintextBytes = openRelayBlob({
-            blobB64: blob.blob_b64,
-            recipientBoxPriv: this._boxKeyPair.privateKey,
-            senderBoxPubB64: blob.epk,
-            from: blob.from,
-            to: this._peerId,
-            session: this._session,
-          })
+          await this._ensurePreKeys()
+          let plaintextBytes
+          if (relayBlobVersion(blob.blob_b64) === 2) {
+            // ── v2: X3DH forward-secret content key ──────────────────────────
+            const parsed = parseRelayBlobV2(blob.blob_b64)
+            const spkPriv = this._preKeys.signedPreKeyPriv(parsed.signedPreKeyId)
+            if (!spkPriv) continue            // unknown signed prekey → fail closed
+            let opkPriv = null
+            if (parsed.oneTimePreKeyId) {
+              opkPriv = this._preKeys.oneTimePreKeyPriv(parsed.oneTimePreKeyId)
+              // Already-consumed / unknown one-time prekey: fail closed. This also
+              // rejects replays of a one-time-prekey handshake (FS).
+              if (!opkPriv) continue
+            }
+            const sk = x3dhRespond({
+              identityPriv: this._boxKeyPair.privateKey,
+              senderIdentityPub: b64ToBytes(blob.epk),
+              signedPreKeyPriv: spkPriv,
+              oneTimePreKeyPriv: opkPriv,
+              ephemeralPub: parsed.ephemeralPub,
+              senderId: blob.from,
+              recipientId: this._peerId,
+            })
+            // Throws on tamper / wrong key BEFORE we burn the one-time prekey.
+            plaintextBytes = openRelayBlobV2({
+              parsed, key: sk, from: blob.from, to: this._peerId, session: this._session,
+            })
+            // FORWARD SECRECY: delete the consumed one-time prekey now so its
+            // private scalar can never again derive this (or any) message key.
+            if (parsed.oneTimePreKeyId) this._preKeys.consumeOneTimePreKey(parsed.oneTimePreKeyId)
+          } else {
+            // ── v1: legacy static-static ECDH (no forward secrecy) ───────────
+            plaintextBytes = openRelayBlob({
+              blobB64: blob.blob_b64,
+              recipientBoxPriv: this._boxKeyPair.privateKey,
+              senderBoxPubB64: blob.epk,
+              from: blob.from,
+              to: this._peerId,
+              session: this._session,
+            })
+          }
           const rawPayload = new TextDecoder().decode(plaintextBytes)
           if (rawPayload.length > MAX_PAYLOAD_BYTES) continue  // oversized plaintext → drop
           const msg = JSON.parse(rawPayload)
@@ -623,14 +683,9 @@ export class FabricClient extends EventTarget {
       const plaintext = new TextEncoder().encode(
         JSON.stringify({ session: this._session, data }),
       )
-      const blob_b64 = sealRelayBlob({
-        plaintext,
-        senderBoxPriv: this._boxKeyPair.privateKey,
-        recipientBoxPubB64,
-        from: this._peerId,
-        to: toPeerId,
-        session: this._session,
-      })
+      // Seal: prefer the forward-secret X3DH (v2) path; fall back to static-static
+      // (v1) only when no signed prekey is available. Never plaintext.
+      const blob_b64 = await this._sealForPeer(toPeerId, recipientBoxPubB64, plaintext)
       const nonce = crypto.randomUUID()
       const epk = this._boxPubKeyB64   // sender box pubkey, authenticated by sig below
 
@@ -666,6 +721,75 @@ export class FabricClient extends EventTarget {
     } catch (err) {
       console.warn('[fabric] relay deposit error:', err.message)
     }
+  }
+
+  /**
+   * Seal `plaintext` for `toPeerId`, choosing the strongest available content
+   * crypto:
+   *   • v2 (X3DH, FORWARD-SECRET) whenever a verified signed prekey is available
+   *     — preferred. A per-sender one-time prekey is CLAIMED (Contract A) for
+   *     full forward secrecy; absent one, signed-prekey-only v2 is used (still no
+   *     static-identity dependence for content secrecy).
+   *   • v1 (static-static ECDH, NO forward secrecy) only when no signed prekey
+   *     can be obtained — preserves reachability to pre-FS peers.
+   *
+   * @param {string} toPeerId
+   * @param {string} recipientBoxPubB64  recipient X25519 box (identity) pubkey
+   * @param {Uint8Array} plaintext
+   * @returns {Promise<string>} blob_b64
+   */
+  async _sealForPeer(toPeerId, recipientBoxPubB64, plaintext) {
+    await this._ensurePreKeys()
+
+    // A verified signed prekey announced via the peer's join frame (already
+    // ECDSA-checked by signaling.js).
+    let signedPreKey = this._signaling.getPeerSignedPreKey(toPeerId)
+    let opk = null
+
+    // Claim a per-sender one-time prekey for full forward secrecy (Contract A).
+    const claim = await this._claimPreKeys(toPeerId)
+    if (claim) {
+      if (!signedPreKey && claim.signed_prekey &&
+          await this._signaling.verifyPeerSignedPreKey(toPeerId, claim.signed_prekey)) {
+        signedPreKey = claim.signed_prekey
+      }
+      const c = claim.one_time_prekey
+      if (signedPreKey && c && typeof c.pub === 'string' && typeof c.id === 'string') {
+        opk = c
+      }
+    }
+
+    if (signedPreKey) {
+      // ── v2: forward-secret X3DH ──────────────────────────────────────────
+      const { ephemeralPub, sk } = x3dhInitiate({
+        identityPriv: this._boxKeyPair.privateKey,
+        recipientIdentityPub: b64ToBytes(recipientBoxPubB64),
+        signedPreKeyPub: b64ToBytes(signedPreKey.pub),
+        oneTimePreKeyPub: opk ? b64ToBytes(opk.pub) : null,
+        senderId: this._peerId,
+        recipientId: toPeerId,
+      })
+      return sealRelayBlobV2({
+        plaintext,
+        key: sk,
+        ephemeralPub,
+        signedPreKeyId: signedPreKey.id,
+        oneTimePreKeyId: opk ? opk.id : null,
+        from: this._peerId,
+        to: toPeerId,
+        session: this._session,
+      })
+    }
+
+    // ── v1: static-static fallback (no forward secrecy, still encrypted) ────
+    return sealRelayBlob({
+      plaintext,
+      senderBoxPriv: this._boxKeyPair.privateKey,
+      recipientBoxPubB64,
+      from: this._peerId,
+      to: toPeerId,
+      session: this._session,
+    })
   }
 
   /**
@@ -714,6 +838,89 @@ export class FabricClient extends EventTarget {
       enc.encode(message),
     )
     return btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+  }
+
+  /**
+   * Sign RAW bytes (not a JSON string) with the ECDSA identity key, returning a
+   * base64 signature. Used to sign the X3DH signed-prekey public key, mirroring
+   * how depositPubKey/boxPubKey are bound to this identity.
+   *
+   * @param {Uint8Array} bytes
+   * @returns {Promise<string>}
+   */
+  async _signDepositRaw(bytes) {
+    await this._ensureDepositKey()
+    const sigBuf = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      this._depositKeyPair.privateKey,
+      bytes,
+    )
+    return btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+  }
+
+  // ─── X3DH prekeys (forward secrecy) ──────────────────────────────────────────
+
+  /**
+   * Lazily create the per-session X3DH prekey store: a signed prekey (signed by
+   * the ECDSA identity) plus a one-time-prekey pool. Idempotent.
+   */
+  async _ensurePreKeys() {
+    await this._ensureDepositKey()   // box key + ECDSA identity
+    if (this._preKeys) return
+    this._preKeys = await PreKeyStore.create(
+      (bytes) => this._signDepositRaw(bytes),
+      ONE_TIME_PREKEY_POOL,
+    )
+    const b = this._preKeys.publicBundle(this._peerId)
+    this._signedPreKeyPublic = b.signed_prekey
+  }
+
+  /**
+   * Publish this peer's prekey bundle (signed prekey + one-time-prekey pool) so
+   * the host can serve per-sender OPK CLAIMs (Contract A). Best-effort: if the
+   * host does not (yet) host /api/peering/prekeys/publish, v2 still works
+   * signed-prekey-only via the join-frame announcement.
+   */
+  async _publishPreKeys() {
+    await this._ensurePreKeys()
+    const headers = { 'Content-Type': 'application/json' }
+    if (this._authToken) headers['Authorization'] = `Bearer ${this._authToken}`
+    await fetch(`${this._relayBase}/api/peering/prekeys/publish`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(this._preKeys.publicBundle(this._peerId)),
+    })
+  }
+
+  /**
+   * Claim a recipient's prekey bundle for one message (Contract A):
+   *   POST /api/peering/prekeys/claim { identity_vula_id }
+   *   → { signed_prekey:{id,pub,sig}, one_time_prekey:{id,pub} | null }
+   * The host atomically hands out + DELETES the returned OPK (single-use), so two
+   * sends to the same recipient get DIFFERENT OPKs (per-sender forward secrecy);
+   * `null` when the pool is exhausted (sender falls back to signed-prekey-only).
+   *
+   * NOTE (divergence from the Go contract): identity_vula_id is the recipient's
+   * relay peerId here; the host maps it to the canonical base58 VulaID. Returns
+   * null on any error so the caller can fall back.
+   *
+   * @param {string} toPeerId
+   * @returns {Promise<{ signed_prekey?:object, one_time_prekey?:object|null }|null>}
+   */
+  async _claimPreKeys(toPeerId) {
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      if (this._authToken) headers['Authorization'] = `Bearer ${this._authToken}`
+      const res = await fetch(`${this._relayBase}/api/peering/prekeys/claim`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ identity_vula_id: toPeerId }),
+      })
+      if (!res || !res.ok) return null
+      return await res.json()
+    } catch {
+      return null
+    }
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
