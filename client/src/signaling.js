@@ -122,6 +122,55 @@ function _canonical({ type, session, to, from, nonce, ts, sdp, candidate, pubKey
   return JSON.stringify(msg)
 }
 
+// ─── Canonical JOIN signing message (anti-downgrade commitment) ──────────────
+//
+// Deterministic JSON string signed over for the "join" frame.  Unlike
+// offer/answer/ice, the join carries the peer's *security-establishing* fields:
+// `depositPubKey` (identity), `boxPubKey` (X25519 encryption), `signedPreKey`
+// (X3DH prekey enabling FORWARD SECRECY) and a `supportsV2` capability flag.
+//
+// The signaling/relay server is UNTRUSTED transport.  Without an authenticated
+// commitment a malicious server can simply STRIP the `signedPreKey` field from a
+// join — the receiver then stores no prekey and the sender silently falls back to
+// the v1 static-static path (no forward secrecy).  Forgery is already blocked
+// (the SPK carries its own ECDSA signature, verified before storage) but OMISSION
+// was not detectable.
+//
+// Signing this CAPABILITY COMMITMENT with the peer's ECDSA identity key closes
+// the hole:
+//   • DOWNGRADE: the signed `supportsV2:true` flag commits that the peer is
+//     forward-secrecy capable.  A receiver that verifies it PINS the peer as
+//     v2-capable; a sender then refuses any v1 path for that peer (fail closed),
+//     so a stripped/omitted SPK is treated as an attack rather than legacy.
+//   • IDENTITY/BOX BINDING: depositPubKey + boxPubKey are bound to the same
+//     signature, so a server cannot swap the encryption key under a v2 claim.
+//
+// IMPORTANT — the mutable `signedPreKey` is DELIBERATELY NOT part of this
+// signature.  The SPK carries its OWN ECDSA signature (`spk.sig`, verified before
+// storage), so it is independently authenticated.  Keeping it out of the join
+// commitment is what makes a STRIPPED SPK *detectable*: if the SPK were inside
+// this signature, stripping it would merely invalidate the whole join sig and the
+// peer would look like an unsigned legacy peer (silent downgrade).  By signing
+// only the capability, a stripped SPK still leaves a VALID `supportsV2` signature
+// → the receiver pins v2 → the absent SPK is caught as a downgrade, not legacy.
+//
+// Field insertion order is fixed so sender and receiver produce identical JSON.
+// `boxPubKey`/`depositPubKey` are normalised to null when absent.
+//
+// @internal — re-implemented by tests to construct/tamper signed joins.
+function _canonicalJoin({ session, from, depositPubKey, boxPubKey, supportsV2, nonce, ts }) {
+  return JSON.stringify({
+    type: 'join',
+    session,
+    from,
+    depositPubKey: depositPubKey ?? null,
+    boxPubKey: boxPubKey ?? null,
+    supportsV2: !!supportsV2,
+    nonce,
+    ts,
+  })
+}
+
 export class SignalingClient extends EventTarget {
   /**
    * @param {object} opts
@@ -213,6 +262,21 @@ export class SignalingClient extends EventTarget {
     /** @type {Map<string, { id: string, pub: string, sig: string }>} */
     this._peerSignedPreKeys = new Map()
 
+    // ── Anti-downgrade: pinned v2 (forward-secrecy) capability ───────────────
+    // Maps peerId → true once we hold CRYPTOGRAPHIC PROOF the peer supports the
+    // forward-secret v2 (X3DH) relay path.  Proof comes from any of:
+    //   (a) a join whose ECDSA signature over a `supportsV2:true` commitment
+    //       verifies (see _canonicalJoin),
+    //   (b) a successfully ECDSA-verified signedPreKey (join frame or claim) —
+    //       a v1-only legacy peer never produces a validly-signed prekey.
+    // Once pinned, FabricClient MUST NOT seal to this peer over v1 static-static:
+    // a missing/stripped signed prekey for a pinned peer is a DOWNGRADE ATTACK by
+    // the untrusted server, and the sender fails closed instead of dropping FS.
+    // Peers that never present a signed v2 commitment stay unpinned → genuine
+    // legacy v1 peers keep interoperating.
+    /** @type {Map<string, true>} */
+    this._peerV2Capable = new Map()
+
     // ── Replay protection: bounded seen-(from,nonce) cache ───────────────────
     // Stores composite keys "<from>:<nonce>" for every successfully-verified
     // signed frame.  FIFO eviction when the Map exceeds NONCE_CACHE_MAX entries
@@ -239,7 +303,7 @@ export class SignalingClient extends EventTarget {
     }
     this._ws = ws
 
-    ws.addEventListener('open', () => {
+    ws.addEventListener('open', async () => {
       this._reconnectDelay = RECONNECT_BASE_MS
       this._reconnectAttempts = 0
       this._degraded = false
@@ -248,15 +312,45 @@ export class SignalingClient extends EventTarget {
       // public key (when available) so the server can bind it to our
       // authenticated peerId and verify relay deposit signatures.
       const join = { type: 'join', session: this._session }
-      const depositPubKey = this._getDepositPubKey?.()
+      const depositPubKey = this._getDepositPubKey?.() ?? null
       if (depositPubKey) join.depositPubKey = depositPubKey
-      const boxPubKey = this._getBoxPubKey?.()
+      const boxPubKey = this._getBoxPubKey?.() ?? null
       if (boxPubKey) join.boxPubKey = boxPubKey
       // Publish the signed prekey {id, pub, sig} so peers can establish a
       // forward-secret (X3DH/v2) relay session. The pub is signed by our ECDSA
       // identity (mirroring boxPubKey/depositPubKey); peers verify it before use.
-      const signedPreKey = this._getSignedPreKey?.()
+      const signedPreKey = this._getSignedPreKey?.() ?? null
       if (signedPreKey) join.signedPreKey = signedPreKey
+
+      // ── Anti-downgrade: authenticate forward-secrecy capability ────────────
+      // When we can sign (signFrame wired) AND we have a signed prekey, advertise
+      // forward-secrecy capability with a SIGNED `supportsV2:true` commitment —
+      // an ECDSA signature over supportsV2 + depositPubKey + boxPubKey + nonce/ts
+      // (see _canonicalJoin).  The mutable signedPreKey is authenticated by its
+      // OWN sig, so a server that strips it leaves this commitment intact: the
+      // receiver still verifies supportsV2, pins us as v2-capable, and catches the
+      // absent prekey as a downgrade instead of treating us as legacy.  When
+      // signFrame is null (e.g. the BroadcastChannel / fabricSignaling stub) the
+      // join is sent unsigned exactly as before — and synchronously, since no
+      // `await` is reached.
+      const supportsV2 = !!(this._signFrame && signedPreKey)
+      if (supportsV2) join.supportsV2 = true
+      if (this._signFrame) {
+        const nonce = crypto.randomUUID()
+        const ts = Date.now()
+        join.nonce = nonce
+        join.ts = ts
+        const canonical = _canonicalJoin({
+          session: this._session,
+          from: this._peerId,
+          depositPubKey,
+          boxPubKey,
+          supportsV2,
+          nonce,
+          ts,
+        })
+        join.sig = await this._signFrame(canonical)
+      }
       this._send(join)
     })
 
@@ -308,8 +402,57 @@ export class SignalingClient extends EventTarget {
           try {
             const pubBytes = Uint8Array.from(atob(spk.pub), c => c.charCodeAt(0))
             const ok = await this._verifyRaw(ecdsaKey, pubBytes, spk.sig)
-            if (ok) this._peerSignedPreKeys.set(senderPeerId, { id: spk.id, pub: spk.pub, sig: spk.sig })
+            if (ok) {
+              this._peerSignedPreKeys.set(senderPeerId, { id: spk.id, pub: spk.pub, sig: spk.sig })
+              // A validly-signed prekey is itself proof of v2 capability — a
+              // v1-only legacy peer cannot produce one.  Pin so a later stripped
+              // SPK (e.g. on reconnect) cannot silently downgrade this peer.
+              this._peerV2Capable.set(senderPeerId, true)
+            }
           } catch { /* malformed — drop */ }
+        }
+      }
+
+      // ── Anti-downgrade: verify the signed join + PIN v2 capability ──────────
+      // A join that carries a `supportsV2:true` flag plus a `sig` is a signed
+      // CAPABILITY commitment (see _canonicalJoin) that the peer is
+      // forward-secrecy capable.  Verify it against the peer's ECDSA identity key
+      // (imported above).  The signature covers supportsV2 + depositPubKey +
+      // boxPubKey but NOT the mutable signedPreKey, so a server that STRIPS the
+      // signedPreKey leaves this commitment intact → it still verifies → the peer
+      // is PINNED v2-capable while no SPK was stored → FabricClient then catches
+      // the absent SPK as a downgrade (fail closed) instead of using v1.  A
+      // verified join thus pins v2; FabricClient refuses any later v1 path.
+      if (p.type === 'join' && p.sig && p.supportsV2 === true &&
+          typeof p.nonce === 'string' && typeof p.ts === 'number') {
+        const ecdsaKey = this._peerKeys.get(senderPeerId)
+        if (ecdsaKey) {
+          const canonical = _canonicalJoin({
+            session: p.session,
+            from: senderPeerId,
+            depositPubKey: p.depositPubKey,
+            boxPubKey: p.boxPubKey,
+            supportsV2: p.supportsV2,
+            nonce: p.nonce,
+            ts: p.ts,
+          })
+          let valid = false
+          try { valid = await this._verifyFrame(ecdsaKey, canonical, p.sig) } catch { valid = false }
+          // Freshness: bound the validity of a captured join so a stale signed
+          // join cannot be replayed indefinitely (mirrors offer/answer/ice).
+          const _now = Date.now()
+          const fresh = !(p.ts > _now + MAX_CLOCK_SKEW_MS || _now - p.ts > MAX_FRAME_AGE_MS)
+          const _nonceKey = `join:${senderPeerId}:${p.nonce}`
+          const replay = this._seenNonces.has(_nonceKey)
+          if (valid && fresh && !replay) {
+            if (this._seenNonces.size >= NONCE_CACHE_MAX) {
+              this._seenNonces.delete(this._seenNonces.keys().next().value)
+            }
+            this._seenNonces.set(_nonceKey, true)
+            this._peerV2Capable.set(senderPeerId, true)   // PIN: no downgrade hereafter
+          }
+          // valid===false → tampered/stripped security fields: do NOT pin, do NOT
+          // trust this join's claims (fail closed).
         }
       }
 
@@ -497,6 +640,20 @@ export class SignalingClient extends EventTarget {
   }
 
   /**
+   * Whether `peerId` has been PINNED as forward-secrecy (v2/X3DH) capable via a
+   * cryptographic commitment: a verified signed join (`supportsV2:true`) or a
+   * verified signed prekey (join frame or claim).  Once true it never reverts —
+   * a subsequently-missing signed prekey for this peer is a downgrade ATTACK, not
+   * a legacy peer, and FabricClient must fail closed rather than seal over v1.
+   *
+   * @param {string} peerId
+   * @returns {boolean}
+   */
+  isPeerV2Capable(peerId) {
+    return this._peerV2Capable.get(peerId) === true
+  }
+
+  /**
    * Verify a signed prekey {pub, sig} (base64) against the stored ECDSA key for
    * `peerId`. Returns false if no key is held or the signature is invalid (fail
    * closed). Used for prekeys obtained via the claim endpoint (Contract A), which
@@ -514,7 +671,12 @@ export class SignalingClient extends EventTarget {
     try {
       const pubBytes = Uint8Array.from(atob(signedPreKey.pub), c => c.charCodeAt(0))
       if (pubBytes.length !== 32) return false
-      return await this._verifyRaw(key, pubBytes, signedPreKey.sig)
+      const ok = await this._verifyRaw(key, pubBytes, signedPreKey.sig)
+      // A signed prekey that verifies (here, obtained via the single-use claim
+      // endpoint) proves v2 capability — pin so a later stripped SPK for this
+      // peer is treated as a downgrade attack, not a legacy peer.
+      if (ok) this._peerV2Capable.set(peerId, true)
+      return ok
     } catch {
       return false
     }

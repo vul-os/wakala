@@ -759,6 +759,22 @@ export class FabricClient extends EventTarget {
       }
     }
 
+    // ── ANTI-DOWNGRADE (forward secrecy) ─────────────────────────────────────
+    // If the recipient has been PINNED as v2-capable (it presented a signed
+    // `supportsV2` commitment or a verified signed prekey at some point) but we
+    // now have NO signed prekey for it, the prekey was stripped/omitted by the
+    // untrusted signaling/relay server.  Falling back to v1 static-static here
+    // would silently drop forward secrecy — exactly the downgrade we must block.
+    // FAIL CLOSED: abort the seal.  _relayDeposit catches this and skips the
+    // deposit rather than sending a non-forward-secret blob to a v2 peer.
+    // (Genuine legacy v1 peers are never pinned, so they still fall through to v1.)
+    if (!signedPreKey && this._signaling.isPeerV2Capable(toPeerId)) {
+      throw new Error(
+        `relay seal aborted for ${toPeerId}: signed prekey missing for a v2-capable peer ` +
+        `(forward-secrecy downgrade attack — refusing v1 static-static fallback)`,
+      )
+    }
+
     if (signedPreKey) {
       // ── v2: forward-secret X3DH ──────────────────────────────────────────
       const { ephemeralPub, sk } = x3dhInitiate({

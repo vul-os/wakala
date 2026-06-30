@@ -134,6 +134,12 @@ describe('FabricClient — deposit public key publication (integrity wiring)', (
     // Drive the signaling socket open and inspect the join frame.
     const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
     ws._open()
+    // The join is now SIGNED (FabricClient wires signFrame), so its send is
+    // deferred until the async ECDSA signature resolves — poll for it.
+    const deadline = Date.now() + 500
+    while (ws.sent.length === 0 && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 5))
+    }
     const join = JSON.parse(ws.sent[0])
     expect(join.payload.type).toBe('join')
     expect(join.payload.session).toBe('test-session')

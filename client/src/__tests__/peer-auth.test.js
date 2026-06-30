@@ -618,6 +618,9 @@ describe('FabricClient — outgoing signals carry signature and nonce', () => {
     const ws = FakeWebSocket.last
     ws._open()
 
+    // The join is now SIGNED (signFrame wired by FabricClient), so its send is
+    // deferred until the async ECDSA signature completes — poll for it.
+    await waitFor(() => ws.sent.length > 0)
     const join = JSON.parse(ws.sent[0])
     expect(join.payload.type).toBe('join')
     expect(join.payload.depositPubKey).toBe(fc._depositPubKeyB64)
