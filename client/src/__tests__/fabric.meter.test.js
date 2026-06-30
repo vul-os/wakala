@@ -15,6 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FabricClient } from '../fabric.js'
+import { makeRelayBlob } from './_relayTestUtil.js'
 
 class FakeWebSocket {
   static OPEN = 1
@@ -140,22 +141,26 @@ describe('FabricClient — relayByteCount (billing G-1)', () => {
 
   it('relay pickup increments in by decoded data byte size', async () => {
     const data = 'relay-received-data'
-    const msg = { session: 'sess-meter', data }
-    const blob_b64 = btoa(JSON.stringify(msg))
+
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    relayPeer(fc)
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote',
+      session: 'sess-meter', data,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
         return {
           ok: true,
-          json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64 }] }),
+          json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64, epk }] }),
         }
       }
       if (String(url).includes('ack')) return { ok: true }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric()
-    relayPeer(fc)
 
     await fc._relayPoll()
 
@@ -167,11 +172,18 @@ describe('FabricClient — relayByteCount (billing G-1)', () => {
   it('multiple pickup blobs accumulate in bytes', async () => {
     const d1 = 'aaa'  // 3 bytes
     const d2 = 'bbbbbb'  // 6 bytes
-    const mkBlob = (data, id) => ({
-      id,
-      from: 'remote',
-      blob_b64: btoa(JSON.stringify({ session: 'sess-meter', data })),
-    })
+
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    relayPeer(fc)
+
+    const mkBlob = (data, id) => {
+      const { blob_b64, epk } = makeRelayBlob({
+        recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote',
+        session: 'sess-meter', data,
+      })
+      return { id, from: 'remote', blob_b64, epk }
+    }
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
@@ -184,9 +196,6 @@ describe('FabricClient — relayByteCount (billing G-1)', () => {
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
-    relayPeer(fc)
-
     await fc._relayPoll()
 
     expect(fc.relayByteCount.in).toBe(9)
@@ -195,24 +204,29 @@ describe('FabricClient — relayByteCount (billing G-1)', () => {
 
   it('out and in counters are independent', async () => {
     const data = 'in-data'
-    const msg = { session: 'sess-meter', data }
-    const blob_b64 = btoa(JSON.stringify(msg))
+
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    relayPeer(fc)
+    // Register the recipient (self) box key so the outbound deposit is not skipped.
+    fc._signaling._peerBoxKeys.set('remote', fc._boxPubKeyB64)
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote',
+      session: 'sess-meter', data,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('deposit')) return { ok: true }
       if (String(url).includes('pickup')) {
         return {
           ok: true,
-          json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64 }] }),
+          json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64, epk }] }),
         }
       }
       if (String(url).includes('ack')) return { ok: true }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric()
-    await fc._ensureDepositKey()
-    relayPeer(fc)
 
     await fc._relayDeposit('remote', 'outbound-payload')
     await fc._relayPoll()

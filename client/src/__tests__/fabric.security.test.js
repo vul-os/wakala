@@ -14,6 +14,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FabricClient } from '../fabric.js'
 import { SignalingClient } from '../signaling.js'
+import { makeRelayBlob } from './_relayTestUtil.js'
+import { sealRelayBlob, generateBoxKeyPair } from '../relayBox.js'
 
 // ── Fake WebSocket ────────────────────────────────────────────────────────────
 
@@ -248,24 +250,33 @@ describe('FabricClient — cross-session isolation', () => {
 
 describe('FabricClient — cross-session relay leakage', () => {
   it('relay blobs from a different session are not dispatched', async () => {
-    let capturedFetch
-    vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
+    const fc = makeFabric('local-peer', 'sess-A')
+    await fc._ensureDepositKey()
+
+    // Seal a blob whose AEAD AAD session matches (so it decrypts) but whose
+    // inner-envelope session is a DIFFERENT one — exercises the inner-session
+    // guard, not just the AEAD AAD binding.
+    const senderKP = generateBoxKeyPair()
+    const plaintext = new TextEncoder().encode(
+      JSON.stringify({ session: 'OTHER-SESSION', data: 'secret-data' }),
+    )
+    const blob_b64 = sealRelayBlob({
+      plaintext, senderBoxPriv: senderKP.privateKey,
+      recipientBoxPubB64: fc._boxPubKeyB64,
+      from: 'attacker', to: 'local-peer', session: 'sess-A',
+    })
+
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        capturedFetch = { url, opts }
-        // Return a blob from a DIFFERENT session
-        const msg = { session: 'OTHER-SESSION', data: 'secret-data' }
-        const blob_b64 = btoa(JSON.stringify(msg))
         return {
           ok: true,
           json: async () => ({
-            blobs: [{ id: 'b1', from: 'attacker', blob_b64 }],
+            blobs: [{ id: 'b1', from: 'attacker', blob_b64, epk: senderKP.publicKeyB64 }],
           }),
         }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric('local-peer', 'sess-A')
 
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
@@ -278,27 +289,31 @@ describe('FabricClient — cross-session relay leakage', () => {
 
     await fc._relayPoll()
 
-    // Blob from 'OTHER-SESSION' must be silently dropped
+    // Inner session 'OTHER-SESSION' must be silently dropped
     expect(received).toHaveLength(0)
     fc.leave()
   })
 
   it('relay blobs from the correct session are dispatched', async () => {
+    const fc = makeFabric('local-peer', 'sess-A')
+    await fc._ensureDepositKey()
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote-peer',
+      session: 'sess-A', data: 'hello-from-relay',
+    })
+
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        const msg = { session: 'sess-A', data: 'hello-from-relay' }
-        const blob_b64 = btoa(JSON.stringify(msg))
         return {
           ok: true,
           json: async () => ({
-            blobs: [{ id: 'b2', from: 'remote-peer', blob_b64 }],
+            blobs: [{ id: 'b2', from: 'remote-peer', blob_b64, epk }],
           }),
         }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric('local-peer', 'sess-A')
 
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))

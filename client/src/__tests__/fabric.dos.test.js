@@ -11,6 +11,19 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FabricClient } from '../fabric.js'
+import { makeRelayBlob } from './_relayTestUtil.js'
+
+// Sign the relay-deposit form { to, from, nonce, blob_b64, epk } with an
+// ECDSA P-256 private key and return a base64 signature.
+async function signDepositForm(privateKey, { to, from, nonce, blob_b64, epk }) {
+  const sigMsg = JSON.stringify({ to, from, nonce, blob_b64, epk })
+  const sigBuf = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    privateKey,
+    new TextEncoder().encode(sigMsg),
+  )
+  return btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+}
 
 // ── Fake WebSocket ─────────────────────────────────────────────────────────────
 
@@ -129,19 +142,23 @@ afterEach(() => { vi.restoreAllMocks() })
 
 describe('FabricClient relay — oversized blob dropped', () => {
   it('drops a relay blob whose decoded payload exceeds MAX_PAYLOAD_BYTES (256 KB)', async () => {
-    // Build a payload JSON string just over 256 KB
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    // Build an ENCRYPTED payload whose plaintext JSON is just over 256 KB.
     const bigData = 'x'.repeat(256 * 1024 + 1)
-    const msg = { session: 'sess-1', data: bigData }
-    const blob_b64 = btoa(JSON.stringify(msg))
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'remote',
+      session: 'sess-1', data: bigData,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64 }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b1', from: 'remote', blob_b64, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
 
@@ -158,21 +175,25 @@ describe('FabricClient relay — oversized blob dropped', () => {
   })
 
   it('dispatches a relay blob that is exactly at the limit (256 KB)', async () => {
-    // MAX_PAYLOAD_BYTES = 256 * 1024 = 262144. The raw decoded size is the JSON
-    // string length. We build a payload that decodes to exactly 262144 bytes.
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    // MAX_PAYLOAD_BYTES = 256 * 1024 = 262144. The post-decrypt cap is on the
+    // decrypted JSON string length. Build a payload that decrypts to exactly that.
     const overhead = JSON.stringify({ session: 'sess-1', data: '' }).length
     const data = 'y'.repeat(256 * 1024 - overhead)
-    const msg = { session: 'sess-1', data }
-    const blob_b64 = btoa(JSON.stringify(msg))
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'remote',
+      session: 'sess-1', data,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b2', from: 'remote', blob_b64 }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b2', from: 'remote', blob_b64, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
 
@@ -192,39 +213,40 @@ describe('FabricClient relay — oversized blob dropped', () => {
 // ── 2. Relay inbound signature verification (MED audit fix #3) ────────────────
 
 describe('FabricClient relay — inbound blob signature check', () => {
-  it('drops a blob from a known-keyed sender that has no sig', async () => {
-    // Set up a peer key in the SignalingClient's registry by injecting via join
+  // Register `remote`'s ECDSA verify key directly in the signaling registry,
+  // mirroring a prior keyed 'join', without the WS dance.
+  async function registerRemoteKey(fc, keyPair) {
+    const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey)
+    const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
+    const verifyKey = await crypto.subtle.importKey(
+      'raw', Uint8Array.from(atob(pubKeyB64), c => c.charCodeAt(0)),
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+    )
+    fc._signaling._peerKeys.set('remote', verifyKey)
+  }
+
+  it('drops an (encrypted) blob from a known-keyed sender that has no sig', async () => {
     const keyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'],
     )
-    const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey)
-    const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
 
-    const msg = { session: 'sess-1', data: 'should-be-dropped' }
-    const blob_b64 = btoa(JSON.stringify(msg))
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    await registerRemoteKey(fc, keyPair)
+    expect(fc._signaling.hasPeerKey('remote')).toBe(true)
+
+    // Encrypted blob (carries epk) but unsigned, from a known-keyed sender.
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'remote',
+      session: 'sess-1', data: 'should-be-dropped',
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        // Blob has no sig/nonce even though sender has a known key
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b3', from: 'remote', blob_b64 }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b3', from: 'remote', blob_b64, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric()
-    await fc.join()
-    const ws = FakeWebSocket.last
-    ws._open()
-
-    // Register remote's key via signaling join
-    ws._message({
-      channel: 'signal',
-      from: 'remote',
-      payload: { type: 'join', session: 'sess-1', depositPubKey: pubKeyB64 },
-    })
-    // Wait for the async importKey
-    await sleep(50)
-    expect(fc._signaling.hasPeerKey('remote')).toBe(true)
 
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
@@ -236,7 +258,7 @@ describe('FabricClient relay — inbound blob signature check', () => {
 
     await fc._relayPoll()
 
-    // Blob has no sig but sender's key is known → must be dropped
+    // No sig but sender's key is known → must be dropped
     expect(received).toHaveLength(0)
     fc.leave()
   })
@@ -248,40 +270,27 @@ describe('FabricClient relay — inbound blob signature check', () => {
     const wrongKeyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'],
     )
-    const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey)
-    const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
 
-    const msg = { session: 'sess-1', data: 'tampered' }
-    const blob_b64 = btoa(JSON.stringify(msg))
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    await registerRemoteKey(fc, keyPair)
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'remote',
+      session: 'sess-1', data: 'tampered',
+    })
     const nonce = crypto.randomUUID()
-
-    // Sign with a WRONG key (mallory impersonates 'remote')
-    const sigMsg = JSON.stringify({ to: 'local', from: 'remote', nonce, blob_b64 })
-    const sigBuf = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      wrongKeyPair.privateKey,
-      new TextEncoder().encode(sigMsg),
-    )
-    const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+    // Sign the deposit form with a WRONG key (mallory impersonates 'remote')
+    const sig = await signDepositForm(wrongKeyPair.privateKey, {
+      to: 'local', from: 'remote', nonce, blob_b64, epk,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b4', from: 'remote', blob_b64, nonce, sig }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b4', from: 'remote', blob_b64, nonce, sig, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric()
-    await fc.join()
-    const ws = FakeWebSocket.last
-    ws._open()
-
-    ws._message({
-      channel: 'signal',
-      from: 'remote',
-      payload: { type: 'join', session: 'sess-1', depositPubKey: pubKeyB64 },
-    })
-    await sleep(50)
 
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
@@ -301,40 +310,27 @@ describe('FabricClient relay — inbound blob signature check', () => {
     const keyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'],
     )
-    const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey)
-    const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
 
-    const msg = { session: 'sess-1', data: 'valid-signed-payload' }
-    const blob_b64 = btoa(JSON.stringify(msg))
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+    await registerRemoteKey(fc, keyPair)
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'remote',
+      session: 'sess-1', data: 'valid-signed-payload',
+    })
     const nonce = crypto.randomUUID()
-
-    // Correct signing: { to: <receiver>, from: 'remote', nonce, blob_b64 }
-    const sigMsg = JSON.stringify({ to: 'local', from: 'remote', nonce, blob_b64 })
-    const sigBuf = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      keyPair.privateKey,
-      new TextEncoder().encode(sigMsg),
-    )
-    const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+    // Correct signing of { to, from, nonce, blob_b64, epk }
+    const sig = await signDepositForm(keyPair.privateKey, {
+      to: 'local', from: 'remote', nonce, blob_b64, epk,
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b5', from: 'remote', blob_b64, nonce, sig }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b5', from: 'remote', blob_b64, nonce, sig, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
-
-    const fc = makeFabric()
-    await fc.join()
-    const ws = FakeWebSocket.last
-    ws._open()
-
-    ws._message({
-      channel: 'signal',
-      from: 'remote',
-      payload: { type: 'join', session: 'sess-1', depositPubKey: pubKeyB64 },
-    })
-    await sleep(50)
 
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
@@ -351,18 +347,24 @@ describe('FabricClient relay — inbound blob signature check', () => {
     fc.leave()
   })
 
-  it('allows unsigned blob from an unknown sender (backward compat — no key stored)', async () => {
-    const msg = { session: 'sess-1', data: 'unknown-sender-no-key' }
-    const blob_b64 = btoa(JSON.stringify(msg))
+  it('allows an (encrypted) unsigned blob from an unknown sender (backward compat — no key stored)', async () => {
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    // Unknown sender (no ECDSA key stored): still encrypted (carries epk).
+    // Confidentiality holds regardless of authenticity; the blob is accepted.
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local', from: 'stranger',
+      session: 'sess-1', data: 'unknown-sender-no-key',
+    })
 
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        return { ok: true, json: async () => ({ blobs: [{ id: 'b6', from: 'stranger', blob_b64 }] }) }
+        return { ok: true, json: async () => ({ blobs: [{ id: 'b6', from: 'stranger', blob_b64, epk }] }) }
       }
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     const received = []
     fc.addEventListener('message', ({ detail }) => received.push(detail))
 
@@ -371,7 +373,7 @@ describe('FabricClient relay — inbound blob signature check', () => {
       relayTimer: null, pendingCandidates: [], reset() {},
     })
 
-    // No join frame for 'stranger' → hasPeerKey('stranger') === false → allow through
+    // No key stored for 'stranger' → hasPeerKey('stranger') === false → allow through
     await fc._relayPoll()
 
     expect(received).toHaveLength(1)

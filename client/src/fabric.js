@@ -27,6 +27,7 @@
 
 import { SignalingClient } from './signaling.js'
 import { fetchIce, resolveStunFallback } from './call/ice.js'
+import { generateBoxKeyPair, sealRelayBlob, openRelayBlob } from './relayBox.js'
 
 /**
  * Byte-length of a relay payload datum.  Used by the billing meter to count
@@ -56,6 +57,13 @@ const RELAY_TTL_HOURS = 1
 const MAX_PENDING_CANDIDATES = 50     // per-peer ICE candidate queue (MED-DoS)
 const MAX_PEERS = 50                  // per-session peer map (MED-DoS)
 const MAX_PAYLOAD_BYTES = 256 * 1024  // data-channel + relay blob cap, 256 KB (MED-DoS)
+// Relay-blob AEAD envelope overhead: version(1) + XChaCha nonce(24) + Poly1305 tag(16).
+const RELAY_ENVELOPE_OVERHEAD = 1 + 24 + 16
+// Upper bound on the base64 length of an encrypted relay blob carrying a
+// max-size (MAX_PAYLOAD_BYTES) plaintext, so we can reject abusive blobs before
+// spending any crypto on them.  base64 expands ~4/3; +4 for padding slack.
+const MAX_RELAY_BLOB_B64 =
+  Math.ceil((MAX_PAYLOAD_BYTES + RELAY_ENVELOPE_OVERHEAD) / 3) * 4 + 4
 
 export class FabricClient extends EventTarget {
   /**
@@ -109,6 +117,17 @@ export class FabricClient extends EventTarget {
     this._depositKeyPair = null
     /** @type {string|null} — base64 raw public key for signaling announce */
     this._depositPubKeyB64 = null
+    /**
+     * Per-session X25519 box keypair used to encrypt relay-fallback payloads
+     * end-to-end (XChaCha20-Poly1305 keyed by X25519-ECDH).  Separate from the
+     * ECDSA deposit/signing identity above — WebCrypto/NaCl will not reuse a
+     * sign/verify key for ECDH.  The public key is announced in the signaling
+     * "join" frame so peers can seal payloads the relay server cannot read.
+     * @type {{ privateKey: Uint8Array, publicKey: Uint8Array, publicKeyB64: string }|null}
+     */
+    this._boxKeyPair = null
+    /** @type {string|null} — base64 raw X25519 box public key */
+    this._boxPubKeyB64 = null
 
     // ── Billing G-1: authoritative relay byte meter ───────────────────────────
     // Counts payload bytes transported via the relay fallback path.  These are
@@ -128,6 +147,9 @@ export class FabricClient extends EventTarget {
       // Publish the deposit signing public key in the join frame so the relay
       // server can bind it to our authenticated peerId and verify deposit sigs.
       getDepositPubKey: () => this._depositPubKeyB64,
+      // Publish the X25519 box (encryption) public key in the join frame so
+      // peers can seal relay-fallback payloads to us end-to-end.
+      getBoxPubKey: () => this._boxPubKeyB64,
       // ── E2E peer authentication (security audit MEDIUM) ────────────────────
       // Wire the per-session ECDSA signing key into the signaling layer so that
       // all outgoing offer/answer/ice frames are signed.  The canonical signing
@@ -480,22 +502,31 @@ export class FabricClient extends EventTarget {
       for (const blob of blobs) {
         try {
           // ── MED-DoS: relay blob size cap ────────────────────────────────────
-          const rawPayload = atob(blob.blob_b64)
-          if (rawPayload.length > MAX_PAYLOAD_BYTES) continue  // oversized → drop
-          const msg = JSON.parse(rawPayload)
-          if (msg.session !== this._session) continue
+          // Cap the encoded ciphertext size up front (before any crypto work).
+          // The exact plaintext cap is re-checked post-decrypt below.
+          if (typeof blob.blob_b64 !== 'string' || blob.blob_b64.length > MAX_RELAY_BLOB_B64) {
+            continue  // oversized / malformed → drop
+          }
+
+          // ── E2E confidentiality: the blob carries the sender's box pubkey ────
+          // (epk).  Without it we cannot derive the shared secret, so the blob
+          // is undecryptable — drop it (fail closed; no plaintext fallback).
+          if (!blob.epk) continue
 
           // ── MED: verify relay-blob inbound signature ─────────────────────────
-          // The depositor signs { to, from, nonce, blob_b64 } (see _relayDeposit).
-          // If we hold a key for the sender (imported via signaling join / TOFU),
-          // the blob MUST carry a valid signature.  Unknown senders (no key held)
-          // are allowed through for backward compat with pre-auth relay clients.
+          // The depositor signs { to, from, nonce, blob_b64, epk } (see
+          // _relayDeposit).  If we hold a key for the sender (imported via
+          // signaling join / TOFU), the blob MUST carry a valid signature.
+          // Unknown senders (no key held) are allowed through for backward
+          // compat with pre-auth relay clients — confidentiality still holds
+          // because decryption below depends only on the box keys.
           if (blob.sig && blob.nonce) {
             const sigMsg = JSON.stringify({
               to: this._peerId,
               from: blob.from,
               nonce: blob.nonce,
               blob_b64: blob.blob_b64,
+              epk: blob.epk,
             })
             const result = await this._signaling.verifyPeerSig(blob.from, sigMsg, blob.sig)
             if (result === false) continue  // key held + sig invalid → tamper/impersonation
@@ -507,11 +538,28 @@ export class FabricClient extends EventTarget {
             continue
           }
 
+          // ── Decrypt end-to-end ──────────────────────────────────────────────
+          // openRelayBlob throws on tamper / wrong key (AEAD failure) or a
+          // version/length mismatch → caught below and the blob is skipped.
+          await this._ensureDepositKey()
+          const plaintextBytes = openRelayBlob({
+            blobB64: blob.blob_b64,
+            recipientBoxPriv: this._boxKeyPair.privateKey,
+            senderBoxPubB64: blob.epk,
+            from: blob.from,
+            to: this._peerId,
+            session: this._session,
+          })
+          const rawPayload = new TextDecoder().decode(plaintextBytes)
+          if (rawPayload.length > MAX_PAYLOAD_BYTES) continue  // oversized plaintext → drop
+          const msg = JSON.parse(rawPayload)
+          if (msg.session !== this._session) continue
+
           // ── billing meter: count inbound payload bytes ─────────────────────
           this._relayedBytesIn += _byteSize(msg.data)
           this.dispatchEvent(new CustomEvent('message', { detail: { from: blob.from, data: msg.data } }))
           ackIds.push(blob.id)
-        } catch { /* malformed blob, skip */ }
+        } catch { /* malformed / undecryptable blob, skip */ }
       }
 
       if (ackIds.length) {
@@ -541,24 +589,61 @@ export class FabricClient extends EventTarget {
    * Trust model: unsigned deposits are rejected by a correctly-configured
    * relay server.  Signed-but-unverified (relay not updated) degrades to the
    * previous unsigned behaviour until the server enforces verification.
+   *
+   * Confidentiality (E2E): the application payload is SEALED with
+   * XChaCha20-Poly1305 keyed by an X25519-ECDH shared secret between this peer's
+   * box key and the recipient's announced box key, so the relay/host server only
+   * ever sees ciphertext.  The ECDSA signature is layered over the ciphertext
+   * (covering the sender's box pubkey `epk` too), so authenticity is unchanged.
+   *
+   * FAIL-CLOSED: if the recipient's box public key has not been learned yet
+   * (no keyed 'join' seen), the deposit is SKIPPED rather than sent in the
+   * clear — the sovereign/E2E guarantee must not silently degrade to plaintext.
    */
   async _relayDeposit(toPeerId, data) {
     // ── billing meter: count outbound payload bytes before encoding ──────────
     this._relayedBytesOut += _byteSize(data)
     try {
+      await this._ensureDepositKey()
+
+      // Recipient's X25519 box public key (announced in their signaling 'join').
+      const recipientBoxPubB64 = this._signaling.getPeerBoxKey(toPeerId)
+      if (!recipientBoxPubB64) {
+        // Fail closed: no E2E key for this peer → do NOT leak plaintext to the relay.
+        console.warn(
+          `[fabric] relay deposit skipped for ${toPeerId}: no box key (cannot encrypt end-to-end)`,
+        )
+        return
+      }
+
       const headers = { 'Content-Type': 'application/json' }
       if (this._authToken) headers['Authorization'] = `Bearer ${this._authToken}`
-      const payload = { session: this._session, data }
-      const blob_b64 = btoa(JSON.stringify(payload))
+
+      // Plaintext is the same {session, data} envelope as before, now sealed.
+      const plaintext = new TextEncoder().encode(
+        JSON.stringify({ session: this._session, data }),
+      )
+      const blob_b64 = sealRelayBlob({
+        plaintext,
+        senderBoxPriv: this._boxKeyPair.privateKey,
+        recipientBoxPubB64,
+        from: this._peerId,
+        to: toPeerId,
+        session: this._session,
+      })
       const nonce = crypto.randomUUID()
+      const epk = this._boxPubKeyB64   // sender box pubkey, authenticated by sig below
 
       // Build the signing message: canonical JSON of the fields the server
-      // can reconstruct independently (to, from, nonce, blob_b64).
+      // can reconstruct independently (to, from, nonce, blob_b64, epk).
+      // Including `epk` binds the sender's box key end-to-end so a relay cannot
+      // swap it for one it controls.
       const signingMsg = JSON.stringify({
         to: toPeerId,
         from: this._peerId,
         nonce,
         blob_b64,
+        epk,
       })
 
       // Sign with the session signing key (lazily generated ECDSA P-256).
@@ -575,6 +660,7 @@ export class FabricClient extends EventTarget {
           ttl_hours: RELAY_TTL_HOURS,
           nonce,
           sig: sigB64,
+          epk,
         }),
       })
     } catch (err) {
@@ -591,6 +677,12 @@ export class FabricClient extends EventTarget {
    * uses it to verify deposit signatures.
    */
   async _ensureDepositKey() {
+    // Generate the X25519 box keypair alongside the signing key so its public
+    // key is announced in the same "join" frame.
+    if (!this._boxKeyPair) {
+      this._boxKeyPair = generateBoxKeyPair()
+      this._boxPubKeyB64 = this._boxKeyPair.publicKeyB64
+    }
     if (this._depositKeyPair) return
     // Non-extractable: the private signing key must never leave the crypto
     // subsystem. Per the WebCrypto spec, generateKey() always marks the public

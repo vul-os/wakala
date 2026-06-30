@@ -12,6 +12,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FabricClient } from '../fabric.js'
+import { makeRelayBlob } from './_relayTestUtil.js'
+import { openRelayBlob } from '../relayBox.js'
 
 // ── Shared fake stubs ─────────────────────────────────────────────────────────
 
@@ -213,8 +215,10 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
       relayTimer: null, pendingCandidates: [], reset() {},
     })
 
-    // _relayDeposit needs the signing key
+    // _relayDeposit needs the signing + box keys, and the recipient's box key
+    // (fail-closed E2E: encrypt to the peer's announced X25519 key).
     await fc._ensureDepositKey()
+    fc._signaling._peerBoxKeys.set('remote-peer', fc._boxPubKeyB64)
     await fc._relayDeposit('remote-peer', 'hello-relay')
 
     expect(depositCalls).toHaveLength(1)
@@ -227,17 +231,14 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
     expect(body.blob_b64).toBeTruthy()
     expect(body.sig).toBeTruthy()
     expect(body.nonce).toBeTruthy()
+    expect(body.epk).toBeTruthy()      // sender X25519 box pubkey
     fc.leave()
   })
 
-  it('relay deposit payload decodes to the original message', async () => {
+  it('relay deposit payload is encrypted (not plaintext) and decrypts to the original', async () => {
+    const deposits = []
     vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
-      if (String(url).includes('deposit')) {
-        const body = JSON.parse(opts.body)
-        const decoded = JSON.parse(atob(body.blob_b64))
-        expect(decoded.data).toBe('my-payload')
-        expect(decoded.session).toBe('sess-1')
-      }
+      if (String(url).includes('deposit')) deposits.push(JSON.parse(opts.body))
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
@@ -249,19 +250,47 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
     })
 
     await fc._ensureDepositKey()
+    // Encrypt to ourselves so the test holds the box private key to decrypt.
+    fc._signaling._peerBoxKeys.set('remote', fc._boxPubKeyB64)
     await fc._relayDeposit('remote', 'my-payload')
+
+    expect(deposits).toHaveLength(1)
+    const body = deposits[0]
+
+    // The relay MUST NOT see plaintext: the base64 blob must not decode to JSON.
+    let leaked = false
+    try { JSON.parse(atob(body.blob_b64)); leaked = true } catch { /* expected */ }
+    expect(leaked).toBe(false)
+    expect(atob(body.blob_b64)).not.toContain('my-payload')
+
+    // Authorised recipient decrypts with its box private key + the sender epk.
+    const plaintext = openRelayBlob({
+      blobB64: body.blob_b64,
+      recipientBoxPriv: fc._boxKeyPair.privateKey,
+      senderBoxPubB64: body.epk,
+      from: 'local', to: 'remote', session: 'sess-1',
+    })
+    const decoded = JSON.parse(new TextDecoder().decode(plaintext))
+    expect(decoded.data).toBe('my-payload')
+    expect(decoded.session).toBe('sess-1')
     fc.leave()
   })
 
   it('relay pickup delivers messages as fabric "message" events', async () => {
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote-peer',
+      session: 'sess-1', data: 'picked-up-data',
+    })
+
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
-        const msg = { session: 'sess-1', data: 'picked-up-data' }
-        const blob_b64 = btoa(JSON.stringify(msg))
         return {
           ok: true,
           json: async () => ({
-            blobs: [{ id: 'blob-1', from: 'remote-peer', blob_b64 }],
+            blobs: [{ id: 'blob-1', from: 'remote-peer', blob_b64, epk }],
           }),
         }
       }
@@ -269,7 +298,6 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     fc._peers.set('remote-peer', {
       id: 'remote-peer', state: 'relay', dc: null, pc: null,
       relayTimer: null, pendingCandidates: [], reset() {},
@@ -287,15 +315,21 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
   })
 
   it('relay pickup sends ack for delivered blobs', async () => {
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    const { blob_b64, epk } = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote-peer',
+      session: 'sess-1', data: 'x',
+    })
+
     const ackCalls = []
     vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
       if (String(url).includes('pickup')) {
-        const msg = { session: 'sess-1', data: 'x' }
-        const blob_b64 = btoa(JSON.stringify(msg))
         return {
           ok: true,
           json: async () => ({
-            blobs: [{ id: 'blob-99', from: 'remote-peer', blob_b64 }],
+            blobs: [{ id: 'blob-99', from: 'remote-peer', blob_b64, epk }],
           }),
         }
       }
@@ -306,7 +340,6 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     fc._peers.set('remote-peer', {
       id: 'remote-peer', state: 'relay', dc: null, pc: null,
       relayTimer: null, pendingCandidates: [], reset() {},
@@ -320,14 +353,22 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
   })
 
   it('malformed relay blob is silently skipped', async () => {
+    const fc = makeFabric()
+    await fc._ensureDepositKey()
+
+    const good = makeRelayBlob({
+      recipientBoxPubB64: fc._boxPubKeyB64, to: 'local-peer', from: 'remote-peer',
+      session: 'sess-1', data: 'ok',
+    })
+
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('pickup')) {
         return {
           ok: true,
           json: async () => ({
             blobs: [
-              { id: 'bad-1', from: 'remote-peer', blob_b64: 'not-valid-base64!!!###' },
-              { id: 'good-1', from: 'remote-peer', blob_b64: btoa(JSON.stringify({ session: 'sess-1', data: 'ok' })) },
+              { id: 'bad-1', from: 'remote-peer', blob_b64: 'not-valid-base64!!!###', epk: good.epk },
+              { id: 'good-1', from: 'remote-peer', blob_b64: good.blob_b64, epk: good.epk },
             ],
           }),
         }
@@ -336,7 +377,6 @@ describe('FabricClient — relay deposit / pickup round-trip', () => {
       return { ok: true, json: async () => ({ ice_servers: [] }) }
     }))
 
-    const fc = makeFabric()
     fc._peers.set('remote-peer', {
       id: 'remote-peer', state: 'relay', dc: null, pc: null,
       relayTimer: null, pendingCandidates: [], reset() {},
