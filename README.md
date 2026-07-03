@@ -4,7 +4,7 @@
 
 # Vulos Relay
 
-**`@vulos/relay-client` — the sovereign peer-fabric client SDK for VulOS web surfaces**
+**The sovereign connectivity fabric for VulOS — `@vulos/relay-client` peer-fabric SDK + a self-hosted Go reverse-tunnel**
 
 [![npm](https://img.shields.io/npm/v/%40vulos%2Frelay-client?label=%40vulos%2Frelay-client)](https://www.npmjs.com/package/@vulos/relay-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -20,20 +20,31 @@
 
 ## What is Vulos Relay?
 
-Vulos Relay is the **sovereign connectivity fabric** for the VulOS suite. Its
-single deliverable is `@vulos/relay-client` — a browser-side JS SDK that wires
-peers together: it opens **WebRTC peer-to-peer data channels** between
-collaborators, multiplexes signaling, presence, and live cursors over them, and
-**falls back to a relay circuit** whenever a direct connection can't be
-established.
+Vulos Relay is the **sovereign connectivity fabric** for the VulOS suite — the
+single place the suite reaches sovereign, self-hosted boxes across the network
+boundary. It ships **two complementary deliverables**:
 
-It is a **client only** — no server ships in this package. The SDK talks to its
-host application's `/api/peering/*` endpoints over HTTP and WebSocket for
-signaling and ICE credentials. When P2P fails, deposits and pickups flow through
-the host's relay circuit (the deposit/pickup HTTP API). TLS is always terminated
-at the edge — a cloud POP for cloud-routed installs, or the box itself for
-LAN-direct — so the SDK only ever speaks `https`/`wss` to whichever endpoint it
-has selected.
+- **`@vulos/relay-client`** (JS/TS SDK) — wires browser peers together with
+  **WebRTC peer-to-peer data channels**, multiplexing signaling, presence, and
+  live cursors, and **falling back to a relay circuit** when a direct connection
+  can't be established. It's a **client only** — it talks to its host app's
+  `/api/peering/*` endpoints for signaling and ICE credentials; TLS is always
+  terminated at the edge, so the SDK only ever speaks `https`/`wss`. This powers
+  **P2P collaboration** (incl. E2E-encrypted, room-gated document co-editing).
+
+- **A self-hosted Go reverse-tunnel** (`tunnel/` + `cmd/vulos-relayd` +
+  `cmd/vulos-relay-agent`) — the **sovereign replacement for `frp` / ngrok /
+  Cloudflare Tunnel**. A loopback-bound box dials one outbound `wss://`
+  connection to a relay **you control**, which serves a public URL and
+  reverse-proxies HTTP + WebSocket back down it — **no inbound ports, no static
+  IP, no third-party relay**. The agent can **link to a Vulos account** so its
+  usage is metered through Vulos Cloud billing, or run **unlinked and unbilled**
+  for pure self-host. This powers **public exposure + cross-instance federation**.
+
+> **Not** the OS app-gateway. Routing `/app/<id>` to a box's local app ports
+> (with auth-token injection) is the VulOS shell's own internal reverse proxy —
+> a separate concern that stays in the OS. Relay is for crossing the *network*
+> boundary (P2P + public exposure), not the in-box one.
 
 ---
 
@@ -48,7 +59,7 @@ self-hostable on its own, and combined under one login by **Vulos Workspace**:
 | **Vulos Talk** | Team chat + channels/Spaces + huddles |
 | **Vulos Meet** | Video meetings (LiveKit SFU) |
 | **Vulos Office** | Documents: docs, sheets, slides, PDF |
-| **Vulos Relay** | **← this repo** — sovereign connectivity fabric (`@vulos/relay-client`) |
+| **Vulos Relay** | **← this repo** — sovereign connectivity fabric: `@vulos/relay-client` SDK + a self-hosted Go reverse-tunnel |
 | **Vulos Workspace** | The open suite shell (one login, app switcher, admin) |
 | **Vulos OS** | The web-native desktop |
 
@@ -261,9 +272,11 @@ sequenceDiagram
 
 **Transport stack.** This SDK is built on the browser's native primitives —
 `RTCPeerConnection` / `RTCDataChannel` for P2P, `WebSocket` for signaling, and
-`fetch` for ICE credentials and relay deposit/pickup. There is no proxy/tunnel
-layer; the relay circuit is a plain authenticated HTTP store-and-forward served
-by the host backend.
+`fetch` for ICE credentials and relay deposit/pickup. The SDK itself has no
+proxy/tunnel layer; its relay circuit is a plain authenticated HTTP
+store-and-forward served by the host backend. (The repo's separate **Go
+reverse-tunnel** — see below — is a distinct subsystem for public exposure, not
+part of the SDK's transport.)
 
 **TLS termination.** The SDK only ever talks to the base URL it selected, over
 `https`/`wss`. TLS is terminated at the edge — a cloud POP for cloud-routed
@@ -311,8 +324,21 @@ go run ./cmd/vulos-relay-agent -server wss://relay.example.com \
 
 The `tunnel/agent` package mirrors wede's `internal/tunnel.Manager`
 (`Start`/`Stop`/`PublicURL`/`Snapshot`, same `stopped`/`starting`/`connected`/`error`
-vocabulary) so it can be embedded in-process. Full design, deploy shape, DNS, and
-limitations: **[docs/TUNNEL.md](docs/TUNNEL.md)**.
+vocabulary) so it can be embedded in-process — [wede](https://github.com/vul-os/wede)
+uses it directly in place of external `frpc`.
+
+**Account-linking + usage metering (optional).** An OSS/self-host install can
+**link to a Vulos account** — a headless device-code flow
+(`/api/link/device/{start,approve,poll}`) mints an account-bound credential — after
+which the relay server resolves each agent to its account, gates it on the
+account's tier/quota (`GET /api/relay/entitlement`), and flushes per-account byte
+deltas to Vulos Cloud billing (`POST /api/relay/usage`, HMAC-signed + idempotent).
+Entitlement fails **closed** at connect and **open** mid-session (a billing blip
+never cuts a live tunnel). A static grant with **no** account runs **unlinked and
+unbilled** — pure sovereign self-host needs no Vulos account; linking is opt-in.
+Run `vulos-relayd` with `-cp-url` / `-cp-shared-secret` / `-pop-id` to enable it.
+
+Full design, deploy shape, DNS, and limitations: **[docs/TUNNEL.md](docs/TUNNEL.md)**.
 
 ```
 go build ./...        # server + agent binaries
