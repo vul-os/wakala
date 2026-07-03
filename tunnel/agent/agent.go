@@ -1,0 +1,270 @@
+// Package agent is the box-side half of the Vulos sovereign reverse tunnel.
+//
+// An Agent dials a SINGLE outbound wss:// connection to a Vulos relay server,
+// authenticates with a bearer token, claims its token-authorized name, then hands
+// the connection to yamux and services inbound requests: for each yamux stream the
+// server opens, the agent reads one HTTP request and proxies it to its ONE
+// configured local target (localhost:PORT) — never an arbitrary host (SSRF guard).
+//
+// The public surface intentionally mirrors wede's internal/tunnel.Manager so wede
+// can swap its frp subprocess for this in-process client:
+//
+//	Status vocabulary: "stopped" | "starting" | "connected" | "error"
+//	Start(ctx) / Stop() / PublicURL() / Snapshot()
+//
+// Start returns immediately after kicking off an async dial+maintain loop that
+// reconnects with exponential backoff + jitter; it never blocks on the network.
+package agent
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Status is the tunnel's lifecycle state. Values match wede's tunnel.Status.
+type Status string
+
+const (
+	StatusStopped   Status = "stopped"
+	StatusStarting  Status = "starting"
+	StatusConnected Status = "connected"
+	StatusError     Status = "error"
+)
+
+const maxLogLines = 200
+
+// Options configures an Agent.
+type Options struct {
+	// ServerURL is the relay's control endpoint base, e.g. "wss://relay.vulos.dev"
+	// or "https://relay.vulos.dev" (http/https are normalized to ws/wss). The
+	// control path is appended automatically.
+	ServerURL string
+	// Token is the per-agent bearer token; the server validates it and derives the
+	// permitted name(s) from it. Owner-only secret.
+	Token string
+	// LocalAddr is the ONE local target to proxy to, e.g. "127.0.0.1:8080" or
+	// "localhost:8080". Must resolve to loopback; non-local targets are refused.
+	LocalAddr string
+	// Name is the requested public name (subdomain / path segment). The server only
+	// honors it if the token authorizes it.
+	Name string
+
+	// TLSConfig, if set, is used for the wss dial (e.g. a pinned CA for self-hosted
+	// relays). nil uses the system roots.
+	TLSConfig *tls.Config
+	// InsecureSkipVerify disables TLS verification — for local testing only.
+	InsecureSkipVerify bool
+
+	// HandshakeTimeout bounds the control dial + register round-trip. 0 -> 15s.
+	HandshakeTimeout time.Duration
+	// MaxBackoff caps the reconnect backoff. 0 -> 30s.
+	MaxBackoff time.Duration
+	// now is injectable for tests; nil -> time.Now.
+	now func() time.Time
+}
+
+// Snapshot is the state a UI reads. Field set mirrors wede's expectations.
+type Snapshot struct {
+	Status    Status   `json:"status"`
+	PublicURL string   `json:"publicUrl,omitempty"`
+	Connected bool     `json:"connected"`
+	LastError string   `json:"lastError,omitempty"`
+	Log       []string `json:"log,omitempty"`
+}
+
+// Agent maintains one outbound tunnel. Safe for concurrent use.
+type Agent struct {
+	opts Options
+
+	mu        sync.Mutex
+	status    Status
+	publicURL string
+	lastErr   string
+	log       []string
+	cancel    context.CancelFunc
+	running   bool
+	// dialHook lets tests replace the wss dial with an in-memory net.Conn.
+	dialHook func(ctx context.Context) (net.Conn, error)
+}
+
+// New returns an idle Agent. Call Start to bring the tunnel up.
+func New(opts Options) *Agent {
+	if opts.now == nil {
+		opts.now = time.Now
+	}
+	if opts.HandshakeTimeout == 0 {
+		opts.HandshakeTimeout = 15 * time.Second
+	}
+	if opts.MaxBackoff == 0 {
+		opts.MaxBackoff = 30 * time.Second
+	}
+	return &Agent{opts: opts, status: StatusStopped}
+}
+
+// Start validates options and launches the async dial+maintain loop. It returns
+// quickly; connection progress is observable via Snapshot. Calling Start on an
+// already-running Agent is a no-op.
+func (a *Agent) Start(ctx context.Context) error {
+	if err := validateOptions(a.opts); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return nil
+	}
+	loopCtx, cancel := context.WithCancel(ctx)
+	a.cancel = cancel
+	a.running = true
+	a.status = StatusStarting
+	a.lastErr = ""
+	a.log = nil
+	a.mu.Unlock()
+
+	a.appendLog("starting: dialing %s for name %q -> %s", a.opts.ServerURL, a.opts.Name, a.opts.LocalAddr)
+	go a.maintain(loopCtx)
+	return nil
+}
+
+// Stop tears down the tunnel and blocks briefly for the loop to observe cancel.
+// No-op if not running.
+func (a *Agent) Stop() {
+	a.mu.Lock()
+	cancel := a.cancel
+	a.running = false
+	a.cancel = nil
+	a.status = StatusStopped
+	a.publicURL = ""
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// PublicURL returns the current public URL, or "" if not connected.
+func (a *Agent) PublicURL() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.status != StatusConnected {
+		return ""
+	}
+	return a.publicURL
+}
+
+// Snapshot returns the current observable state. The token is never included.
+func (a *Agent) Snapshot() Snapshot {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	logCopy := make([]string, len(a.log))
+	copy(logCopy, a.log)
+	url := ""
+	if a.status == StatusConnected {
+		url = a.publicURL
+	}
+	return Snapshot{
+		Status:    a.status,
+		PublicURL: url,
+		Connected: a.status == StatusConnected,
+		LastError: a.lastErr,
+		Log:       logCopy,
+	}
+}
+
+// --- internals ---
+
+func validateOptions(o Options) error {
+	if strings.TrimSpace(o.ServerURL) == "" {
+		return fmt.Errorf("agent: ServerURL is required")
+	}
+	if strings.TrimSpace(o.Token) == "" {
+		return fmt.Errorf("agent: Token is required")
+	}
+	if strings.TrimSpace(o.Name) == "" {
+		return fmt.Errorf("agent: Name is required")
+	}
+	if strings.TrimSpace(o.LocalAddr) == "" {
+		return fmt.Errorf("agent: LocalAddr is required")
+	}
+	if err := ensureLoopback(o.LocalAddr); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureLoopback rejects any LocalAddr that is not a loopback host. This is the
+// agent's SSRF guard at configuration time; forwardStream enforces it again at
+// dial time in case the target is a hostname that resolves off-loopback.
+func ensureLoopback(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("agent: LocalAddr must be host:port: %w", err)
+	}
+	if strings.TrimSpace(port) == "" {
+		return fmt.Errorf("agent: LocalAddr must include a port")
+	}
+	host = strings.TrimSpace(host)
+	switch strings.ToLower(host) {
+	case "localhost":
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("agent: LocalAddr host %q must be localhost or a loopback IP", host)
+	}
+	if !ip.IsLoopback() {
+		return fmt.Errorf("agent: LocalAddr %q is not loopback (SSRF guard)", host)
+	}
+	return nil
+}
+
+// controlURL normalizes ServerURL to a wss/ws URL with the control path.
+func controlURL(serverURL string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(serverURL))
+	if err != nil {
+		return "", fmt.Errorf("agent: invalid ServerURL: %w", err)
+	}
+	switch u.Scheme {
+	case "https", "wss":
+		u.Scheme = "wss"
+	case "http", "ws":
+		u.Scheme = "ws"
+	default:
+		return "", fmt.Errorf("agent: ServerURL scheme %q must be wss/https (or ws/http for testing)", u.Scheme)
+	}
+	// Preserve any base path the operator put in front of the relay.
+	u.Path = strings.TrimRight(u.Path, "/") + controlPath
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func (a *Agent) setStatus(s Status, publicURL, errMsg string) {
+	a.mu.Lock()
+	a.status = s
+	if publicURL != "" {
+		a.publicURL = publicURL
+	}
+	if errMsg != "" {
+		a.lastErr = errMsg
+	}
+	if s == StatusConnected {
+		a.lastErr = ""
+	}
+	a.mu.Unlock()
+}
+
+func (a *Agent) appendLog(format string, args ...any) {
+	line := fmt.Sprintf("%s "+format, append([]any{a.opts.now().Format(time.RFC3339)}, args...)...)
+	a.mu.Lock()
+	a.log = append(a.log, line)
+	if len(a.log) > maxLogLines {
+		a.log = a.log[len(a.log)-maxLogLines:]
+	}
+	a.mu.Unlock()
+}

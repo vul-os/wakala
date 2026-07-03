@@ -3,6 +3,10 @@ node_modules/
 dist-lib/
 /dist/
 
+# Go build artifacts (sovereign reverse tunnel)
+/vulos-relayd
+/vulos-relay-agent
+
 # Databases
 *.db
 

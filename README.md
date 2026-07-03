@@ -284,10 +284,49 @@ in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ---
 
+## Sovereign reverse tunnel (Go)
+
+Alongside the JS SDK, this repo ships a **self-hosted reverse tunnel** that lets a
+loopback-bound Vulos box publish itself on the public internet with **no inbound
+ports, no static IP, and no third-party relay** — it replaces external `frp` with
+our own sovereign server.
+
+The box runs an **agent** that dials a **single outbound `wss://`** connection to a
+**relay server you control**; the relay serves a public URL
+(`https://<name>.<relay-domain>`, or `/t/<name>/` without wildcard DNS) and reverse-
+proxies inbound HTTP + WebSocket traffic back down that one connection via
+[`hashicorp/yamux`](https://github.com/hashicorp/yamux). Bearer-token agent auth
+(constant-time), token-bound names (no hijacking), a loopback-only SSRF guard, and
+concurrency/size limits make it safe to run internet-facing.
+
+```bash
+# relay server
+go run ./cmd/vulos-relayd -domain relay.example.com \
+  -tokens-file grants.json            # [{"token":"SECRET1","names":["box1"]}]
+
+# box-side agent (binds nothing inbound; forwards only to -local)
+go run ./cmd/vulos-relay-agent -server wss://relay.example.com \
+  -token SECRET1 -name box1 -local 127.0.0.1:8080
+```
+
+The `tunnel/agent` package mirrors wede's `internal/tunnel.Manager`
+(`Start`/`Stop`/`PublicURL`/`Snapshot`, same `stopped`/`starting`/`connected`/`error`
+vocabulary) so it can be embedded in-process. Full design, deploy shape, DNS, and
+limitations: **[docs/TUNNEL.md](docs/TUNNEL.md)**.
+
+```
+go build ./...        # server + agent binaries
+go test ./...         # in-process round-trip / WS / auth / SSRF / reconnect / limits
+go vet ./...
+```
+
+---
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [docs/TUNNEL.md](docs/TUNNEL.md) | Sovereign reverse tunnel (Go server + agent) design & deploy |
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Install + first integration walkthrough |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Fabric / signaling / endpoint-failover design |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All SDK options and constructor params |
