@@ -295,6 +295,42 @@ func TestMeter_DrainDeltasAndFlush(t *testing.T) {
 	}
 }
 
+// TestMeter_OverQuotaResponseCutsPromptly verifies WAVE34-RELAY-HARDEN: an
+// over-quota account returned by the usage-report response is cut on its NEXT
+// request (via the gate) instead of surviving until the gate TTL lapses.
+func TestMeter_OverQuotaResponseCutsPromptly(t *testing.T) {
+	fake := newFakeCP("shh")
+	// The account is currently allowed and NOT over quota by the entitlement read;
+	// only the usage-report response will flag it over quota. Use a LONG gate TTL
+	// so that, without the prompt-cut wiring, the account would keep serving.
+	fake.entByAccount["acct-hot"] = Entitlement{AccountID: "acct-hot", RelayAllowed: true, OverQuota: true}
+	srv := fake.server(t)
+	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
+
+	gate := newEntitlementGate(cp, time.Hour) // long TTL: a cached "allowed" would linger
+	m := newMeter(cp, time.Hour)              // manual flush only
+	m.onOverQuota = gate.markOverQuota
+
+	// Prime the gate with a fresh "allowed" decision (entitlement read says
+	// RelayAllowed=true, OverQuota=true here — but simulate the account being
+	// allowed at connect by seeding a clean decision directly).
+	gate.mu.Lock()
+	gate.cache["acct-hot"] = gateDecision{allowed: true, overQuota: false, expires: time.Now().Add(time.Hour)}
+	gate.mu.Unlock()
+	if !gate.allowContinue("acct-hot") {
+		t.Fatal("account should be serving before the over-quota report")
+	}
+
+	// Traffic accrues and we flush; the CP flags the account over quota.
+	m.addBytes("acct-hot", 10_000)
+	m.flushOnce()
+
+	// The very next request must be cut (no waiting a full gate TTL).
+	if gate.allowContinue("acct-hot") {
+		t.Fatal("over-quota account must be cut on its next request after the usage report")
+	}
+}
+
 func TestMeter_FlushFailureRetriesWithoutLoss(t *testing.T) {
 	fake := newFakeCP("shh")
 	srv := fake.server(t)
