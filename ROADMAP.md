@@ -16,6 +16,9 @@ priorities shift with Vulos OS milestones.
 - Round-trip check fixture runner (subpath `@vulos/relay-client/roundTripCheck`)
 - Dual ESM + CJS build; optional React / xlsx peer deps
 - Release pipeline with npm provenance and GitHub Releases
+- **Sovereign relay tunnel (Go)** — self-hostable `vulos-relayd` + `vulos-relay-agent`
+  replacing the third-party frp server (`tunnel/`, `cmd/`); the repo now ships both
+  the JS SDK and this server-side tunnel
 
 ---
 
@@ -63,8 +66,6 @@ priorities shift with Vulos OS milestones.
 
 ## Out of scope (frozen invariants)
 
-- Shipping a Go server or any server-side process — this repo is a pure JS SDK;
-  server-side concerns belong in vulos-cloud.
 - Google SSO / OAuth.
 - Stripe billing.
 - Rust rewrites.
@@ -72,4 +73,4 @@ priorities shift with Vulos OS milestones.
 
 ---
 
-_Last updated: 2026-06-15_
+_Last updated: 2026-07-06_
