@@ -34,10 +34,32 @@ jobs:
       - name: Test
         run: npm test
 
+  go:
+    name: Relay Server — Build, Vet & Test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test ./... -race
+
   security:
     name: Security Scan
     runs-on: ubuntu-24.04
-    needs: client
+    needs: [client, go]
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
