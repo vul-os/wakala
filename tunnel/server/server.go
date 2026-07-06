@@ -67,6 +67,43 @@ type Config struct {
 	// usage-report cadence (default 45s).
 	GateTTL          time.Duration
 	MeterFlushPeriod time.Duration
+
+	// Rate limiting (WAVE34-RELAY-HARDEN). All optional; 0 => sane defaults are
+	// applied in New. Set a rate to a negative value to DISABLE that limiter
+	// (useful for tests or a trusted-edge deployment). These are ON TOP OF the
+	// existing hard caps (MaxAgents, MaxStreamsPerAgent), which stay intact.
+
+	// ControlConnRate / ControlConnBurst throttle control-connection attempts per
+	// source IP (token bucket). Defaults: 5/s, burst 20.
+	ControlConnRate  float64
+	ControlConnBurst float64
+	// PublicReqRate / PublicReqBurst throttle inbound public requests per
+	// agent/session (token bucket). Defaults: 50/s, burst 100.
+	PublicReqRate  float64
+	PublicReqBurst float64
+	// GlobalReqRate / GlobalReqBurst cap the AGGREGATE inbound public request rate
+	// across all tunnels. Defaults: 500/s, burst 1000.
+	GlobalReqRate  float64
+	GlobalReqBurst float64
+	// RateLimitIdleTTL evicts a per-key bucket unused for this long (bounds
+	// memory). Default 10m.
+	RateLimitIdleTTL time.Duration
+	// RateLimitMaxKeys caps distinct buckets per limiter (bounds memory).
+	// Default 100_000.
+	RateLimitMaxKeys int
+}
+
+// rateLimitField resolves a configured rate: 0 => the supplied default, a
+// negative value => 0 (disabled).
+func rateLimitField(v, def float64) float64 {
+	switch {
+	case v < 0:
+		return 0
+	case v == 0:
+		return def
+	default:
+		return v
+	}
 }
 
 func (c *Config) applyDefaults() {
@@ -91,6 +128,20 @@ func (c *Config) applyDefaults() {
 	if c.RequestTimeout == 0 {
 		c.RequestTimeout = 60 * time.Second
 	}
+	// Rate-limit defaults (WAVE34-RELAY-HARDEN). A negative value means "disabled"
+	// and is normalized to 0 by rateLimitField at construction time.
+	c.ControlConnRate = rateLimitField(c.ControlConnRate, 5)
+	c.ControlConnBurst = rateLimitField(c.ControlConnBurst, 20)
+	c.PublicReqRate = rateLimitField(c.PublicReqRate, 50)
+	c.PublicReqBurst = rateLimitField(c.PublicReqBurst, 100)
+	c.GlobalReqRate = rateLimitField(c.GlobalReqRate, 500)
+	c.GlobalReqBurst = rateLimitField(c.GlobalReqBurst, 1000)
+	if c.RateLimitIdleTTL == 0 {
+		c.RateLimitIdleTTL = 10 * time.Minute
+	}
+	if c.RateLimitMaxKeys == 0 {
+		c.RateLimitMaxKeys = 100_000
+	}
 }
 
 // Server is the relay. Construct with New, then use Handler() / ListenAndServe*.
@@ -99,6 +150,11 @@ type Server struct {
 	registry *registry
 	gate     *entitlementGate // account relay-entitlement gate (no-op when CP nil)
 	meter    *meter           // per-account usage meter (no-op when CP nil)
+
+	// Rate limiters (WAVE34-RELAY-HARDEN). Nil => disabled (allow all).
+	ctrlLimiter   *rateLimiter       // control-conn attempts per source IP
+	reqLimiter    *rateLimiter       // public requests per agent/session
+	globalLimiter *globalRateLimiter // aggregate public request cap
 }
 
 // New validates config and returns a Server. It fails closed: a missing token
@@ -116,6 +172,10 @@ func New(cfg Config) (*Server, error) {
 		registry: newRegistry(cfg.MaxAgents),
 		gate:     newEntitlementGate(cfg.CP, cfg.GateTTL),
 		meter:    newMeter(cfg.CP, cfg.MeterFlushPeriod),
+
+		ctrlLimiter:   newRateLimiter(cfg.ControlConnRate, cfg.ControlConnBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
+		reqLimiter:    newRateLimiter(cfg.PublicReqRate, cfg.PublicReqBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
+		globalLimiter: newGlobalRateLimiter(cfg.GlobalReqRate, cfg.GlobalReqBurst),
 	}
 	// WAVE34-RELAY-HARDEN: let the usage-flush loop feed the CP's over-quota
 	// verdict straight into the entitlement gate, so an over-cap account is cut

@@ -31,6 +31,22 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such tunnel", http.StatusNotFound)
 		return
 	}
+
+	// WAVE34-RELAY-HARDEN: rate-limit inbound public requests. A global bucket
+	// caps aggregate load across all tunnels; a per-agent bucket caps any single
+	// tunnel. Both return 429 (with Retry-After) when exceeded. These are ON TOP
+	// OF the per-agent stream cap below (which bounds concurrency, not rate).
+	if !s.globalLimiter.allow() {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "relay busy (rate limited)", http.StatusTooManyRequests)
+		return
+	}
+	if !s.reqLimiter.allow(name) {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many requests for this tunnel", http.StatusTooManyRequests)
+		return
+	}
+
 	sess, ok := s.registry.lookup(name)
 	if !ok {
 		http.Error(w, "tunnel offline", http.StatusBadGateway)

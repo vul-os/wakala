@@ -20,6 +20,15 @@ const wireControlPath = wire.ControlPath
 // handleControl accepts an agent's wss control connection, authenticates it,
 // registers its name, and becomes the yamux client for the session lifetime.
 func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
+	// WAVE34-RELAY-HARDEN: throttle control-connection attempts per source IP
+	// BEFORE spending a WS upgrade + CP entitlement round-trip on them. Return 429
+	// (with Retry-After) when a source exceeds its token bucket.
+	if !s.ctrlLimiter.allow(clientIP(r)) {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many control-connection attempts", http.StatusTooManyRequests)
+		return
+	}
+
 	// Pre-auth: the bearer token must be present in the Authorization header. We
 	// validate token+name after reading the Register frame (the name comes from it),
 	// but reject obviously-unauthenticated connections before the WS upgrade to

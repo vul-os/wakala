@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/vul-os/vulos-relay/tunnel/server"
@@ -34,6 +35,15 @@ func main() {
 		tokensFile = flag.String("tokens-file", "", "path to JSON grants file (or set VULOS_RELAY_TOKENS)")
 		pathMode   = flag.Bool("path-mode", false, "also serve /t/<name>/ fallback (no wildcard DNS)")
 		maxAgents  = flag.Int("max-agents", 256, "max concurrent agents")
+
+		// WAVE34-RELAY-HARDEN: rate limits for the internet-facing surfaces. 0 uses
+		// the built-in safe default; a negative value DISABLES that limiter.
+		ctrlRate   = flag.Float64("ratelimit-control-rate", envFloat("VULOS_RELAY_CTRL_RATE", 0), "control-conn attempts/sec per source IP (0=default 5, <0=off)")
+		ctrlBurst  = flag.Float64("ratelimit-control-burst", envFloat("VULOS_RELAY_CTRL_BURST", 0), "control-conn attempt burst per source IP (0=default 20)")
+		reqRate    = flag.Float64("ratelimit-req-rate", envFloat("VULOS_RELAY_REQ_RATE", 0), "public requests/sec per tunnel (0=default 50, <0=off)")
+		reqBurst   = flag.Float64("ratelimit-req-burst", envFloat("VULOS_RELAY_REQ_BURST", 0), "public request burst per tunnel (0=default 100)")
+		globalRate = flag.Float64("ratelimit-global-rate", envFloat("VULOS_RELAY_GLOBAL_RATE", 0), "aggregate public requests/sec across all tunnels (0=default 500, <0=off)")
+		globBurst  = flag.Float64("ratelimit-global-burst", envFloat("VULOS_RELAY_GLOBAL_BURST", 0), "aggregate public request burst (0=default 1000)")
 
 		// WAVE24-RELAY-BILLING: link this relay to Vulos Cloud so account-bound
 		// tokens are gated + metered. All optional — omit to run UNBILLED (self-host).
@@ -87,6 +97,13 @@ func main() {
 		EnablePathMode: *pathMode,
 		MaxAgents:      *maxAgents,
 		CP:             cp,
+
+		ControlConnRate:  *ctrlRate,
+		ControlConnBurst: *ctrlBurst,
+		PublicReqRate:    *reqRate,
+		PublicReqBurst:   *reqBurst,
+		GlobalReqRate:    *globalRate,
+		GlobalReqBurst:   *globBurst,
 	})
 	if err != nil {
 		log.Fatalf("vulos-relayd: %v", err)
@@ -138,6 +155,16 @@ func loadGrants(path string) ([]server.Grant, error) {
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+// envFloat reads a float from env k, falling back to def when unset/unparseable.
+func envFloat(k string, def float64) float64 {
+	if v := os.Getenv(k); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
 	}
 	return def
 }
