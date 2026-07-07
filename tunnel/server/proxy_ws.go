@@ -52,6 +52,11 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, outReq *http.Request, str
 		return // handshake refused by app; response already relayed
 	}
 
+	// Handshake done (101 received): clear any RequestTimeout deadline the caller set
+	// on the stream so the long-lived WS splice below is not cut mid-session. The
+	// deadline only bounds time-to-handshake (protection against a half-dead agent).
+	_ = stream.SetDeadline(time.Time{})
+
 	// Splice: client <-> agent stream, honoring any buffered bytes on each side.
 	clientSide := wrapBuffered(clientConn, clientBuf.Reader)
 	agentSide := wrapBuffered(stream, agentBr)

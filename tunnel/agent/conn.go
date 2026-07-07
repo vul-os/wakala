@@ -84,9 +84,15 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	}
 	defer session.Close()
 
-	// Close the session if ctx is cancelled so Accept unblocks.
+	// Close the session if ctx is cancelled so Accept unblocks. Use a
+	// per-connection context that is cancelled when connectOnce returns (defer
+	// below) so this watcher goroutine does NOT outlive the session: the maintain
+	// loop's ctx lives for the whole agent lifetime, so watching it directly would
+	// leak one goroutine (and pin one dead session) per reconnect under churn.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
 	go func() {
-		<-ctx.Done()
+		<-connCtx.Done()
 		session.Close()
 	}()
 

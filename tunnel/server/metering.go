@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -44,10 +46,28 @@ type meter struct {
 	// keep accumulating). Traffic is never blocked.
 	maxAccounts int
 
-	seq atomic.Uint64 // monotonic report_id source
+	seq    atomic.Uint64 // monotonic report_id source (within this boot)
+	bootID string        // per-process nonce so report_ids never collide across restarts
+
+	// retry holds batches that were assigned a report_id and drained but whose flush
+	// FAILED, so they are retried on a later tick REUSING THE SAME report_id. Reusing
+	// the id is what makes the CP's idempotent dedup correct: a batch the CP already
+	// applied but whose HTTP response we lost is a no-op on retry (not double-billed),
+	// and a batch the CP never received is applied exactly once. Guarded by mu; only
+	// the flush goroutine appends/drains it, but addBytes/drain share mu.
+	retry           []pendingReport
+	maxRetryBatches int
 
 	stop   chan struct{}
 	doneWG sync.WaitGroup
+}
+
+// pendingReport is one drained, immutable usage batch plus its STABLE report_id.
+// The id is generated once when the batch is drained and is reused verbatim on
+// every retry so the CP dedups a re-sent batch instead of re-applying it.
+type pendingReport struct {
+	id    string
+	items []usageItem
 }
 
 // newMeter constructs a meter. A nil cp disables flushing (metering is a no-op),
@@ -61,8 +81,28 @@ func newMeter(cp *CPClient, flushInterval time.Duration) *meter {
 		flushInterval: flushInterval,
 		pending:       make(map[string]*meterDelta),
 		maxAccounts:   50_000,
-		stop:          make(chan struct{}),
+		bootID:        newBootID(),
+		// Bound retained retry batches under a prolonged CP outage. At the default
+		// 45s flush cadence this holds ~12h of failed batches before the oldest are
+		// shed, which is far longer than any real CP blip.
+		maxRetryBatches: 1024,
+		stop:            make(chan struct{}),
 	}
+}
+
+// newBootID returns a short random per-process nonce mixed into every report_id.
+// Without it, report_ids restart at <pop>-1 after a process restart and would
+// COLLIDE with ids the CP already applied before the restart, so the CP's dedup
+// would silently drop the first post-restart batches (under-billing). A random
+// boot nonce makes ids globally unique across restarts while staying stable within
+// a boot (so in-boot retries still dedup correctly).
+func newBootID() string {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Fall back to a time-based nonce; uniqueness across restarts is still met.
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // enabled reports whether flushing is active (a CP client is configured).
@@ -125,29 +165,40 @@ func (m *meter) drain() []usageItem {
 	return items
 }
 
-// restore adds items back into the pending map (used when a flush failed, so the
-// deltas are retried on the next tick rather than lost). Additive — a concurrent
-// addBytes between drain and restore is preserved.
-func (m *meter) restore(items []usageItem) {
+// takeRetry atomically removes and returns the queued failed batches.
+func (m *meter) takeRetry() []pendingReport {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, it := range items {
-		d := m.pending[it.AccountID]
-		if d == nil {
-			if len(m.pending) >= m.maxAccounts {
-				continue
-			}
-			d = &meterDelta{}
-			m.pending[it.AccountID] = d
-		}
-		d.bytes += it.Bytes
-		d.sessions += it.Sessions
+	if len(m.retry) == 0 {
+		return nil
+	}
+	out := m.retry
+	m.retry = nil
+	return out
+}
+
+// requeue puts failed batches back for the next tick, bounded so a prolonged CP
+// outage cannot grow memory without limit. On overflow the OLDEST batches are
+// dropped (favouring fresher usage) and the drop is logged.
+func (m *meter) requeue(batches []pendingReport) {
+	if len(batches) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.retry = append(m.retry, batches...)
+	if len(m.retry) > m.maxRetryBatches {
+		drop := len(m.retry) - m.maxRetryBatches
+		m.retry = m.retry[drop:]
+		slog.Warn("usage retry queue overflow; dropping oldest batches",
+			"component", "relay", "dropped", drop)
 	}
 }
 
-// nextReportID returns a monotonic, per-PoP report id for idempotency.
+// nextReportID returns a monotonic, per-PoP, per-boot report id for idempotency.
+// The boot nonce prevents cross-restart collisions (see newBootID).
 func (m *meter) nextReportID() string {
-	return fmt.Sprintf("%s-%d", m.cp.PoPID, m.seq.Add(1))
+	return fmt.Sprintf("%s-%s-%d", m.cp.PoPID, m.bootID, m.seq.Add(1))
 }
 
 // run starts the background flush loop. Call stopAndFlush to end it.
@@ -172,39 +223,50 @@ func (m *meter) run() {
 	}()
 }
 
-// flushOnce drains and posts the current deltas. On a CP error it restores the
-// deltas so they are retried next tick (never blocks the data path, never
-// double-counts because the report_id makes a retry a fresh id and a genuine
-// duplicate a CP no-op). Bounded: a single report carries whatever accumulated.
+// flushOnce posts any previously-failed batches (reusing their report_ids) plus a
+// fresh batch of newly-accumulated deltas, and requeues whatever fails. It never
+// blocks the data path (addBytes/addSession only touch cheap counters) and never
+// double-counts: each batch carries a STABLE report_id, so a batch the CP already
+// applied but whose response we lost is a dedup no-op on retry rather than being
+// re-billed under a fresh id (the previous restore-into-pending path lost that
+// idempotency and could double-bill on a response-lost flush).
 func (m *meter) flushOnce() {
 	if !m.enabled() {
 		return
 	}
-	items := m.drain()
-	if len(items) == 0 {
+	// Retry the older failed batches first, then the freshly-drained delta.
+	batches := m.takeRetry()
+	if newItems := m.drain(); len(newItems) > 0 {
+		batches = append(batches, pendingReport{id: m.nextReportID(), items: newItems})
+	}
+	if len(batches) == 0 {
 		return
 	}
-	reportID := m.nextReportID()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	overQuota, err := m.cp.ReportUsage(ctx, reportID, items)
-	if err != nil {
-		// CP unreachable or rejected — put the deltas back and retry next tick.
-		m.restore(items)
-		// Server-side fault, not a client event: warn level. No account/secret in
-		// the message — just the transport error.
-		slog.Warn("usage flush failed (will retry)", "component", "relay", "err", err.Error())
-		return
-	}
-	// WAVE34-RELAY-HARDEN: consume the over-quota signal the CP returns on the
-	// usage report. Previously this was dropped, so an over-cap tenant kept
-	// tunnelling until the next entitlement-gate TTL (~30s) lapsed. Pushing it
-	// into the gate now makes the account get cut with 402 on its NEXT request.
-	if m.onOverQuota != nil {
-		for _, acct := range overQuota {
-			m.onOverQuota(acct)
+
+	var failed []pendingReport
+	for _, b := range batches {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		overQuota, err := m.cp.ReportUsage(ctx, b.id, b.items)
+		cancel()
+		if err != nil {
+			// CP unreachable or rejected — keep the batch (with its id) for retry.
+			// Server-side fault, not a client event: warn level. No account/secret in
+			// the message — just the transport error.
+			failed = append(failed, b)
+			slog.Warn("usage flush failed (will retry)", "component", "relay", "err", err.Error())
+			continue
+		}
+		// WAVE34-RELAY-HARDEN: consume the over-quota signal the CP returns on the
+		// usage report. Previously this was dropped, so an over-cap tenant kept
+		// tunnelling until the next entitlement-gate TTL (~30s) lapsed. Pushing it
+		// into the gate now makes the account get cut with 402 on its NEXT request.
+		if m.onOverQuota != nil {
+			for _, acct := range overQuota {
+				m.onOverQuota(acct)
+			}
 		}
 	}
+	m.requeue(failed)
 }
 
 // stopAndFlush stops the loop after a final flush.

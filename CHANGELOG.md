@@ -11,6 +11,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- **Agent goroutine leak per reconnect (`deep/relay` pass)** — `connectOnce` spawned
+  its "close the yamux session when the context ends" watcher on the *long-lived*
+  maintain-loop context, so every ended session (each reconnect) left one goroutine
+  blocked until the whole agent stopped. Under reconnect churn (a flapping relay)
+  goroutines and dead sessions piled up without bound. The watcher is now bound to a
+  per-connection context cancelled when `connectOnce` returns.
+- **Usage metering could double-bill on a response-lost flush (`deep/relay` pass)** —
+  the flush drained deltas, posted them under a `report_id`, and on *any* error
+  restored them into the pending pool so the next flush re-sent them under a **fresh**
+  id. When the CP had actually applied the batch but its HTTP response was lost
+  (timeout / 5xx after commit), the fresh id defeated the CP's idempotent dedup and
+  the account was billed twice. Failed batches now retain and **reuse their stable
+  `report_id`** on retry (bounded queue), so a re-sent batch is a dedup no-op instead
+  of a re-bill. `report_id`s also carry a per-boot nonce so they no longer collide
+  across a process restart (which previously let the CP silently drop the first
+  post-restart batches → under-billing).
+- **`RequestTimeout` is now actually enforced (`deep/relay` pass)** — the config knob
+  was defined, defaulted (60s), and documented as "per public request forward
+  timeout" but never applied. A *half-dead* agent (yamux keepalive still answering,
+  so the session stays up, but never servicing a stream) held the public request and
+  its stream slot open forever; once `MaxStreamsPerAgent` such streams accumulated the
+  whole tunnel bricked (503 to everyone) with no recovery. The relay now bounds
+  time-to-response-headers and frees the slot, failing fast with 502. The deadline is
+  cleared before the response body streams, so long-lived SSE/downloads/WS are
+  unaffected; `0` disables it.
 - **Graceful shutdown for `vulos-relayd`** — the relay now traps `SIGTERM`/`SIGINT`
   (what Fly and most orchestrators send on deploy/restart) and drains: it flips
   `/readyz` to draining, stops accepting new connections on the public + admin

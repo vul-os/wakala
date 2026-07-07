@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // hopByHopHeaders are stripped in both directions (RFC 7230 §6.1). Connection's
@@ -108,6 +109,20 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stream.Close()
 
+	// Enforce RequestTimeout as a bound on how long the agent may take to accept the
+	// forwarded request AND return response headers. Without this a HALF-DEAD agent —
+	// one whose yamux keepalive still answers (so the session is not torn down) but
+	// which never services this particular stream — would hold the stream slot and
+	// the public client's connection open forever; once MaxStreamsPerAgent such
+	// streams pile up the whole tunnel bricks (503 to everyone) with no recovery. The
+	// deadline bounds time-to-headers only: it is CLEARED before the response body is
+	// streamed, so legitimate long-lived responses (SSE, downloads) are unaffected.
+	// A configured 0 (or negative) disables it. (Previously RequestTimeout was
+	// defined + defaulted but never enforced — a dead knob.)
+	if s.cfg.RequestTimeout > 0 {
+		_ = stream.SetDeadline(time.Now().Add(s.cfg.RequestTimeout))
+	}
+
 	// Build the outbound request as the agent's local app should see it.
 	outReq := r.Clone(r.Context())
 	outReq.URL.Path = trimmedPath
@@ -138,6 +153,10 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	// Response headers are in hand: clear the deadline so the body may stream for as
+	// long as it needs (SSE / large downloads must not be cut mid-body).
+	_ = stream.SetDeadline(time.Time{})
 
 	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
