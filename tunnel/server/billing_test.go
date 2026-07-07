@@ -295,6 +295,39 @@ func TestMeter_DrainDeltasAndFlush(t *testing.T) {
 	}
 }
 
+// TestMeter_StopAndFlushDrainsPendingOnShutdown pins the graceful-shutdown drain
+// guarantee that Server.Shutdown/Close relies on: pending deltas that the periodic
+// ticker has NOT yet flushed must still reach the CP via the final flush the run
+// loop performs on stop. Without it, the last window of metered usage is silently
+// lost when the process winds down. Uses a 1h flush interval so the ONLY thing that
+// can deliver the usage is the shutdown drain itself, not a coincidental tick.
+func TestMeter_StopAndFlushDrainsPendingOnShutdown(t *testing.T) {
+	fake := newFakeCP("shh")
+	srv := fake.server(t)
+	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
+	m := newMeter(cp, time.Hour) // ticker will not fire within the test
+	m.run()
+
+	m.addBytes("acct-1", 4096)
+	m.addSession("acct-1")
+	m.addBytes("acct-2", 128)
+
+	// Nothing may have been flushed yet — the periodic ticker is an hour away.
+	if b, s := fake.totals("acct-1"); b != 0 || s != 0 {
+		t.Fatalf("pre-shutdown the CP must have received nothing, got bytes=%d sessions=%d", b, s)
+	}
+
+	// The graceful-shutdown drain: exactly one final flush delivers the last deltas.
+	m.stopAndFlush()
+
+	if b, s := fake.totals("acct-1"); b != 4096 || s != 1 {
+		t.Fatalf("shutdown drain lost acct-1 usage: bytes=%d sessions=%d, want 4096/1", b, s)
+	}
+	if b, _ := fake.totals("acct-2"); b != 128 {
+		t.Fatalf("shutdown drain lost acct-2 usage: bytes=%d, want 128", b)
+	}
+}
+
 // TestMeter_OverQuotaResponseCutsPromptly verifies WAVE34-RELAY-HARDEN: an
 // over-quota account returned by the usage-report response is cut on its NEXT
 // request (via the gate) instead of surviving until the gate TTL lapses.
