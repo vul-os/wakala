@@ -23,25 +23,7 @@ func wrapBuffered(c net.Conn, br *bufio.Reader) net.Conn {
 	return &bufferedConn{Conn: c, r: io.MultiReader(br, c)}
 }
 
-// duplexCopy copies bytes in both directions until either side closes.
-func duplexCopy(a, b net.Conn) {
-	done := make(chan struct{}, 2)
-	cp := func(dst, src net.Conn) {
-		_, _ = io.Copy(dst, src)
-		if cw, ok := dst.(interface{ CloseWrite() error }); ok {
-			_ = cw.CloseWrite()
-		} else {
-			_ = dst.SetReadDeadline(time.Now())
-		}
-		done <- struct{}{}
-	}
-	go cp(a, b)
-	go cp(b, a)
-	<-done
-	<-done
-}
-
-// duplexCopyObserved is duplexCopy that (WAVE24-RELAY-BILLING) meters the total
+// duplexCopyObserved (WAVE24-RELAY-BILLING) meters the total
 // bytes spliced in BOTH directions to the account when account != "", and
 // (WAVE50-RELAY-OBSERVABILITY) always records them in the duplex-direction
 // proxied-bytes metric. It never blocks the data path — both updates are cheap

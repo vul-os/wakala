@@ -308,12 +308,30 @@ The box runs an **agent** that dials a **single outbound `wss://`** connection t
 **relay server you control**; the relay serves a public URL
 (`https://<name>.<relay-domain>`, or `/t/<name>/` without wildcard DNS) and reverse-
 proxies inbound HTTP + WebSocket traffic back down that one connection via
-[`hashicorp/yamux`](https://github.com/hashicorp/yamux). Bearer-token agent auth
-(constant-time), token-bound names (no hijacking), a loopback-only SSRF guard, and
-concurrency/size limits make it safe to run internet-facing.
+[`hashicorp/yamux`](https://github.com/hashicorp/yamux). It is built to run
+internet-facing:
+
+- **Bearer-token agent auth** — constant-time compare, tokens stored hashed.
+- **Token-bound names** — a token may serve only its granted name(s); a live name is
+  held by exactly one session and cannot be hijacked.
+- **SSRF guard** — the agent forwards only to its one configured loopback target;
+  non-loopback targets are refused at startup and re-checked at dial time.
+- **Rate limiting** — per-source-IP control-connection, per-tunnel, and global
+  request token buckets, all returning `429` (memory-bounded, idle-evicted).
+- **Over-quota cut** — an account past its billing cap is cut with `402`.
+- **Token / credential revocation** — a file/env revoked-list plus a runtime revoke
+  API; revoked credentials are refused at connect and any live tunnel is dropped by a
+  periodic revocation sweep.
+- **Bounds** — max agents, max streams/agent, request header/body caps, and
+  keepalive dead-peer detection keep memory bounded.
+- **Observability** — a dependency-free Prometheus `/metrics` endpoint plus
+  `/healthz` / `/readyz` on a **separate loopback/token-gated admin listener** (never
+  on the public tunnel), with bounded-cardinality labels and structured `slog`
+  logging that never emits a token/secret.
 
 ```bash
-# relay server
+# relay server. Serves the public tunnel on -addr; serves /metrics + /healthz +
+# /readyz on a SEPARATE admin listener (default 127.0.0.1:9090, loopback-only).
 go run ./cmd/vulos-relayd -domain relay.example.com \
   -tokens-file grants.json            # [{"token":"SECRET1","names":["box1"]}]
 
@@ -342,7 +360,8 @@ Full design, deploy shape, DNS, and limitations: **[docs/TUNNEL.md](docs/TUNNEL.
 
 ```
 go build ./...        # server + agent binaries
-go test ./...         # in-process round-trip / WS / auth / SSRF / reconnect / limits
+go test -race ./...   # round-trip / WS / auth / SSRF / reconnect / rate-limit /
+                      # revocation / billing + adversarial regression tests
 go vet ./...
 ```
 

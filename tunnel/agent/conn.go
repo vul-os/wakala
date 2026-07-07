@@ -157,7 +157,7 @@ func (a *Agent) register(conn net.Conn) (string, error) {
 		Type:         "register",
 		Name:         a.opts.Name,
 		Token:        a.opts.Token,
-		AgentVersion: "vulos-relay-agent/0.1",
+		AgentVersion: "vulos-relay-agent/0.2",
 	}
 	if err := json.NewEncoder(conn).Encode(&req); err != nil {
 		return "", fmt.Errorf("write register: %w", err)
