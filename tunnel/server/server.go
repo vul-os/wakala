@@ -97,6 +97,21 @@ type Config struct {
 
 	// Revocation (WAVE41-RELAY-REVOCATION).
 
+	// DIRECT-IP: direct-connect endpoint negotiation. When a box advertises a
+	// direct endpoint in its Register frame, the relay VERIFIES it (reachable +
+	// ownership-proven via a probe) before surfacing it to clients. Direct traffic
+	// then bypasses the relay entirely (near-native latency + full bandwidth); a
+	// client falls back to the relay tunnel when direct fails.
+
+	// DisableDirect turns off direct-endpoint negotiation entirely: advertised
+	// endpoints are ignored and every box is served purely over the relay tunnel
+	// (the pre-DIRECT-IP behavior). Default false (direct negotiation is ON, but a
+	// box still has to opt in by advertising an endpoint AND passing verification).
+	DisableDirect bool
+	// directVerifier overrides the reachability/ownership probe — TEST-ONLY (the
+	// real one performs a live internet GET). nil => the default httpDirectVerifier.
+	directVerifier directEndpointVerifier
+
 	// RevokeSweepPeriod is how often the server rechecks every LIVE session against
 	// the revocation sources (static revoked-list + CP revoked/404 via the
 	// entitlement poll) and drops any that are now definitively revoked. This
@@ -184,6 +199,11 @@ type Server struct {
 	revokeStop   chan struct{}
 	revokeWG     sync.WaitGroup
 
+	// DIRECT-IP: verifier for box-advertised direct endpoints (nil when
+	// DisableDirect). directVerify is called at register time to prove an
+	// advertised endpoint is reachable + owned before it is surfaced to clients.
+	directVerifier directEndpointVerifier
+
 	// Observability (WAVE50-RELAY-OBSERVABILITY). metrics is always non-nil; log is
 	// the structured logger. adminSrv is the running admin/metrics *http.Server (nil
 	// until ServeAdmin runs) so Close can shut it down.
@@ -233,6 +253,16 @@ func New(cfg Config) (*Server, error) {
 
 		metrics: newMetrics(),
 		log:     newLogger(),
+	}
+	// DIRECT-IP: wire the direct-endpoint verifier unless direct negotiation is
+	// disabled. A test may inject its own via cfg.directVerifier (the real one
+	// performs a live internet probe, which unit tests must not do).
+	if !cfg.DisableDirect {
+		if cfg.directVerifier != nil {
+			s.directVerifier = cfg.directVerifier
+		} else {
+			s.directVerifier = &httpDirectVerifier{}
+		}
 	}
 	// WAVE34-RELAY-HARDEN: let the usage-flush loop feed the CP's over-quota
 	// verdict straight into the entitlement gate, so an over-cap account is cut

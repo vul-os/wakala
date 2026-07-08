@@ -147,6 +147,11 @@ type metrics struct {
 	revocationCuts   counter // live tunnels cut by the revocation sweep
 	overQuotaCuts    counter // requests cut for over-quota (402)
 
+	// DIRECT-IP: direct-endpoint negotiation outcomes. Bounded (two counters, no
+	// labels). No endpoint/host/IP is ever recorded — only the pass/fail count.
+	directVerifiedCt counter // advertised direct endpoints that passed reachability+ownership
+	directRejectedCt counter // advertised direct endpoints that failed verification
+
 	// Labelled counters (bounded enums only).
 	requests    map[reqOutcome]*counter       // inbound public requests by outcome
 	authFails   map[authFailReason]*counter   // control-conn rejections by reason
@@ -212,6 +217,21 @@ func (m *metrics) reconnected() {
 		return
 	}
 	m.reconnects.inc()
+}
+
+// directVerified / directRejected count DIRECT-IP endpoint verification outcomes.
+func (m *metrics) directVerified() {
+	if m == nil {
+		return
+	}
+	m.directVerifiedCt.inc()
+}
+
+func (m *metrics) directRejected() {
+	if m == nil {
+		return
+	}
+	m.directRejectedCt.inc()
 }
 
 func (m *metrics) request(o reqOutcome) {
@@ -328,6 +348,8 @@ func (m *metrics) writeTo(w io.Writer) {
 	writeCounter(w, "reconnects_total", "Agent reconnections observed (name re-registered right after departing).", m.reconnects.get())
 	writeCounter(w, "revocation_cuts_total", "Live tunnels cut by the revocation sweep.", m.revocationCuts.get())
 	writeCounter(w, "over_quota_cuts_total", "Requests cut for over-quota (402).", m.overQuotaCuts.get())
+	writeCounter(w, "direct_verified_total", "Advertised direct endpoints that passed reachability+ownership verification.", m.directVerifiedCt.get())
+	writeCounter(w, "direct_rejected_total", "Advertised direct endpoints that failed verification.", m.directRejectedCt.get())
 
 	writeReadiness(w, m.isReady())
 

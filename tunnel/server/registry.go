@@ -22,6 +22,14 @@ type session struct {
 	mux       *yamux.Session
 	createdAt time.Time
 
+	// directEndpoint (DIRECT-IP) is the box's VERIFIED direct-connect endpoint
+	// (scheme://host[:port]), or "" if the box advertised none / verification
+	// failed. It is set once at register time (after the relay probes it) and read
+	// by clients via the discovery endpoint so they can attempt a direct dial
+	// before falling back to the relay tunnel. Immutable for the session lifetime,
+	// so it needs no lock.
+	directEndpoint string
+
 	mu      sync.Mutex
 	streams int // concurrent in-flight streams (for per-agent stream cap)
 	limit   int

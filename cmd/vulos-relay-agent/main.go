@@ -29,6 +29,7 @@ func main() {
 		name      = flag.String("name", os.Getenv("VULOS_RELAY_NAME"), "public name to claim (must be token-authorized)")
 		local     = flag.String("local", "127.0.0.1:8080", "local target host:port (must be loopback)")
 		insecure  = flag.Bool("insecure", false, "skip TLS verification (testing only)")
+		direct    = flag.String("direct", os.Getenv("VULOS_RELAY_DIRECT_ENDPOINT"), "optional public https:// base URL this box is ALSO directly reachable at (DIRECT-IP fast path); relay verifies reachability+ownership before advertising it")
 	)
 	flag.Parse()
 
@@ -38,6 +39,7 @@ func main() {
 		Name:               *name,
 		LocalAddr:          *local,
 		InsecureSkipVerify: *insecure,
+		DirectEndpoint:     *direct,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

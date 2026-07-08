@@ -36,6 +36,21 @@ type Register struct {
 	Token string `json:"token"`
 	// AgentVersion is informational (for server logs); never trusted.
 	AgentVersion string `json:"agentVersion,omitempty"`
+
+	// DirectEndpoint (DIRECT-IP) is an OPTIONAL direct-connect endpoint the box
+	// advertises alongside its relay tunnel: a public https:// base URL a client
+	// can dial DIRECTLY (near-native latency, full bandwidth) instead of routing
+	// through the relay. It is only surfaced to clients AFTER the relay has
+	// independently verified it is (a) reachable from the public internet and (b)
+	// actually controlled by this box — see DirectVerified in RegisterAck. An empty
+	// value means "relay only" (the always-works path for NAT'd/CGNAT boxes).
+	//
+	// SECURITY: advertising a direct endpoint is NOT trusted on the agent's word.
+	// The relay probes the endpoint over the internet and requires the box to
+	// echo a one-time probe nonce, so a box cannot advertise an IP/hostname it
+	// does not control to hijack another box's client traffic (endpoint-ownership
+	// proof). See tunnel/server/directprobe.go.
+	DirectEndpoint string `json:"directEndpoint,omitempty"`
 }
 
 // RegisterAck is the server's reply. On failure OK is false and Error carries a
@@ -45,4 +60,34 @@ type RegisterAck struct {
 	OK        bool   `json:"ok"`
 	PublicURL string `json:"publicUrl,omitempty"`
 	Error     string `json:"error,omitempty"`
+
+	// DirectEndpoint (DIRECT-IP) echoes back the box's advertised direct endpoint
+	// IF AND ONLY IF the relay verified it (reachable + ownership-proven). Empty
+	// when the box advertised none, or when verification failed — in which case the
+	// box (and its clients) transparently fall back to the relay tunnel. A box can
+	// read this to learn whether its direct fast-path is live.
+	DirectEndpoint string `json:"directEndpoint,omitempty"`
+	// DirectVerified reports whether the relay confirmed the direct endpoint. It is
+	// distinct from a non-empty DirectEndpoint only for clarity in logs/UX: when
+	// true, DirectEndpoint is set; when false, DirectEndpoint is empty.
+	DirectVerified bool `json:"directVerified,omitempty"`
+	// DirectError is a short, non-leaky reason the direct endpoint was not accepted
+	// (e.g. "unreachable", "ownership proof failed", "not https"). Advisory only —
+	// the tunnel still comes up on the relay path regardless.
+	DirectError string `json:"directError,omitempty"`
 }
+
+// DirectProbePath is the well-known path the relay GETs on a box's advertised
+// direct endpoint to verify reachability AND ownership. The box MUST serve it on
+// the SAME public TLS listener it advertises, echoing back the one-time nonce the
+// relay supplies via the DirectProbeHeader (proving it received the relay's probe
+// and therefore controls the endpoint). The response body is the nonce verbatim.
+//
+// This endpoint is UNAUTHENTICATED by design (it carries no user data — only the
+// relay's own nonce is echoed) and MUST be exempt from the box's auth stack, but
+// it does NOT weaken auth for any other path: it serves only the nonce echo.
+const DirectProbePath = "/_vulos-direct/probe"
+
+// DirectProbeHeader carries the one-time probe nonce from the relay to the box on
+// the reachability/ownership probe, and is echoed by the box in its response.
+const DirectProbeHeader = "X-Vulos-Direct-Probe"

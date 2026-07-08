@@ -27,6 +27,19 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// DIRECT-IP: direct-endpoint discovery. A client asks the relay whether the
+	// tunnel it is about to use has a VERIFIED direct endpoint, so it can attempt a
+	// direct dial first and fall back to this relay tunnel on failure (ICE-like).
+	// This only ever returns an endpoint the relay itself verified (reachable +
+	// ownership-proven) — never the box's unverified claim. It is a read-only
+	// lookup: it carries no user data and mutates nothing, so it needs no session
+	// auth (the direct endpoint is a public URL by definition; knowing it grants no
+	// access — the box's OWN auth stack still gates every request there).
+	if r.URL.Path == wireDirectResolvePath {
+		s.handleDirectResolve(w, r)
+		return
+	}
+
 	name, trimmedPath, matched := s.route(r)
 	if !matched {
 		s.metrics.request(outcomeNoTunnel)

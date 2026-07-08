@@ -55,7 +55,7 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 
 	// Read + validate the Register frame under a deadline.
 	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
-	name, token, ok := readRegister(conn)
+	name, token, directEndpoint, ok := readRegister(conn)
 	if !ok {
 		s.metrics.authFail(authFailBadRegister)
 		s.logDebug("bad register frame", logFields{Remote: clientIP(r), Reason: string(authFailBadRegister)})
@@ -112,6 +112,29 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// DIRECT-IP: if the box advertised a direct endpoint AND direct negotiation is
+	// enabled, verify it NOW (reachable + ownership-proven) — but only after auth +
+	// entitlement have passed, so an unauthorized box can never make the relay probe
+	// an arbitrary target (the probe itself is additionally SSRF-guarded). A
+	// verification failure is NON-FATAL: the tunnel still comes up on the relay path;
+	// the box simply doesn't get its direct fast-path. verifiedDirect is "" unless
+	// the endpoint fully passed.
+	var verifiedDirect, directErr string
+	if s.directVerifier != nil && strings.TrimSpace(directEndpoint) != "" {
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), directProbeTimeout+2*time.Second)
+		norm, verr := s.directVerifier.verify(probeCtx, directEndpoint)
+		probeCancel()
+		if verr != nil {
+			directErr = verr.Error()
+			s.metrics.directRejected()
+			s.logInfo("direct endpoint rejected", logFields{Name: nn, Account: accountID, Reason: directErr})
+		} else {
+			verifiedDirect = norm
+			s.metrics.directVerified()
+			s.logInfo("direct endpoint verified", logFields{Name: nn, Account: accountID})
+		}
+	}
+
 	// The server is the yamux CLIENT (it opens streams into the agent).
 	mux, err := yamux.Client(conn, serverYamuxConfig())
 	if err != nil {
@@ -121,12 +144,13 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := &session{
-		name:      nn,
-		accountID: accountID,
-		token:     token, // retained for the WAVE41 revocation sweep (static-list recheck)
-		mux:       mux,
-		createdAt: time.Now(),
-		limit:     s.cfg.MaxStreamsPerAgent,
+		name:           nn,
+		accountID:      accountID,
+		token:          token, // retained for the WAVE41 revocation sweep (static-list recheck)
+		mux:            mux,
+		createdAt:      time.Now(),
+		limit:          s.cfg.MaxStreamsPerAgent,
+		directEndpoint: verifiedDirect,
 	}
 	release, reconnect, err := s.registry.add(sess)
 	if err != nil {
@@ -152,7 +176,14 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	// Clear the handshake deadline; yamux keepalive governs liveness now.
 	_ = conn.SetDeadline(time.Time{})
 
-	if err := writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: true, PublicURL: s.publicURL(nn)}); err != nil {
+	if err := writeAck(conn, wire.RegisterAck{
+		Type:           "register_ack",
+		OK:             true,
+		PublicURL:      s.publicURL(nn),
+		DirectEndpoint: verifiedDirect,
+		DirectVerified: verifiedDirect != "",
+		DirectError:    directErr,
+	}); err != nil {
 		return
 	}
 	s.logInfo("agent registered", logFields{Name: nn, Account: accountID, Remote: clientIP(r)})
@@ -162,17 +193,19 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	s.logInfo("agent unregistered", logFields{Name: nn, Account: accountID})
 }
 
-// readRegister decodes the bounded Register frame.
-func readRegister(conn net.Conn) (name, token string, ok bool) {
+// readRegister decodes the bounded Register frame. It also returns the box's
+// OPTIONAL advertised direct endpoint (DIRECT-IP), untrusted at this point — it is
+// only surfaced to clients after the relay independently verifies it.
+func readRegister(conn net.Conn) (name, token, directEndpoint string, ok bool) {
 	dec := json.NewDecoder(io.LimitReader(conn, wire.MaxControlMessage))
 	var reg wire.Register
 	if err := dec.Decode(&reg); err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	if reg.Type != "register" {
-		return "", "", false
+		return "", "", "", false
 	}
-	return reg.Name, reg.Token, true
+	return reg.Name, reg.Token, reg.DirectEndpoint, true
 }
 
 func writeAck(conn net.Conn, ack wire.RegisterAck) error {

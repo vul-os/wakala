@@ -69,13 +69,22 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	// belt-and-suspenders for the error paths before yamux takes over).
 	defer conn.Close()
 
-	pub, err := a.register(conn)
+	ack, err := a.register(conn)
 	if err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
 
-	a.setStatus(StatusConnected, pub, "")
-	a.appendLog("connected: public URL %s", pub)
+	a.setStatus(StatusConnected, ack.PublicURL, "")
+	// DIRECT-IP: record the relay's verdict on our advertised direct endpoint.
+	a.setDirectResult(ack.DirectEndpoint, ack.DirectVerified, ack.DirectError)
+	a.appendLog("connected: public URL %s", ack.PublicURL)
+	if a.opts.DirectEndpoint != "" {
+		if ack.DirectVerified {
+			a.appendLog("direct fast-path verified: %s", ack.DirectEndpoint)
+		} else {
+			a.appendLog("direct endpoint not used (relay only): %s", ack.DirectError)
+		}
+	}
 
 	// The agent is the yamux SERVER (accepts streams the relay opens).
 	session, err := yamux.Server(conn, yamuxConfig())
@@ -154,8 +163,8 @@ func (a *Agent) dial(ctx context.Context) (net.Conn, error) {
 }
 
 // register performs the JSON handshake over the control conn and returns the
-// assigned public URL.
-func (a *Agent) register(conn net.Conn) (string, error) {
+// server's ack (public URL + DIRECT-IP verdict).
+func (a *Agent) register(conn net.Conn) (wire.RegisterAck, error) {
 	_ = conn.SetDeadline(a.opts.now().Add(a.opts.HandshakeTimeout))
 	defer conn.SetDeadline(time.Time{})
 
@@ -164,25 +173,28 @@ func (a *Agent) register(conn net.Conn) (string, error) {
 		Name:         a.opts.Name,
 		Token:        a.opts.Token,
 		AgentVersion: "vulos-relay-agent/0.2",
+		// DIRECT-IP: advertise our optional direct endpoint (untrusted until the
+		// relay verifies it).
+		DirectEndpoint: a.opts.DirectEndpoint,
 	}
 	if err := json.NewEncoder(conn).Encode(&req); err != nil {
-		return "", fmt.Errorf("write register: %w", err)
+		return wire.RegisterAck{}, fmt.Errorf("write register: %w", err)
 	}
 
 	// Bounded read of the ack.
 	dec := json.NewDecoder(io.LimitReader(conn, wire.MaxControlMessage))
 	var ack wire.RegisterAck
 	if err := dec.Decode(&ack); err != nil {
-		return "", fmt.Errorf("read ack: %w", err)
+		return wire.RegisterAck{}, fmt.Errorf("read ack: %w", err)
 	}
 	if !ack.OK {
 		msg := ack.Error
 		if msg == "" {
 			msg = "registration rejected"
 		}
-		return "", errors.New(msg)
+		return wire.RegisterAck{}, errors.New(msg)
 	}
-	return ack.PublicURL, nil
+	return ack, nil
 }
 
 func yamuxConfig() *yamux.Config {

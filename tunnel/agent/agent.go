@@ -55,6 +55,16 @@ type Options struct {
 	// honors it if the token authorizes it.
 	Name string
 
+	// DirectEndpoint (DIRECT-IP) is an OPTIONAL public https:// base URL at which
+	// this box is ALSO directly reachable (static IP / public hostname). When set,
+	// the agent advertises it to the relay, which independently verifies it
+	// (reachable + ownership-proven) before surfacing it to clients as a faster
+	// direct fast-path. Leave empty for the pure-relay path (NAT'd/CGNAT boxes).
+	// Advertising it here does NOT bypass the relay's verification — an endpoint the
+	// relay cannot reach or prove the box owns is silently dropped and the box stays
+	// on the relay tunnel.
+	DirectEndpoint string
+
 	// TLSConfig, if set, is used for the wss dial (e.g. a pinned CA for self-hosted
 	// relays). nil uses the system roots.
 	TLSConfig *tls.Config
@@ -76,6 +86,14 @@ type Snapshot struct {
 	Connected bool     `json:"connected"`
 	LastError string   `json:"lastError,omitempty"`
 	Log       []string `json:"log,omitempty"`
+
+	// DIRECT-IP: the box's VERIFIED direct endpoint as confirmed by the relay this
+	// session, or "" when the box advertised none or verification failed. A UI can
+	// surface "direct fast-path active" vs "relay only". DirectError carries a short
+	// non-fatal reason when an advertised endpoint was rejected (e.g. "unreachable").
+	DirectEndpoint string `json:"directEndpoint,omitempty"`
+	DirectVerified bool   `json:"directVerified,omitempty"`
+	DirectError    string `json:"directError,omitempty"`
 }
 
 // Agent maintains one outbound tunnel. Safe for concurrent use.
@@ -89,6 +107,11 @@ type Agent struct {
 	log       []string
 	cancel    context.CancelFunc
 	running   bool
+	// DIRECT-IP: the relay-confirmed direct endpoint for the current session (and
+	// the last non-fatal rejection reason). Reset each connect.
+	directEndpoint string
+	directVerified bool
+	directErr      string
 	// dialHook lets tests replace the wss dial with an in-memory net.Conn.
 	dialHook func(ctx context.Context) (net.Conn, error)
 }
@@ -141,6 +164,9 @@ func (a *Agent) Stop() {
 	a.cancel = nil
 	a.status = StatusStopped
 	a.publicURL = ""
+	a.directEndpoint = ""
+	a.directVerified = false
+	a.directErr = ""
 	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -168,11 +194,14 @@ func (a *Agent) Snapshot() Snapshot {
 		url = a.publicURL
 	}
 	return Snapshot{
-		Status:    a.status,
-		PublicURL: url,
-		Connected: a.status == StatusConnected,
-		LastError: a.lastErr,
-		Log:       logCopy,
+		Status:         a.status,
+		PublicURL:      url,
+		Connected:      a.status == StatusConnected,
+		LastError:      a.lastErr,
+		Log:            logCopy,
+		DirectEndpoint: a.directEndpoint,
+		DirectVerified: a.directVerified,
+		DirectError:    a.directErr,
 	}
 }
 
@@ -256,6 +285,16 @@ func (a *Agent) setStatus(s Status, publicURL, errMsg string) {
 	if s == StatusConnected {
 		a.lastErr = ""
 	}
+	a.mu.Unlock()
+}
+
+// setDirectResult records the relay's verdict on the box's advertised direct
+// endpoint for the current session (DIRECT-IP). Observable via Snapshot.
+func (a *Agent) setDirectResult(endpoint string, verified bool, errMsg string) {
+	a.mu.Lock()
+	a.directEndpoint = endpoint
+	a.directVerified = verified
+	a.directErr = errMsg
 	a.mu.Unlock()
 }
 
