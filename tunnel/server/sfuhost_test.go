@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -263,6 +264,134 @@ func TestSFUHost_ResolveIsNameScoped(t *testing.T) {
 	// A resolve with NO name must fail closed (cannot scope ⇒ nothing).
 	if out := sfuResolveName(t, base, ""); out.Available {
 		t.Fatalf("unscoped resolve must be available=false, got %+v", out)
+	}
+}
+
+// anyNameCPTokenStore reproduces the SHARED CLOUD RELAY CP-token path
+// (VULOS_RELAY_CP_TOKENS=1): the CP validates a token → account but allows ANY
+// normalized name for that validated account (name uniqueness is left to the
+// registry). It maps each token to a distinct account and grants every valid
+// name — exactly the CPTokenStore.Authorize contract. This is the shape that lets
+// two DIFFERENT accounts both claim the SAME tunnel name, which the register-time
+// one-owner-per-name refusal (P1-2) must reject.
+type anyNameCPTokenStore struct {
+	accounts map[string]string // token → accountID
+}
+
+func (s *anyNameCPTokenStore) Authorize(token, name string) (string, error) {
+	acct, ok := s.accounts[strings.TrimSpace(token)]
+	if !ok {
+		return "", errTestUnknownToken
+	}
+	if normalizeName(name) == "" {
+		return "", errTestInvalidName
+	}
+	return acct, nil // ANY valid name is allowed for a validated account (CP contract)
+}
+
+var (
+	errTestUnknownToken = errorsNew("unknown token")
+	errTestInvalidName  = errorsNew("invalid name")
+)
+
+// errorsNew is a tiny helper so the test file needn't import errors just for two
+// sentinels (keeps the import block minimal and matches existing style).
+func errorsNew(msg string) error { return &stringErr{msg} }
+
+type stringErr struct{ s string }
+
+func (e *stringErr) Error() string { return e.s }
+
+// sfuRelayCP starts a relay backed by a CP-style token store where tokA→acctA and
+// tokB→acctB, BOTH able to register under any name. This is the shared-cloud-relay
+// topology in which P1-2 lived.
+func sfuRelayCP(t *testing.T) (httpBase string, s *Server) {
+	t.Helper()
+	var err error
+	s, err = New(Config{
+		Domain:                "relay.test",
+		Tokens:                &anyNameCPTokenStore{accounts: map[string]string{"tokA": "acctA", "tokB": "acctB"}},
+		RevokeSweepPeriod:     -1,
+		EnableSFUHostRegistry: true,
+		directVerifier:        &httpDirectVerifier{allowInsecure: true},
+		ControlConnRate:       -1,
+	})
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	t.Cleanup(s.Close)
+	pub := httptest.NewServer(s.Handler())
+	t.Cleanup(pub.Close)
+	return pub.URL, s
+}
+
+// TestSFUHost_CrossAccountNameCollisionRefused is the P1-2 adversarial regression.
+//
+// On the shared cloud relay the CP grants ANY name to a validated account, and a
+// registry record is identified by hostID — so account B (a fully valid account
+// with its OWN verified endpoint) could register an SFU under account A's tunnel
+// name. Because pick(name) selects by name only, account A's big-call media would
+// then route to account B's SFU. The register-time one-owner-per-name refusal
+// closes it: B's collision is REJECTED (409) and A's resolve keeps returning A's
+// endpoint.
+func TestSFUHost_CrossAccountNameCollisionRefused(t *testing.T) {
+	base, _ := sfuRelayCP(t)
+	boxA := sfuBox(t, true /*owned by A*/)
+	boxB := sfuBox(t, true /*B owns ITS OWN endpoint — B is a valid account*/)
+
+	// Account A registers name "shared" pointing at A's endpoint.
+	regA := sfuHostRegistration{HostID: "vula:A", Name: "shared", Endpoint: boxA.URL,
+		Capabilities: sfuHostCapabilities{MaxParticipants: 50}}
+	resp := sfuPost(t, base, sfuHostRegisterPath, "tokA", regA)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("A register = %d, want 200", resp.StatusCode)
+	}
+
+	// Account B (different account, valid CP token, endpoint it truly owns) tries to
+	// register the SAME name "shared" → MUST be refused (cross-tenant hijack).
+	regB := sfuHostRegistration{HostID: "vula:B", Name: "shared", Endpoint: boxB.URL,
+		Capabilities: sfuHostCapabilities{MaxParticipants: 50}}
+	resp = sfuPost(t, base, sfuHostRegisterPath, "tokB", regB)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("B register under A's name = %d, want 409 (cross-tenant collision refused)", resp.StatusCode)
+	}
+
+	// A's resolve STILL returns A's endpoint — B never displaced A.
+	out := sfuResolveName(t, base, "shared")
+	if !out.Available || out.ServerURL != boxA.URL {
+		t.Fatalf("after refused collision, resolve must still be A's endpoint %q, got %+v", boxA.URL, out)
+	}
+	if out.HostID != "vula:A" {
+		t.Fatalf("resolve returned host %q, want A's vula:A (B must not have displaced A)", out.HostID)
+	}
+}
+
+// TestSFUHost_SameAccountReRegisterAllowed proves the fix does NOT break a box
+// replacing its own registration (same account) under its own name — e.g. after a
+// restart it re-registers a new hostID, or updates its endpoint. Same-account puts
+// must always succeed.
+func TestSFUHost_SameAccountReRegisterAllowed(t *testing.T) {
+	base, _ := sfuRelayCP(t)
+	box1 := sfuBox(t, true)
+	box2 := sfuBox(t, true)
+
+	// First registration under acctA.
+	r1 := sfuHostRegistration{HostID: "vula:A1", Name: "shared", Endpoint: box1.URL,
+		Capabilities: sfuHostCapabilities{MaxParticipants: 50}}
+	resp := sfuPost(t, base, sfuHostRegisterPath, "tokA", r1)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("first register = %d, want 200", resp.StatusCode)
+	}
+	// Same account (tokA), same name, DIFFERENT hostID + endpoint → must be allowed.
+	r2 := sfuHostRegistration{HostID: "vula:A2", Name: "shared", Endpoint: box2.URL,
+		Capabilities: sfuHostCapabilities{MaxParticipants: 50}}
+	resp = sfuPost(t, base, sfuHostRegisterPath, "tokA", r2)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("same-account re-register = %d, want 200 (must not break)", resp.StatusCode)
 	}
 }
 

@@ -39,6 +39,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -120,13 +121,42 @@ func newSFUHostRegistry() *sfuHostRegistry {
 	return &sfuHostRegistry{hosts: make(map[string]*sfuHostRecord)}
 }
 
-// put stores/refreshes a verified host with a fresh TTL.
-func (r *sfuHostRegistry) put(rec *sfuHostRecord) {
+// put stores/refreshes a verified host with a fresh TTL, enforcing the
+// ONE-OWNER-PER-NAME invariant that pick() relies on. On the SHARED cloud relay
+// (VULOS_RELAY_CP_TOKENS=1) the CP validates a token → account but allows ANY
+// normalized name for that account, and record identity is the hostID — so two
+// DIFFERENT accounts (each a valid endpoint owner) could otherwise both register
+// under the SAME tunnel name, and pick(name) — which selects by name only — would
+// route account A's big-call media to account B's SFU (cross-tenant leak, P1-2).
+//
+// put therefore REFUSES when a LIVE record already exists under the same name
+// owned by a DIFFERENT accountID. Same-account re-register/update stays allowed
+// (a box replacing its own hostID under its own name); an expired collider is
+// pruned and the slot is free again. Fail-closed: the name's first live owner
+// keeps it until it lapses.
+func (r *sfuHostRegistry) put(rec *sfuHostRecord) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rec.expires = time.Now().Add(sfuHostTTL)
+	now := time.Now()
+	for id, existing := range r.hosts {
+		if now.After(existing.expires) {
+			delete(r.hosts, id) // prune expired as we scan — frees any lapsed name
+			continue
+		}
+		if existing.name == rec.name && existing.accountID != rec.accountID {
+			// A different account already owns this live tunnel name. Refuse rather
+			// than overwrite, so account A can never be hijacked onto account B's SFU.
+			return errNameOwnedByOtherAccount
+		}
+	}
+	rec.expires = now.Add(sfuHostTTL)
 	r.hosts[rec.hostID] = rec
+	return nil
 }
+
+// errNameOwnedByOtherAccount is returned by put when a live record under the same
+// tunnel name is owned by a different account (the cross-tenant collision).
+var errNameOwnedByOtherAccount = errors.New("sfu host name already owned by another account")
 
 // refresh extends the TTL of an existing host (heartbeat). Returns false if the
 // host is unknown/expired — the caller then re-registers (re-verifies).
@@ -157,8 +187,11 @@ func (r *sfuHostRegistry) remove(hostID string) {
 // accounts, so an unscoped "first live host" would hand box B's clients box A's
 // SFU endpoint — a cross-tenant routing leak. A box therefore only ever resolves
 // a host it itself registered under its own name. An empty name matches nothing
-// (fail-closed). Phase 2 selection among a name's own hosts is "first live";
-// PEER-25's richer election refines it later. Returns nil when none is live.
+// (fail-closed). A name has at most ONE live owning account — put() refuses a
+// cross-account collision at register time (P1-2) — so selecting by name here
+// cannot straddle tenants even on the shared CP-token relay. Phase 2 selection
+// among a single name's own hosts is "first live"; PEER-25's richer election
+// refines it later. Returns nil when none is live.
 func (r *sfuHostRegistry) pick(name string) *sfuHostRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -235,7 +268,7 @@ func (s *Server) handleSFUHostRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.metrics.directVerified()
-	s.sfuHosts.put(&sfuHostRecord{
+	if err := s.sfuHosts.put(&sfuHostRecord{
 		hostID: reg.HostID,
 		// Store the NORMALIZED name (the same form authorizeSFUHost validated the
 		// token grant against) so a name-scoped resolve matches deterministically —
@@ -244,7 +277,15 @@ func (s *Server) handleSFUHostRegister(w http.ResponseWriter, r *http.Request) {
 		verifiedEndpoint: norm,
 		caps:             reg.Capabilities,
 		accountID:        accountID,
-	})
+	}); err != nil {
+		// A different account already owns this live tunnel name. Refuse fail-closed
+		// so the shared relay never routes the name's owner onto this registrant's
+		// SFU (cross-tenant media leak, P1-2). The rightful owner keeps the name.
+		s.metrics.authFail(authFailUnauthorized)
+		s.logInfo("sfu host name collision refused", logFields{Name: reg.Name, Account: accountID, Reason: err.Error()})
+		http.Error(w, "sfu host name already in use", http.StatusConflict)
+		return
+	}
 	s.logInfo("sfu host registered", logFields{Name: reg.Name, Account: accountID})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "host_id": reg.HostID, "endpoint": norm})
 }
