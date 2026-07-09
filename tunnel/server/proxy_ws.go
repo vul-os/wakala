@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -78,5 +79,9 @@ func restoreUpgradeHeaders(req *http.Request) {
 
 func writeRawError(c net.Conn, code int) {
 	_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	_, _ = c.Write([]byte("HTTP/1.1 " + http.StatusText(code) + "\r\nConnection: close\r\n\r\n"))
+	// A valid HTTP/1.1 status line carries the numeric code AND reason phrase
+	// (e.g. "HTTP/1.1 502 Bad Gateway"); omitting the code yields a malformed line
+	// the client cannot parse.
+	statusLine := fmt.Sprintf("HTTP/1.1 %d %s\r\nConnection: close\r\n\r\n", code, http.StatusText(code))
+	_, _ = c.Write([]byte(statusLine))
 }

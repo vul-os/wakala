@@ -200,14 +200,15 @@ func signBody(secret string, body []byte) string {
 // The presented "token" IS the account-bound install credential the install
 // obtained from the device-link flow. The CP resolves it → account and confirms
 // relay is allowed; the store caches the (token → account) mapping briefly to
-// avoid a CP round trip on every reconnect. Name authorization is delegated to a
-// fallback static store (self-host name grants) if provided, otherwise ANY
-// normalized name is allowed for a validated account (the CP is the authority on
-// billing; name uniqueness is still enforced by the registry).
+// avoid a CP round trip on every reconnect. ANY normalized name is allowed for a
+// validated account (the CP is the authority on billing; name uniqueness is still
+// enforced by the registry, and a revoked credential is refused via the CP
+// revoked/404 signal).
 // ──────────────────────────────────────────────────────────────────────────
 
-// CPTokenStore resolves tokens via the CP. It optionally wraps a static store to
-// also honour a local name allow-list.
+// CPTokenStore resolves tokens via the CP: it validates the presented install
+// credential against the CP and resolves it to an account, caching the mapping
+// for TTL. Name uniqueness is enforced by the registry, not here.
 type CPTokenStore struct {
 	CP  *CPClient
 	TTL time.Duration // cache TTL for a validated token → account (default 60s)

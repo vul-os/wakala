@@ -9,8 +9,29 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Direct-IP fast path (DIRECT-IP)** — a box with a public IP/hostname can advertise
+  a direct `https://` endpoint (`agent.Options.DirectEndpoint` / `-direct` /
+  `VULOS_RELAY_DIRECT_ENDPOINT`) that clients dial **directly** for near-native
+  latency + full bandwidth, with the relay tunnel as the always-works fallback
+  (ICE-like: try direct, fall back to relay-as-TURN). The relay **never trusts the
+  box's word**: before surfacing an endpoint it probes `{endpoint}/_vulos-direct/probe`
+  over the internet with a one-time 256-bit nonce and requires the box to echo it
+  (reachability **+** ownership proof), SSRF-guarded (host screened pre-dial, resolved
+  IP re-screened at connect against DNS-rebind, public IPs only, no redirects), and
+  only **after** auth + entitlement pass. Verification failure is non-fatal (the box
+  stays on the relay path). Clients discover the verified endpoint via
+  `GET /_vulos-direct/resolve` and the `tunnel/direct` package. Relay-wide off switch:
+  `Config.DisableDirect`.
+
 ### Fixed
 
+- **Malformed status line on the WS-upgrade error path (finalize pass)** — when the
+  relay could not read the agent's response head during a WebSocket upgrade it wrote a
+  raw `HTTP/1.1 Bad Gateway` line onto the hijacked client connection, **omitting the
+  numeric status code**, so the client could not parse it. It now writes a well-formed
+  `HTTP/1.1 502 Bad Gateway` status line. Added a direct regression test.
 - **Agent goroutine leak per reconnect (`deep/relay` pass)** — `connectOnce` spawned
   its "close the yamux session when the context ends" watcher on the *long-lived*
   maintain-loop context, so every ended session (each reconnect) left one goroutine

@@ -322,6 +322,11 @@ internet-facing:
 - **Token / credential revocation** — a file/env revoked-list plus a runtime revoke
   API; revoked credentials are refused at connect and any live tunnel is dropped by a
   periodic revocation sweep.
+- **Direct-IP fast path (optional)** — a box with a public IP can advertise a direct
+  `https://` endpoint; the relay **verifies it** (reachable + ownership-proven by a
+  nonce echo, SSRF-guarded, only after auth) before clients dial it **directly** for
+  near-native latency, falling back to the relay tunnel on any failure. NAT'd/CGNAT
+  boxes stay on the always-works relay path. See [docs/TUNNEL.md](docs/TUNNEL.md).
 - **Bounds** — max agents, max streams/agent, request header/body caps, and
   keepalive dead-peer detection keep memory bounded.
 - **Observability** — a dependency-free Prometheus `/metrics` endpoint plus

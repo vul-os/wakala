@@ -47,6 +47,36 @@ Only **outbound 443** is required from the box. The box binds nothing inbound.
   metered usage before exiting — so a rolling restart neither drops a live request
   mid-flight nor loses the last usage deltas. Agents reconnect to the replacement.
 
+## Direct-IP fast path (optional, ICE-like)
+
+A box with a public/static IP or hostname can serve the OS on its **own** public TLS
+listener and let clients dial it **directly** — near-native latency, full bandwidth,
+traffic that never touches (or is metered by) the relay — while still keeping the
+relay tunnel as the always-works fallback for NAT'd/CGNAT boxes. It is off unless a
+box opts in, and it is **never trusted on the box's word**:
+
+- **Advertise.** The agent may set `DirectEndpoint` (a bare `https://host[:port]`
+  origin); it is sent in the register frame alongside the relay tunnel. Empty means
+  "relay only" (the default, always-works path).
+- **Verify (reachability + ownership).** Before surfacing it to any client, the relay
+  probes `{endpoint}/_vulos-direct/probe` over the public internet with a fresh
+  256-bit nonce in `X-Vulos-Direct-Probe` and requires the box to **echo the nonce**.
+  Only a box that actually serves that TLS endpoint sees the nonce, so echoing it
+  proves control (a box cannot advertise a victim's IP/hostname to hijack its
+  traffic). The probe is **SSRF-guarded** exactly like the agent's loopback guard:
+  the host is screened before dial, the *resolved* IP is re-screened at connect
+  (anti-DNS-rebind), only public IPs are allowed, and redirects are refused.
+  Verification runs **only after** auth + entitlement pass — an unauthorized box can
+  never make the relay probe an arbitrary target. A failure is **non-fatal**: the
+  tunnel still comes up on the relay path.
+- **Discover + fall back.** A client asks the relay
+  `GET /_vulos-direct/resolve` (host-routed to the tunnel name, same as any public
+  request); the relay returns the box's **verified** direct endpoint or `direct=false`.
+  The client (see `tunnel/direct`) attempts the direct URL first and transparently
+  falls back to the relay URL on any failure — same app, same auth, just a faster
+  transport. Disable relay-wide with `Config.DisableDirect` (advertised endpoints are
+  then ignored and every box is served purely over the relay tunnel).
+
 ## Security model (fails closed — this is internet-facing)
 
 - **Agent auth:** a per-agent **bearer token** (`Authorization: Bearer …`, also
@@ -227,9 +257,16 @@ vulos-relay-agent \
   -token  SECRET1 \
   -name   box1 \
   -local  127.0.0.1:8080
+
+# Optionally advertise a Direct-IP fast path (a box with a public IP). The relay
+# verifies reachability + ownership before advertising it; falls back to the relay
+# tunnel if verification fails. Also VULOS_RELAY_DIRECT_ENDPOINT.
+vulos-relay-agent -server wss://relay.example.com -token SECRET1 -name box1 \
+  -local 127.0.0.1:8080 -direct https://box1.example.com
 ```
 
-`-local` must be a loopback address. The agent binds nothing inbound.
+`-local` must be a loopback address. The agent binds nothing inbound. `-direct` (if
+set) must be a bare `https://` origin the box serves publicly.
 
 ---
 

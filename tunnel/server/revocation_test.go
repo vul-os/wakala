@@ -45,9 +45,6 @@ func TestRevokedList_MatchesTokenNameAccount(t *testing.T) {
 
 func TestRevokedList_EmptyRevokesNothing(t *testing.T) {
 	rl := newRevokedList(RevokedSpec{})
-	if !rl.empty() {
-		t.Fatal("empty spec should yield an empty list")
-	}
 	if rl.IsRevoked("anything", "anybox", "acct-1") {
 		t.Fatal("empty revoked-list must revoke nothing")
 	}

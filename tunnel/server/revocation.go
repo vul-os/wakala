@@ -97,16 +97,6 @@ func newRevokedList(spec RevokedSpec) *revokedList {
 	return r
 }
 
-// empty reports whether the list revokes nothing (lets callers skip work).
-func (r *revokedList) empty() bool {
-	if r == nil {
-		return true
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.tokenHashes) == 0 && len(r.names) == 0 && len(r.accounts) == 0
-}
-
 // IsRevoked reports whether token/name/account matches any revoked entry. The
 // token compare is constant-time over the whole set so timing does not reveal
 // which (if any) token matched.

@@ -119,22 +119,22 @@ func TestDirect_Verify_SSRF_BlocksInternalTargets(t *testing.T) {
 	// at parse time (the connect-time resolved-IP screen is the second layer).
 	v := &httpDirectVerifier{}
 	blocked := []string{
-		"https://127.0.0.1",              // loopback
-		"https://localhost",              // loopback name
-		"https://10.0.0.5",               // RFC1918
-		"https://192.168.1.1",            // RFC1918
-		"https://172.16.0.1",             // RFC1918
-		"https://169.254.169.254",        // cloud metadata (link-local)
-		"https://100.64.0.1",             // CGNAT (RFC6598)
-		"https://[::1]",                  // IPv6 loopback
-		"https://[fd00::1]",              // IPv6 ULA
-		"https://[fe80::1]",              // IPv6 link-local
-		"https://0.0.0.0",                // unspecified
-		"https://box.internal",           // internal hostname suffix
-		"https://foo.local",              // .local suffix
+		"https://127.0.0.1",               // loopback
+		"https://localhost",               // loopback name
+		"https://10.0.0.5",                // RFC1918
+		"https://192.168.1.1",             // RFC1918
+		"https://172.16.0.1",              // RFC1918
+		"https://169.254.169.254",         // cloud metadata (link-local)
+		"https://100.64.0.1",              // CGNAT (RFC6598)
+		"https://[::1]",                   // IPv6 loopback
+		"https://[fd00::1]",               // IPv6 ULA
+		"https://[fe80::1]",               // IPv6 link-local
+		"https://0.0.0.0",                 // unspecified
+		"https://box.internal",            // internal hostname suffix
+		"https://foo.local",               // .local suffix
 		"https://x.example.com/some/path", // path smuggling
-		"https://user:pw@example.com",    // userinfo
-		"http://example.com",             // cleartext
+		"https://user:pw@example.com",     // userinfo
+		"http://example.com",              // cleartext
 	}
 	for _, ep := range blocked {
 		if _, err := v.verify(context.Background(), ep); err == nil {

@@ -28,7 +28,7 @@ func TestMeter_ResponseLostDoesNotDoubleBill(t *testing.T) {
 	const secret = "shh"
 	var (
 		mu       sync.Mutex
-		applied  int64          // total bytes the CP actually committed
+		applied  int64 // total bytes the CP actually committed
 		seen     = map[string]bool{}
 		attempts int32
 	)
