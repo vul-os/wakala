@@ -88,7 +88,19 @@ func sfuPost(t *testing.T, httpBase, path, token string, body any) *http.Respons
 
 func sfuResolve(t *testing.T, httpBase string) sfuHostResolveResponse {
 	t.Helper()
-	resp, err := http.Get(httpBase + sfuHostResolvePath)
+	return sfuResolveName(t, httpBase, "box1")
+}
+
+// sfuResolveName resolves scoped to a specific tunnel name (the shared-relay
+// tenant key). The default sfuResolve uses "box1" (the token-granted name in
+// these tests).
+func sfuResolveName(t *testing.T, httpBase, name string) sfuHostResolveResponse {
+	t.Helper()
+	u := httpBase + sfuHostResolvePath
+	if name != "" {
+		u += "?name=" + name
+	}
+	resp, err := http.Get(u)
 	if err != nil {
 		t.Fatalf("resolve GET: %v", err)
 	}
@@ -222,6 +234,35 @@ func TestSFUHost_HeartbeatAndExpiry(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("heartbeat for pruned host = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestSFUHost_ResolveIsNameScoped proves the shared relay never hands one
+// tenant's verified SFU endpoint to another tenant's clients. box1 registers a
+// verified host; a resolve for box1 returns it, but a resolve for a DIFFERENT
+// name — or a resolve with NO name — returns available=false. Before the fix the
+// unscoped "first live host" pick leaked box1's endpoint to any caller.
+func TestSFUHost_ResolveIsNameScoped(t *testing.T) {
+	base, _ := sfuRelay(t, true)
+	box := sfuBox(t, true /*owned*/)
+
+	resp := sfuPost(t, base, sfuHostRegisterPath, "tok", reg(box))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("register = %d, want 200", resp.StatusCode)
+	}
+
+	// The owner (box1) resolves ITS OWN host.
+	if out := sfuResolveName(t, base, "box1"); !out.Available || out.ServerURL != box.URL {
+		t.Fatalf("owner resolve should return its endpoint, got %+v", out)
+	}
+	// A DIFFERENT tenant name must NOT see box1's endpoint (cross-tenant leak).
+	if out := sfuResolveName(t, base, "someone-else"); out.Available {
+		t.Fatalf("cross-tenant resolve leaked another tenant's SFU: %+v", out)
+	}
+	// A resolve with NO name must fail closed (cannot scope ⇒ nothing).
+	if out := sfuResolveName(t, base, ""); out.Available {
+		t.Fatalf("unscoped resolve must be available=false, got %+v", out)
 	}
 }
 

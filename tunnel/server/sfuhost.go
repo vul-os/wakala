@@ -151,13 +151,20 @@ func (r *sfuHostRegistry) remove(hostID string) {
 	delete(r.hosts, hostID)
 }
 
-// pick returns a live (unexpired) host to allocate a big call to, pruning any
-// expired entries it walks past. Phase 2 selection is "first live host" — the
-// lobby's richer host-election (PEER-25) selects among hosts once more than one
-// exists; a single BYO host is the common case. Returns nil when none is live.
-func (r *sfuHostRegistry) pick() *sfuHostRecord {
+// pick returns a live (unexpired) host registered under name to allocate a big
+// call to, pruning any expired entries it walks past. Selection is SCOPED BY
+// name (the box's token-authorized tunnel name): the relay is SHARED across many
+// accounts, so an unscoped "first live host" would hand box B's clients box A's
+// SFU endpoint — a cross-tenant routing leak. A box therefore only ever resolves
+// a host it itself registered under its own name. An empty name matches nothing
+// (fail-closed). Phase 2 selection among a name's own hosts is "first live";
+// PEER-25's richer election refines it later. Returns nil when none is live.
+func (r *sfuHostRegistry) pick(name string) *sfuHostRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if name == "" {
+		return nil
+	}
 	now := time.Now()
 	var chosen *sfuHostRecord
 	for id, rec := range r.hosts {
@@ -165,7 +172,7 @@ func (r *sfuHostRegistry) pick() *sfuHostRecord {
 			delete(r.hosts, id)
 			continue
 		}
-		if chosen == nil {
+		if chosen == nil && rec.name == name {
 			chosen = rec
 		}
 	}
@@ -229,8 +236,11 @@ func (s *Server) handleSFUHostRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	s.metrics.directVerified()
 	s.sfuHosts.put(&sfuHostRecord{
-		hostID:           reg.HostID,
-		name:             reg.Name,
+		hostID: reg.HostID,
+		// Store the NORMALIZED name (the same form authorizeSFUHost validated the
+		// token grant against) so a name-scoped resolve matches deterministically —
+		// register authorized "box1" but reg.Name may be "Box1".
+		name:             normalizeName(reg.Name),
 		verifiedEndpoint: norm,
 		caps:             reg.Capabilities,
 		accountID:        accountID,
@@ -277,14 +287,23 @@ func (s *Server) handleSFUHostDeregister(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// handleSFUHostResolve is the allocation lookup: it returns a reachable
-// registered SFU endpoint (direct-first via the verified endpoint), or
-// available=false when none is registered. Read-only, unauthenticated (public
-// routing info only; the SFU's own token gate admits joiners).
+// handleSFUHostResolve is the allocation lookup: it returns the reachable SFU
+// endpoint the CALLER'S OWN box registered (direct-first via the verified
+// endpoint), or available=false when none is. Read-only, unauthenticated (public
+// routing info only; the SFU's own token gate admits joiners) — but SCOPED BY the
+// required ?name= param so the shared relay never hands one tenant's SFU endpoint
+// to another tenant's clients. A missing/empty/unmatched name is available=false.
 func (s *Server) handleSFUHostResolve(w http.ResponseWriter, r *http.Request) {
+	// name scopes the lookup to the caller's own registration on this shared relay.
+	// It is the box's tunnel name (VULOS_RELAY_NAME); normalized to match storage.
+	name := normalizeName(r.URL.Query().Get("name"))
+	if name == "" {
+		writeJSON(w, http.StatusOK, sfuHostResolveResponse{Available: false})
+		return
+	}
 	// When registration is disabled the registry is always empty, so this
 	// naturally returns available=false — the caller keeps its static serverUrl.
-	rec := s.sfuHosts.pick()
+	rec := s.sfuHosts.pick(name)
 	if rec == nil {
 		writeJSON(w, http.StatusOK, sfuHostResolveResponse{Available: false})
 		return
