@@ -42,6 +42,13 @@ func main() {
 		pathMode   = flag.Bool("path-mode", false, "also serve /t/<name>/ fallback (no wildcard DNS)")
 		maxAgents  = flag.Int("max-agents", 256, "max concurrent agents")
 
+		// Vulos Meet SFU Phase 2 (BYO / self-host): the SFU-host registry lets a
+		// token-authorized box register a VERIFIED SFU endpoint (POST
+		// /api/meet/host/register) so big calls escalate to media on the operator's
+		// own infra. Off by default — the registry stays empty + resolve returns
+		// available=false unless enabled.
+		sfuHostRegistry = flag.Bool("sfu-host-registry", envOr("VULOS_RELAY_SFU_HOST_REGISTRY", "") == "1", "enable the Vulos Meet SFU-host registry (/api/meet/host/*); off by default")
+
 		// CONSOLIDATION A-1: single-request upload cap. The relay streams the body
 		// (no buffering) so this bounds per-stream duration/abuse, not RAM. 0 keeps
 		// the server-side default (256 MiB); a negative value is refused (never run
@@ -141,6 +148,8 @@ func main() {
 		MaxAgents:       *maxAgents,
 		MaxRequestBytes: *maxReqBytes,
 		CP:              cp,
+
+		EnableSFUHostRegistry: *sfuHostRegistry,
 
 		ControlConnRate:  *ctrlRate,
 		ControlConnBurst: *ctrlBurst,

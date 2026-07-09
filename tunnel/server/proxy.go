@@ -40,6 +40,25 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SFU-HOST REGISTRY (Vulos Meet SFU Phase 2). These are relay-owned control
+	// endpoints, NOT tunnel-proxied paths, so they are matched here before the
+	// name route. They are inert by default: resolve returns available=false and
+	// register is refused unless EnableSFUHostRegistry is set (handlers enforce).
+	switch r.URL.Path {
+	case sfuHostRegisterPath:
+		s.handleSFUHostRegister(w, r)
+		return
+	case sfuHostHeartbeatPath:
+		s.handleSFUHostHeartbeat(w, r)
+		return
+	case sfuHostDeregisterPath:
+		s.handleSFUHostDeregister(w, r)
+		return
+	case sfuHostResolvePath:
+		s.handleSFUHostResolve(w, r)
+		return
+	}
+
 	name, trimmedPath, matched := s.route(r)
 	if !matched {
 		s.metrics.request(outcomeNoTunnel)

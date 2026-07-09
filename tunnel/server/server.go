@@ -112,6 +112,16 @@ type Config struct {
 	// real one performs a live internet GET). nil => the default httpDirectVerifier.
 	directVerifier directEndpointVerifier
 
+	// EnableSFUHostRegistry turns on the Vulos Meet SFU-host registry (Phase 2,
+	// BYO/self-host). When true, a token-authorized box may register a VERIFIED SFU
+	// endpoint via POST /api/meet/host/{register,heartbeat,deregister} and clients
+	// resolve a reachable host via GET /api/meet/host/resolve. Default FALSE: the
+	// registry rejects registers and resolve returns available=false, so a relay
+	// that does not run the placement layer is byte-for-byte unchanged. Registration
+	// additionally REQUIRES direct verification (DisableDirect must be false), since
+	// the SFU endpoint is proven with the same directprobe verifier.
+	EnableSFUHostRegistry bool
+
 	// RevokeSweepPeriod is how often the server rechecks every LIVE session against
 	// the revocation sources (static revoked-list + CP revoked/404 via the
 	// entitlement poll) and drops any that are now definitively revoked. This
@@ -209,6 +219,11 @@ type Server struct {
 	// advertised endpoint is reachable + owned before it is surfaced to clients.
 	directVerifier directEndpointVerifier
 
+	// sfuHosts is the Vulos Meet SFU-host registry (Phase 2). Always non-nil (an
+	// empty registry is inert: resolve returns available=false). Registration is
+	// only accepted when cfg.EnableSFUHostRegistry is true.
+	sfuHosts *sfuHostRegistry
+
 	// Observability (WAVE50-RELAY-OBSERVABILITY). metrics is always non-nil; log is
 	// the structured logger. adminSrv is the running admin/metrics *http.Server (nil
 	// until ServeAdmin runs) so Close can shut it down.
@@ -258,6 +273,8 @@ func New(cfg Config) (*Server, error) {
 
 		metrics: newMetrics(),
 		log:     newLogger(),
+
+		sfuHosts: newSFUHostRegistry(),
 	}
 	// DIRECT-IP: wire the direct-endpoint verifier unless direct negotiation is
 	// disabled. A test may inject its own via cfg.directVerifier (the real one
