@@ -57,6 +57,13 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 	case sfuHostResolvePath:
 		s.handleSFUHostResolve(w, r)
 		return
+	case s2sNotifyPath:
+		// CROSS-INSTANCE notify forwarding (MINST-06). A relay-owned control route,
+		// NOT a tunnel-proxied path, so it is matched here before the name route. It
+		// authenticates the origin box and forwards the bare notification to the
+		// target box over the target's existing tunnel (SSRF-safe by construction).
+		s.handleS2SNotify(w, r)
+		return
 	}
 
 	name, trimmedPath, matched := s.route(r)
