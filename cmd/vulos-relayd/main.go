@@ -46,12 +46,12 @@ import (
 
 func main() {
 	var (
-		addr       = flag.String("addr", ":8443", "listen address")
+		addr       = flag.String("addr", envOr("VULOS_RELAY_ADDR", ":8443"), "listen address (or VULOS_RELAY_ADDR)")
 		domain     = flag.String("domain", envOr("VULOS_RELAY_DOMAIN", ""), "base relay domain, e.g. relay.example.com")
 		certFile   = flag.String("cert", "", "TLS certificate file (omit to run plain HTTP behind a terminating proxy)")
 		keyFile    = flag.String("key", "", "TLS key file")
 		tokensFile = flag.String("tokens-file", "", "path to JSON grants file (or set VULOS_RELAY_TOKENS)")
-		pathMode   = flag.Bool("path-mode", false, "also serve /t/<name>/ fallback (no wildcard DNS)")
+		pathMode   = flag.Bool("path-mode", envOr("VULOS_RELAY_PATH_MODE", "") == "1", "also serve /t/<name>/ fallback (no wildcard DNS) (or VULOS_RELAY_PATH_MODE=1)")
 		maxAgents  = flag.Int("max-agents", 256, "max concurrent agents")
 
 		// SECURITY: how X-Forwarded-For/-Proto shown to the box's app are built. OFF
@@ -85,7 +85,7 @@ func main() {
 
 		// WAVE41-RELAY-REVOCATION: static revoked-list + live-session recheck cadence.
 		revokedFile = flag.String("revoked-file", "", "path to JSON revoked-list ({\"tokens\":[],\"names\":[],\"accounts\":[]}); or set VULOS_RELAY_REVOKED")
-		revokeSweep = flag.Duration("revoke-sweep", 0, "how often to recheck live sessions for revocation (0=default 20s, <0=disable)")
+		revokeSweep = flag.Duration("revoke-sweep", envDuration("VULOS_RELAY_REVOKE_SWEEP", 0), "how often to recheck live sessions for revocation (0=default 20s, <0=disable) (or VULOS_RELAY_REVOKE_SWEEP)")
 
 		// WAVE34-RELAY-HARDEN: rate limits for the internet-facing surfaces. 0 uses
 		// the built-in safe default; a negative value DISABLES that limiter.
@@ -326,6 +326,17 @@ func envInt64(k string, def int64) int64 {
 	if v := os.Getenv(k); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
+		}
+	}
+	return def
+}
+
+// envDuration reads a time.Duration from env k, falling back to def when
+// unset/unparseable.
+func envDuration(k string, def time.Duration) time.Duration {
+	if v := os.Getenv(k); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
 		}
 	}
 	return def

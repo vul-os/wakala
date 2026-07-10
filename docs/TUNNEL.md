@@ -220,10 +220,10 @@ VULOS_RELAY_TOKENS='[{"token":"SECRET1","names":["box1"]}]' \
 
 | Flag | Env | Default | Purpose |
 |------|-----|---------|---------|
-| `-addr` | | `:8443` | Public tunnel listen address. |
+| `-addr` | `VULOS_RELAY_ADDR` | `:8443` | Public tunnel listen address. |
 | `-domain` | `VULOS_RELAY_DOMAIN` | — (required) | Base relay domain. |
 | `-tokens-file` | `VULOS_RELAY_TOKENS` (inline JSON) | — (required unless `-cp-token-store`) | Agent grants. |
-| `-path-mode` | | `false` | Also serve `/t/<name>/` fallback. |
+| `-path-mode` | `VULOS_RELAY_PATH_MODE=1` | `false` | Also serve `/t/<name>/` fallback. |
 | `-trust-proxy-headers` | `VULOS_RELAY_TRUST_PROXY_HEADERS=1` | `false` | Trust `X-Forwarded-*` from a fronting proxy. **Off** (default, directly internet-facing) overwrites them with the observed peer so a client cannot spoof its source IP. Enable **only** behind a trusted TLS-terminating edge/CDN (the Fly deployment sets it). |
 | `-cert` / `-key` | | — | Terminate TLS here (omit if behind an edge). |
 | `-max-agents` | | `256` | Max concurrent agents. |
@@ -254,7 +254,7 @@ value DISABLES that limiter.
 | Flag | Env | Default | Purpose |
 |------|-----|---------|---------|
 | `-revoked-file` | `VULOS_RELAY_REVOKED` (inline JSON) | — | Static revoked-list `{"tokens":[],"names":[],"accounts":[]}`. |
-| `-revoke-sweep` | | `20s` | Live-session recheck cadence. `<0` disables the sweep (connect-time revocation still applies). |
+| `-revoke-sweep` | `VULOS_RELAY_REVOKE_SWEEP` | `20s` | Live-session recheck cadence. `<0` disables the sweep (connect-time revocation still applies). |
 
 **Account-linking + billing (WAVE24-RELAY-BILLING, optional)** — omit all to run
 UNBILLED (pure self-host).

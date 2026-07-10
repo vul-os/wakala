@@ -63,6 +63,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- **`-path-mode` / `-addr` / `-revoke-sweep` had no env-var twin** —
+  `fly.toml`'s commented-out `VULOS_RELAY_PATH_MODE` admitted "wire via CMD if
+  needed" because `cmd/vulos-relayd/main.go` only read it via `-path-mode` on the
+  command line; Fly's `[env]` block can set env vars but not extra CMD args, so
+  path-mode was unreachable on Fly without a custom entrypoint. `-path-mode` and
+  `-addr` now fall back to `VULOS_RELAY_PATH_MODE=1` / `VULOS_RELAY_ADDR`, and
+  `-revoke-sweep` to `VULOS_RELAY_REVOKE_SWEEP` (new `envDuration` helper); the
+  flag still wins when both are set. `docs/TUNNEL.md`'s flag table updated to
+  match.
 - **Malformed status line on the WS-upgrade error path (finalize pass)** — when the
   relay could not read the agent's response head during a WebSocket upgrade it wrote a
   raw `HTTP/1.1 Bad Gateway` line onto the hijacked client connection, **omitting the

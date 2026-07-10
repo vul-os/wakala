@@ -395,8 +395,12 @@ go vet ./...
 
 | Document | Description |
 |----------|-------------|
-| [docs/TUNNEL.md](docs/TUNNEL.md) | Sovereign reverse tunnel (Go server + agent) design & deploy |
-| [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Install + first integration walkthrough |
+| [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Zero-to-reachable-box walkthrough: self-hosted or Vulos-hosted relay, authorize an agent, expose a service, verify the tunnel |
+| [docs/TUNNEL-GUIDE.md](docs/TUNNEL-GUIDE.md) | Protocol/lifecycle deep dive — wss+yamux handshake, reconnects, multiplexing, direct-first/relay-fallback |
+| [docs/SECURITY.md](docs/SECURITY.md) | Trust model — what the relay operator can/cannot see, auth, account linking, abuse controls |
+| [docs/METERING-BILLING.md](docs/METERING-BILLING.md) | How transfer is metered, account tiers/quotas, over-quota behavior (opt-in; unbilled self-host by default) |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Symptom → cause → fix field guide, keyed to literal relay/agent error strings |
+| [docs/TUNNEL.md](docs/TUNNEL.md) | Full server flag/env reference & deploy notes for the Go reverse tunnel (server + agent) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Fabric / signaling / endpoint-failover design |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All SDK options and constructor params |
 | [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Demo harness + screenshot regeneration |
