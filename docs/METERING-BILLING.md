@@ -40,6 +40,10 @@ Per account, the relay accumulates two counters
 - **Sessions** — one per proxied public request (each yamux stream opened into the
   agent counts one).
 
+> **Planned, not current:** the meter today counts proxied **body bytes** as described
+> here. A shift to an **egress-based** billing model is a future direction, not a shipped
+> behavior — bill against, and reason about, the counters documented on this page.
+
 Unbilled sessions (`accountID == ""`) skip per-account metering entirely; the
 direction-bucketed Prometheus metric is updated regardless (see
 [Observing metering locally](#observing-metering-locally) below), so even a pure
