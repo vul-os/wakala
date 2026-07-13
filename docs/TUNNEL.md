@@ -129,10 +129,17 @@ GET  {relay}/api/meet/host/resolve?name=<name> → 200 {allocation | available:f
   startup and re-checked per stream.
 - **Bounds:** max concurrent agents, max concurrent streams/agent, request header
   size cap, request body size cap, control-message size cap, idle timeout, and
-  keepalive-based dead-peer detection. Memory is bounded.
+  keepalive-based dead-peer detection. The keepalive is **adaptive and idle-aware**
+  (`tunnel/internal/keepalive`): it pings at the base interval (relay 10s / agent 20s)
+  while a tunnel is active and backs off to a 60s idle interval after 2min of no
+  streams, restoring on activity — cutting idle cost without ever evicting the session.
+  Memory is bounded.
 - **Rate limiting (429):** three memory-bounded token-bucket limiters sit on top of
   the hard caps above — control-connection attempts **per source IP** (throttles
-  auth/CP churn *before* spending a WS upgrade), public requests **per tunnel**, and
+  auth/CP churn *before* spending a WS upgrade; keyed on the real client IP — the
+  observed peer when directly exposed, the left-most `X-Forwarded-For` entry behind a
+  trusted edge, so one edge IP can't collapse a fleet into one bucket), public requests
+  **per tunnel**, and
   an **aggregate global** cap across all tunnels. Each returns `429` (with
   `Retry-After`). Buckets are lazily created, idle-evicted, and key-capped so a flood
   of distinct keys cannot grow memory. All are configurable with safe defaults; a
@@ -169,7 +176,10 @@ GET  {relay}/api/meet/host/resolve?name=<name> → 200 {allocation | available:f
   IPv4, so an address like `64:ff9b::7f00:1` (which carries `127.0.0.1`) cannot be
   used to reach an internal service through a NAT64/6to4 gateway.
 - **TLS everywhere:** run the relay behind an edge/CDN that terminates TLS, or give
-  it `-cert`/`-key` to terminate itself.
+  it `-cert`/`-key` to terminate itself. On the self-terminating path the relay pins an
+  explicit hardened floor — **TLS 1.2 minimum + ALPN (`h2`, `http/1.1`)** — rather than
+  inheriting Go-version-dependent stdlib defaults, and preserves an operator-supplied
+  `TLSConfig` verbatim (e.g. a stricter TLS 1.3 floor).
 
 ## Honest limitations
 
@@ -185,7 +195,20 @@ GET  {relay}/api/meet/host/resolve?name=<name> → 200 {allocation | available:f
   relay instance the agent connected to. Horizontal scaling of the relay tier needs
   a shared session directory (future work); today, run one relay per region/cell.
 - **Dead-peer detection latency.** A hard-killed agent's name frees on the next
-  yamux keepalive miss (~10s), not instantly. A clean `Stop()` frees it at once.
+  keepalive miss — ~10s while the tunnel was active (base ping), up to ~70s (idle
+  interval + write timeout) if it had already gone idle under the adaptive keepalive.
+  A clean `Stop()` frees it at once. Note this is *slowed heartbeat*, not eviction:
+  **true idle-session eviction** — closing an idle tunnel outright — is **planned, not
+  implemented**.
+- **Hosted-relay plaintext for NAT'd boxes.** A NAT'd box with no direct path is
+  reached over a relay that terminates TLS, so a *hosted* relay sees that leg's
+  plaintext (cookies/tokens included). This is the ratified posture, not a bug — use a
+  verified direct endpoint or a self-run relay for relay-blindness. **SNI / TLS
+  passthrough** (which would make a NAT'd box↔user leg opaque to a hosted relay) is
+  **planned, not implemented**. See [SECURITY.md](SECURITY.md#planned-hardening).
+- **Egress-metering billing model.** The meter counts proxied bytes as documented in
+  [METERING-BILLING.md](METERING-BILLING.md); a move to an egress-based billing model
+  is a future direction, **not** current behavior.
 - **No per-request auth on the public side.** The relay exposes whatever the local
   app exposes; auth is the app's job (same as `frp`). The relay only authenticates
   *agents*, not *public visitors* (it does rate-limit them — see the security model).
