@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
+	"github.com/vul-os/vulos-relay/tunnel/internal/keepalive"
 	"github.com/vul-os/vulos-relay/tunnel/internal/wire"
 )
 
@@ -188,7 +189,19 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logInfo("agent registered", logFields{Name: nn, Account: accountID, Remote: s.clientIP(r)})
 
-	// Block until the session dies; yamux keepalive detects dead peers.
+	// Adaptive keepalive: ping the agent on an interval that lengthens while the
+	// tunnel is idle and restores on activity (replaces yamux's built-in keepalive,
+	// disabled in serverYamuxConfig). A ping failure means the peer is dead ⇒ close
+	// the session so CloseChan unblocks below. Bounded to the session lifetime.
+	kaCtx, kaCancel := context.WithCancel(context.Background())
+	defer kaCancel()
+	go func() {
+		if err := keepalive.Run(kaCtx, mux, serverKeepalive(), time.Now); err != nil {
+			mux.Close()
+		}
+	}()
+
+	// Block until the session dies; the adaptive keepalive detects dead peers.
 	<-mux.CloseChan()
 	s.logInfo("agent unregistered", logFields{Name: nn, Account: accountID})
 }
@@ -227,8 +240,24 @@ func bearer(r *http.Request) string {
 func serverYamuxConfig() *yamux.Config {
 	c := yamux.DefaultConfig()
 	c.LogOutput = io.Discard
-	c.EnableKeepAlive = true
-	c.KeepAliveInterval = 10 * time.Second
+	// Adaptive keepalive: yamux's built-in fixed-interval keepalive is disabled and
+	// replaced by keepalive.Run (see handleControl), which pings at serverKeepalive
+	// Base while active and backs off to Idle when the tunnel is carrying no streams
+	// — cutting idle heartbeat cost without evicting the session. ConnectionWriteTimeout
+	// still bounds each ping's dead-peer detection.
+	c.EnableKeepAlive = false
 	c.ConnectionWriteTimeout = 10 * time.Second
 	return c
+}
+
+// serverKeepalive is the relay side's adaptive keepalive policy. Base (10s) matches
+// the previous fixed interval, so active sessions are unchanged; Idle (60s) applies
+// once a session has had no streams for IdleAfter. Worst-case dead-idle-peer
+// detection is Idle + ConnectionWriteTimeout (~70s), bounded.
+func serverKeepalive() keepalive.Params {
+	return keepalive.Params{
+		Base:      10 * time.Second,
+		Idle:      60 * time.Second,
+		IdleAfter: 2 * time.Minute,
+	}
 }

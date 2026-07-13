@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
+	"github.com/vul-os/vulos-relay/tunnel/internal/keepalive"
 	"github.com/vul-os/vulos-relay/tunnel/internal/wire"
 )
 
@@ -103,6 +104,17 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	go func() {
 		<-connCtx.Done()
 		session.Close()
+	}()
+
+	// Adaptive keepalive (replaces yamux's built-in, disabled in yamuxConfig): ping
+	// the relay on an interval that lengthens while this box's tunnel is idle and
+	// restores on activity. A ping failure means the relay is gone ⇒ close the
+	// session so the Accept loop below unwinds and the maintain loop reconnects.
+	// connCtx bounds the goroutine to this connection's lifetime (no leak on churn).
+	go func() {
+		if err := keepalive.Run(connCtx, session, agentKeepalive(), time.Now); err != nil {
+			session.Close()
+		}
 	}()
 
 	for {
@@ -200,10 +212,26 @@ func (a *Agent) register(conn net.Conn) (wire.RegisterAck, error) {
 func yamuxConfig() *yamux.Config {
 	c := yamux.DefaultConfig()
 	c.LogOutput = io.Discard
-	c.EnableKeepAlive = true
-	c.KeepAliveInterval = 20 * time.Second
+	// Adaptive keepalive: yamux's built-in keepalive is disabled and replaced by
+	// keepalive.Run (see connectOnce), which pings at agentKeepalive Base while
+	// active and backs off to Idle when the tunnel is idle — reducing standing
+	// heartbeat cost without dropping the tunnel. ConnectionWriteTimeout still bounds
+	// each ping's dead-peer detection.
+	c.EnableKeepAlive = false
 	c.ConnectionWriteTimeout = 15 * time.Second
 	return c
+}
+
+// agentKeepalive is the box side's adaptive keepalive policy. Base (20s) matches the
+// previous fixed interval; Idle (60s) applies once no streams have been served for
+// IdleAfter. Worst-case dead-idle-peer detection is Idle + ConnectionWriteTimeout
+// (~75s), bounded.
+func agentKeepalive() keepalive.Params {
+	return keepalive.Params{
+		Base:      20 * time.Second,
+		Idle:      60 * time.Second,
+		IdleAfter: 2 * time.Minute,
+	}
 }
 
 // bufferedConn pairs a net.Conn with a Reader that may already hold buffered
