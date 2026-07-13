@@ -69,13 +69,31 @@ From `serverYamuxConfig()` ([control.go](../tunnel/server/control.go)) and
 
 | Setting | Relay (yamux client) | Agent (yamux server) |
 |---|---|---|
-| Keepalive | on, every **10 s** | on, every **20 s** |
+| Keepalive (active / idle) | adaptive: **10 s** active → **60 s** idle | adaptive: **20 s** active → **60 s** idle |
 | ConnectionWriteTimeout | 10 s | 15 s |
 
-Keepalive is the dead-peer detector: a hard-killed agent's name frees on the next missed
-keepalive (order of ~10 s), while a clean `Stop()` frees it immediately. The WebSocket
-read limit is disabled on both sides (`SetReadLimit(-1)`) because yamux frames and
-tunneled bodies can be large — bounding happens at the HTTP layer instead (below).
+**Adaptive, idle-aware keepalive** ([tunnel/internal/keepalive](../tunnel/internal/keepalive/keepalive.go)).
+yamux's built-in fixed-interval keepalive is *disabled* on both sides
+(`EnableKeepAlive=false`) and replaced by an injectable ping driver
+(`keepalive.Run`). While a session has recent stream activity it pings at the **base**
+interval (relay 10 s / agent 20 s — identical to the pre-existing fixed cadence, so
+active sessions behave exactly as before). Once a session has served **no streams for
+2 min** (`IdleAfter`) it backs off to a **60 s idle interval**, and the moment a stream
+appears it snaps back to base. This is the standing-heartbeat side of the ratified
+*direct-first, relay-as-metered-fallback* cost model: every registered box holds one
+permanent control connection, and lengthening its idle ping cadence cuts that idle cost
+**without ever evicting the session** — reachability is unaffected.
+
+Keepalive is still the dead-peer detector. A clean `Stop()` frees the name immediately;
+a hard-killed agent's name frees on the next missed ping — **~10 s** while the tunnel is
+active (base interval), and at most the **idle interval + ConnectionWriteTimeout (~70 s)**
+if the tunnel had already gone idle. Either way the bound is finite; a genuinely dead
+tunnel is always torn down, never left to linger. (True *idle-session eviction* — closing
+an idle tunnel outright rather than merely slowing its heartbeat — is a deliberate
+non-goal here and remains **planned, not implemented**; see [TUNNEL.md](TUNNEL.md#honest-limitations).)
+The WebSocket read limit is disabled on both sides (`SetReadLimit(-1)`) because yamux
+frames and tunneled bodies can be large — bounding happens at the HTTP layer instead
+(below).
 
 ---
 
@@ -135,8 +153,9 @@ flapping agents.
 
 **Consequence for name takeover:** a live name is held by exactly one session,
 first-come. If the old session is dead-but-not-yet-detected (hard kill), a reconnecting
-agent can be refused with `name unavailable` for up to ~one keepalive miss (~10 s) until
-the stale session is reaped; its backoff loop then succeeds on a later attempt.
+agent can be refused with `name unavailable` until the stale session is reaped — up to
+~one keepalive miss (~10 s while the tunnel was active, up to ~70 s if it had gone idle);
+its backoff loop then succeeds on a later attempt.
 
 ---
 
