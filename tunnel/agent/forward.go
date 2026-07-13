@@ -30,8 +30,10 @@ func (a *Agent) serveStream(stream net.Conn) {
 	// against absurd content by capping the body read downstream via the local dial.
 	req.RequestURI = ""
 
-	// SSRF guard, enforced again here: we ONLY ever dial our one configured target.
-	// The request's Host/URL from the relay is irrelevant to where we connect.
+	// SSRF guard, re-checked here: we ONLY ever dial our one configured, loopback-
+	// validated target. The request's Host/URL delivered over the relay never
+	// influences where we connect — it is used only to rewrite the request for the
+	// local origin below.
 	target := a.opts.LocalAddr
 	if err := ensureLoopback(target); err != nil {
 		writeSimpleResponse(stream, http.StatusForbidden, "forbidden")

@@ -227,8 +227,14 @@ func validateOptions(o Options) error {
 }
 
 // ensureLoopback rejects any LocalAddr that is not a loopback host. This is the
-// agent's SSRF guard at configuration time; forwardStream enforces it again at
-// dial time in case the target is a hostname that resolves off-loopback.
+// agent's SSRF guard, checked at configuration time AND re-checked in serveStream
+// before every dial (defence in depth — the check is cheap and the target must
+// never drift off-loopback). It accepts ONLY the literal host "localhost" or a
+// literal loopback IP (127.0.0.0/8, ::1); every other hostname is rejected rather
+// than resolved, so there is no name-resolution step an attacker could steer
+// (no DNS-rebinding surface). "localhost" is dialed by name and resolved by the
+// OS at dial time; on a sane host that is a loopback address, and the target is
+// static operator configuration, never request-influenced.
 func ensureLoopback(addr string) error {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
