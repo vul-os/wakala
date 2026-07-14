@@ -41,6 +41,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vul-os/vulos-relay/tunnel/autoscale"
 	"github.com/vul-os/vulos-relay/tunnel/server"
 )
 
@@ -95,6 +96,23 @@ func main() {
 		reqBurst   = flag.Float64("ratelimit-req-burst", envFloat("VULOS_RELAY_REQ_BURST", 0), "public request burst per tunnel (0=default 100)")
 		globalRate = flag.Float64("ratelimit-global-rate", envFloat("VULOS_RELAY_GLOBAL_RATE", 0), "aggregate public requests/sec across all tunnels (0=default 500, <0=off)")
 		globBurst  = flag.Float64("ratelimit-global-burst", envFloat("VULOS_RELAY_GLOBAL_BURST", 0), "aggregate public request burst (0=default 1000)")
+
+		// AUTOSCALE-ON-SATURATION + MULTI-NODE POOL. This relay is one node of a
+		// geo-distributed pool (Hetzner primary, Vultr edge). node-id/region/provider
+		// make it self-aware (surfaced on /healthz and used by a pool). The soft caps
+		// are the per-node "full" thresholds used to compute the
+		// vulos_relay_saturation_ratio metric an orchestrator scrapes to decide when to
+		// provision/drain a node. They are SOFT (scaling) limits, distinct from the
+		// hard -max-agents / rate caps that bound abuse. All optional: leave the soft
+		// caps at 0 and the saturation sampler stays off (single-node behavior).
+		nodeID   = flag.String("node-id", envOr("VULOS_RELAY_NODE_ID", ""), "this node's stable pool id (e.g. hel1-a); surfaced on /healthz")
+		region   = flag.String("region", envOr("VULOS_RELAY_REGION", ""), "coarse geo tag for nearest-node routing (e.g. eu-central, af-south)")
+		provider = flag.String("provider", envOr("VULOS_RELAY_PROVIDER", ""), "informational host tag (e.g. hetzner, vultr)")
+
+		softMaxAgents  = flag.Int("soft-max-agents", int(envInt64("VULOS_RELAY_SOFT_MAX_AGENTS", 0)), "soft agent cap for saturation (0=ignore this dimension)")
+		softMaxStreams = flag.Int("soft-max-streams", int(envInt64("VULOS_RELAY_SOFT_MAX_STREAMS", 0)), "soft in-flight-stream cap for saturation (0=ignore)")
+		softMaxBPS     = flag.Int64("soft-max-bytes-per-sec", envInt64("VULOS_RELAY_SOFT_MAX_BPS", 0), "soft throughput cap (bytes/sec) for saturation (0=ignore)")
+		satPeriod      = flag.Duration("saturation-sample-period", envDuration("VULOS_RELAY_SAT_PERIOD", 0), "how often to recompute the saturation gauge (0=default 15s, <0=disable)")
 
 		// WAVE24-RELAY-BILLING: link this relay to Vulos Cloud so account-bound
 		// tokens are gated + metered. All optional — omit to run UNBILLED (self-host).
@@ -173,6 +191,16 @@ func main() {
 
 		EnableSFUHostRegistry: *sfuHostRegistry,
 
+		NodeID:   *nodeID,
+		Region:   *region,
+		Provider: *provider,
+		SoftCapacity: autoscale.Capacity{
+			MaxAgents:      *softMaxAgents,
+			MaxStreams:     *softMaxStreams,
+			MaxBytesPerSec: *softMaxBPS,
+		},
+		SaturationSamplePeriod: *satPeriod,
+
 		ControlConnRate:  *ctrlRate,
 		ControlConnBurst: *ctrlBurst,
 		PublicReqRate:    *reqRate,
@@ -188,6 +216,13 @@ func main() {
 
 	log.Printf("vulos-relayd: listening on %s domain=%s pathMode=%v agents<=%d",
 		*addr, *domain, *pathMode, *maxAgents)
+	if *nodeID != "" || *region != "" {
+		log.Printf("vulos-relayd: pool node id=%q region=%q provider=%q", *nodeID, *region, *provider)
+	}
+	if *softMaxAgents > 0 || *softMaxStreams > 0 || *softMaxBPS > 0 {
+		log.Printf("vulos-relayd: saturation sampler ON (soft caps agents=%d streams=%d bps=%d) — vulos_relay_saturation_ratio on /metrics",
+			*softMaxAgents, *softMaxStreams, *softMaxBPS)
+	}
 	if *trustProxy {
 		log.Printf("vulos-relayd: TRUSTING X-Forwarded-* from a fronting proxy (ensure a trusted TLS-terminating edge fronts this relay)")
 	} else {
