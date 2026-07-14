@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "vite build --config vite.config.lib.js && npm run build:types",
+    "notices": "node ../scripts/gen-third-party-notices.mjs --npm-start . --out THIRD-PARTY-NOTICES.txt --title \"@vulos/relay-client (browser bundle)\"",
+    "build": "npm run notices && vite build --config vite.config.lib.js && npm run build:types",
     "build:lib": "vite build --config vite.config.lib.js",
     "build:types": "tsc -p tsconfig.dts.json",
     "build:harness": "vite build --config e2e/harness/vite.config.js",
@@ -109,7 +110,8 @@
     "dist-lib/",
     "src/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.txt"
   ],
   "publishConfig": {
     "access": "public",
@@ -131,6 +133,7 @@
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^6.0.1",
     "jsdom": "^29.1.1",
+    "license-checker-rseidelsohn": "^5.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.9.3",

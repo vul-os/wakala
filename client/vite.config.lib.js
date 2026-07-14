@@ -52,6 +52,13 @@ export default defineConfig({
         'xlsx',
       ],
       output: {
+        // Keep the upstream `@license` / `@preserve` banners in the bundled
+        // output. MIT, BSD and ISC all require the copyright notice to travel
+        // with every copy, and a bundle IS a copy. Vite 8 bundles with
+        // rolldown, whose minifier drops every comment unless this is set —
+        // note that `esbuild.legalComments` does NOT do it, because in Vite 8
+        // the esbuild options only reach the CSS pipeline.
+        comments: { legal: true },
         exports: 'named',
         globals: {
           react: 'React',
