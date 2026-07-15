@@ -82,24 +82,32 @@ const (
 	authFailBadRegister  authFailReason = "bad_register"     // malformed/invalid register frame
 	authFailUnauthorized authFailReason = "unauthorized"     // token/name authorize failed
 	authFailEntitlement  authFailReason = "entitlement"      // CP entitlement denied at connect
-	authFailNameTaken    authFailReason = "name_unavailable" // collision / capacity
+	authFailNameTaken    authFailReason = "name_unavailable" // collision
+	authFailCapacity     authFailReason = "at_capacity"      // hard MaxAgents cap reached (shed)
+	authFailSaturation   authFailReason = "saturation_shed"  // soft saturation shed (shed)
+	authFailDraining     authFailReason = "draining"         // PoP draining (shed)
 )
 
 var allAuthFailReasons = []authFailReason{
 	authFailRateLimited, authFailNoBearer, authFailBadRegister,
 	authFailUnauthorized, authFailEntitlement, authFailNameTaken,
+	authFailCapacity, authFailSaturation, authFailDraining,
 }
 
 // ctrlLimitSurface buckets which rate limiter rejected. Fixed set.
 type ctrlLimitSurface string
 
 const (
-	limitControl ctrlLimitSurface = "control" // control-conn attempts (per source IP)
-	limitPerReq  ctrlLimitSurface = "per_tunnel"
-	limitGlobal  ctrlLimitSurface = "global"
+	limitControl     ctrlLimitSurface = "control" // control-conn attempts (per source IP)
+	limitPerReq      ctrlLimitSurface = "per_tunnel"
+	limitGlobal      ctrlLimitSurface = "global"
+	limitGlobalConn  ctrlLimitSurface = "global_conn"  // aggregate NEW control-connection rate
+	limitAccountConn ctrlLimitSurface = "account_conn" // per-account NEW control-connection rate
 )
 
-var allLimitSurfaces = []ctrlLimitSurface{limitControl, limitPerReq, limitGlobal}
+var allLimitSurfaces = []ctrlLimitSurface{
+	limitControl, limitPerReq, limitGlobal, limitGlobalConn, limitAccountConn,
+}
 
 // cutReason buckets why a live tunnel was cut. Fixed set.
 type cutReason string

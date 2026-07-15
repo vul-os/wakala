@@ -45,7 +45,7 @@ const handoffTimeout = 20 * time.Second
 // graceful drain reconnect hands the tunnel to a successor goroutine and this loop
 // exits.
 func (a *Agent) maintain(ctx context.Context) {
-	a.superviseFrom(ctx, "", nil)
+	a.superviseFrom(ctx, "", nil, 0)
 }
 
 // superviseFrom is the supervise loop. firstEndpoint, when non-empty, is dialed on
@@ -53,8 +53,20 @@ func (a *Agent) maintain(ctx context.Context) {
 // PoP); otherwise the endpoint is resolved each iteration via the routing hook.
 // ready, when non-nil, is closed once the FIRST session of this loop reaches
 // connected — a predecessor waits on it to know the successor is live before winding
-// down (make-before-break).
-func (a *Agent) superviseFrom(ctx context.Context, firstEndpoint string, ready chan struct{}) {
+// down (make-before-break). startDelay, when > 0, staggers the FIRST dial by a
+// (jittered) delay — used on a SIGNALED reconnect so a mass drain of N agents spreads
+// its reconnects across a window instead of thundering-herding the target PoP.
+func (a *Agent) superviseFrom(ctx context.Context, firstEndpoint string, ready chan struct{}, startDelay time.Duration) {
+	// STAGGERED RECONNECT: hold off the first dial by the jittered stagger. The
+	// predecessor keeps the old tunnel up (make-before-break) for the whole handoff
+	// window, so this wait costs no connectivity — it only spreads the herd.
+	if startDelay > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(startDelay):
+		}
+	}
 	backoff := 500 * time.Millisecond
 	endpoint := firstEndpoint
 	for {
@@ -73,17 +85,33 @@ func (a *Agent) superviseFrom(ctx context.Context, firstEndpoint string, ready c
 		if ctx.Err() != nil {
 			return
 		}
+		shed := false
 		if err != nil {
-			a.setStatus(StatusError, "", err.Error())
-			a.appendLog("connection error: %v", err)
+			var re retryableRefusal
+			if errors.As(err, &re) {
+				// The relay SHED this connect (draining / at capacity / saturated /
+				// per-account rate) — not a fault. Re-resolve to another PoP and spread
+				// the retry across the stagger window so a fleet-wide shed does not
+				// synchronize into a herd on whichever PoP the CP hands out next.
+				shed = true
+				a.setStatus(StatusStarting, "", "")
+				a.appendLog("relay shed connect (%v); re-resolving elsewhere", err)
+			} else {
+				a.setStatus(StatusError, "", err.Error())
+				a.appendLog("connection error: %v", err)
+			}
 		} else {
 			// Clean session end (server closed / stream loop ended); treat as retryable.
 			a.setStatus(StatusStarting, "", "")
 			a.appendLog("session ended; reconnecting")
 		}
 
-		// Exponential backoff with full jitter, capped.
+		// Exponential backoff with full jitter, capped. A shed additionally adds the
+		// per-agent reconnect stagger so a synchronized fleet-wide shed de-syncs.
 		sleep := time.Duration(rand.Int63n(int64(backoff) + 1))
+		if shed {
+			sleep += a.staggerDelay()
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -94,6 +122,29 @@ func (a *Agent) superviseFrom(ctx context.Context, firstEndpoint string, ready c
 			backoff = a.opts.MaxBackoff
 		}
 	}
+}
+
+// retryableRefusal marks a register refusal the relay flagged as a LOAD/CAPACITY
+// SHED (draining, at capacity, saturated, or per-account rate) rather than an
+// auth/authorization failure. The supervise loop treats it as transient: it
+// re-resolves its assigned PoP (the CP steers it elsewhere) and retries with a
+// jittered stagger, instead of surfacing a hard StatusError. CONNECTION-FLOOD.
+type retryableRefusal struct{ msg string }
+
+func (e retryableRefusal) Error() string { return e.msg }
+
+// staggerDelay returns a random reconnect-stagger offset in [0, ReconnectJitter),
+// clamped safely below the make-before-break handoff window so a staggered successor
+// still connects while the old tunnel is up (zero-drop). Returns 0 when disabled.
+func (a *Agent) staggerDelay() time.Duration {
+	j := a.opts.ReconnectJitter
+	if j <= 0 {
+		return 0
+	}
+	if maxJ := handoffTimeout - 2*time.Second; j > maxJ && maxJ > 0 {
+		j = maxJ
+	}
+	return time.Duration(rand.Int63n(int64(j) + 1))
 }
 
 // connectOnce establishes one control connection to endpoint, registers, and serves
@@ -202,17 +253,26 @@ func (a *Agent) connectOnce(ctx context.Context, endpoint string, ready chan str
 // dropped connectivity. Returns outcomeHandedOff so the caller's loop exits (the
 // successor now owns the tunnel).
 func (a *Agent) gracefulHandoff(ctx context.Context, old *yamux.Session, reason string) connectOutcome {
-	a.appendLog("graceful reconnect (reason=%q): migrating to a fresh PoP", reason)
+	// STAGGERED RECONNECT (thundering-herd guard): a drain signals EVERY agent on a
+	// PoP to reconnect at once. Delaying the successor's first dial by a random offset
+	// in [0, ReconnectJitter) spreads N reconnects uniformly across that window so the
+	// target PoP is not hit by a synchronized stampede. The stagger stays strictly
+	// below handoffTimeout, and the OLD tunnel is held up for the whole handoff
+	// window, so the wait is zero-drop. A per-agent random offset (not a shared phase)
+	// is what actually de-synchronizes the fleet.
+	stagger := a.staggerDelay()
+	a.appendLog("graceful reconnect (reason=%q): migrating to a fresh PoP after %s stagger", reason, stagger)
 	ready := make(chan struct{})
 	a.handoffWG.Add(1)
 	go func() {
 		defer a.handoffWG.Done()
-		// Successor resolves its OWN endpoint (re-query the directory → new PoP).
-		a.superviseFrom(ctx, "", ready)
+		// Successor resolves its OWN endpoint (re-query the directory → new PoP) after
+		// the jittered stagger.
+		a.superviseFrom(ctx, "", ready, stagger)
 	}()
 
 	// Wait for the successor to connect (zero-drop overlap), bounded so a slow new
-	// PoP cannot pin the old session forever.
+	// PoP cannot pin the old session forever. The bound covers the stagger + dial.
 	select {
 	case <-ready:
 		a.appendLog("successor PoP connected; winding down old tunnel")
@@ -314,6 +374,12 @@ func (a *Agent) register(conn net.Conn) (wire.RegisterAck, error) {
 		msg := ack.Error
 		if msg == "" {
 			msg = "registration rejected"
+		}
+		// A relay-flagged shed (draining / at capacity / saturated / per-account rate)
+		// is transient — surface it as retryable so the supervise loop re-resolves +
+		// staggers instead of reporting a hard error.
+		if ack.Retryable {
+			return wire.RegisterAck{}, retryableRefusal{msg}
 		}
 		return wire.RegisterAck{}, errors.New(msg)
 	}

@@ -87,6 +87,15 @@ type Options struct {
 	HandshakeTimeout time.Duration
 	// MaxBackoff caps the reconnect backoff. 0 -> 30s.
 	MaxBackoff time.Duration
+	// ReconnectJitter is the STAGGER WINDOW over which a SIGNALED reconnect (a relay
+	// drain telling every agent to re-dial, or a retryable "at capacity / saturated"
+	// refusal) is randomly delayed, so a mass reconnect of N agents does NOT
+	// thundering-herd the target PoP — the reconnects are spread uniformly across
+	// [0, ReconnectJitter). Make-before-break keeps the OLD tunnel up during the
+	// wait, so the stagger costs no connectivity (it must stay < the handoff window).
+	// 0 -> 3s. A negative value disables the stagger (reconnect immediately). This is
+	// distinct from MaxBackoff, which governs RETRY backoff after a FAILED dial.
+	ReconnectJitter time.Duration
 	// now is injectable for tests; nil -> time.Now.
 	now func() time.Time
 }
@@ -156,6 +165,14 @@ func New(opts Options) *Agent {
 	}
 	if opts.MaxBackoff == 0 {
 		opts.MaxBackoff = 30 * time.Second
+	}
+	// ReconnectJitter: 0 => default 3s stagger window; a negative value disables the
+	// stagger (mirrors the "0=default, <0=off" convention used across the relay).
+	switch {
+	case opts.ReconnectJitter < 0:
+		opts.ReconnectJitter = 0
+	case opts.ReconnectJitter == 0:
+		opts.ReconnectJitter = 3 * time.Second
 	}
 	// SMART-AUTOSCALE: wire the PoP resolver — an explicit one if injected, else a
 	// default HTTP resolver built from DirectoryURL (nil when DirectoryURL is empty,

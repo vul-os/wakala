@@ -110,6 +110,39 @@ type Config struct {
 	// across all tunnels. Defaults: 500/s, burst 1000.
 	GlobalReqRate  float64
 	GlobalReqBurst float64
+
+	// CONNECTION-FLOOD ADMISSION (per-account + global NEW-connection rate + shed).
+	// All optional; 0 => sane defaults are applied in New; a negative value DISABLES
+	// that limiter. These sit ON TOP OF the per-IP ControlConn* limiter and the hard
+	// MaxAgents cap, and exist to keep a control-connection FLOOD — malicious DoS or a
+	// self-inflicted reconnect storm — from spending CPU/memory on tunnel/yamux setup
+	// before it is rejected.
+
+	// ConnPerAccountRate / ConnPerAccountBurst throttle NEW control connections per
+	// Vulos ACCOUNT (token bucket, checked after the token authorizes so the account
+	// is known but BEFORE yamux setup). A single account normally holds a handful of
+	// tunnels; a burst of reconnects from one account is bounded here so one tenant
+	// cannot flood a PoP. Defaults: 4/s, burst 20. Empty (unbilled) accounts are not
+	// keyed (self-host is unchanged).
+	ConnPerAccountRate  float64
+	ConnPerAccountBurst float64
+	// GlobalConnRate / GlobalConnBurst cap the AGGREGATE rate of NEW control-connection
+	// attempts across ALL sources, checked on the CHEAP path BEFORE the WS upgrade so a
+	// distributed flood (many source IPs, each under the per-IP limit) cannot make the
+	// PoP spend an upgrade + register-read per attempt. Excess attempts get a fast 429.
+	// Defaults: 100/s, burst 200. A legitimate mass-reconnect that trips this simply
+	// backs off + re-resolves (the agent jitters and the CP routes it elsewhere).
+	GlobalConnRate  float64
+	GlobalConnBurst float64
+	// SheddingThreshold is the saturation ratio (0..1+) at/above which this PoP SHEDS
+	// new tunnels — refusing a NEW registration with a retryable "at capacity, try
+	// another PoP" ack so the agent re-resolves elsewhere and the CP stops routing
+	// here — WHILE keeping every live tunnel up. It is a self-protection valve that
+	// fires before the hard MaxAgents cap and gives the autoscaler time to add a node.
+	// Only active when a SoftCapacity is configured (saturation is otherwise 0). 0 =>
+	// default 0.95; a negative value DISABLES shedding (the hard cap still applies).
+	SheddingThreshold float64
+
 	// RateLimitIdleTTL evicts a per-key bucket unused for this long (bounds
 	// memory). Default 10m.
 	RateLimitIdleTTL time.Duration
@@ -238,6 +271,18 @@ func (c *Config) applyDefaults() {
 	c.PublicReqBurst = rateLimitField(c.PublicReqBurst, 100)
 	c.GlobalReqRate = rateLimitField(c.GlobalReqRate, 500)
 	c.GlobalReqBurst = rateLimitField(c.GlobalReqBurst, 1000)
+	// CONNECTION-FLOOD ADMISSION defaults (same negative=disabled convention).
+	c.ConnPerAccountRate = rateLimitField(c.ConnPerAccountRate, 4)
+	c.ConnPerAccountBurst = rateLimitField(c.ConnPerAccountBurst, 20)
+	c.GlobalConnRate = rateLimitField(c.GlobalConnRate, 100)
+	c.GlobalConnBurst = rateLimitField(c.GlobalConnBurst, 200)
+	// Saturation shed threshold: 0 => default 0.95, negative => disabled (0).
+	switch {
+	case c.SheddingThreshold < 0:
+		c.SheddingThreshold = 0
+	case c.SheddingThreshold == 0:
+		c.SheddingThreshold = 0.95
+	}
 	if c.RateLimitIdleTTL == 0 {
 		c.RateLimitIdleTTL = 10 * time.Minute
 	}
@@ -265,6 +310,10 @@ type Server struct {
 	ctrlLimiter   *rateLimiter       // control-conn attempts per source IP
 	reqLimiter    *rateLimiter       // public requests per agent/session
 	globalLimiter *globalRateLimiter // aggregate public request cap
+
+	// CONNECTION-FLOOD ADMISSION. Nil => disabled (allow all).
+	acctConnLimiter   *rateLimiter       // NEW control connections per account
+	globalConnLimiter *globalRateLimiter // aggregate NEW control-connection rate (cheap pre-upgrade gate)
 
 	// Revocation (WAVE41-RELAY-REVOCATION).
 	revoke       revocationSource // static revoked-list + CP revoked/404 signal
@@ -339,6 +388,9 @@ func New(cfg Config) (*Server, error) {
 		ctrlLimiter:   newRateLimiter(cfg.ControlConnRate, cfg.ControlConnBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		reqLimiter:    newRateLimiter(cfg.PublicReqRate, cfg.PublicReqBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		globalLimiter: newGlobalRateLimiter(cfg.GlobalReqRate, cfg.GlobalReqBurst),
+
+		acctConnLimiter:   newRateLimiter(cfg.ConnPerAccountRate, cfg.ConnPerAccountBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
+		globalConnLimiter: newGlobalRateLimiter(cfg.GlobalConnRate, cfg.GlobalConnBurst),
 
 		revoke:       revocationSource{static: staticRevoker, expirer: expirer, gate: gate},
 		revokePeriod: cfg.RevokeSweepPeriod,

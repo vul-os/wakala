@@ -61,6 +61,14 @@ type RegisterAck struct {
 	PublicURL string `json:"publicUrl,omitempty"`
 	Error     string `json:"error,omitempty"`
 
+	// Retryable, on a failed ack (OK=false), tells the agent this refusal is a
+	// LOAD/CAPACITY shed — the PoP is draining, at capacity, or saturated — NOT an
+	// auth/authorization failure. The agent treats it as transient: it re-resolves
+	// its assigned PoP (the CP steers it elsewhere) and retries with jittered backoff,
+	// rather than surfacing a hard error. A non-retryable failure (bad token, name
+	// taken, entitlement denied) is terminal for that endpoint. CONNECTION-FLOOD.
+	Retryable bool `json:"retryable,omitempty"`
+
 	// DirectEndpoint (DIRECT-IP) echoes back the box's advertised direct endpoint
 	// IF AND ONLY IF the relay verified it (reachable + ownership-proven). Empty
 	// when the box advertised none, or when verification failed — in which case the

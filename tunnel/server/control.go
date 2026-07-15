@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -20,26 +21,18 @@ const wireControlPath = wire.ControlPath
 // handleControl accepts an agent's wss control connection, authenticates it,
 // registers its name, and becomes the yamux client for the session lifetime.
 func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
-	// WAVE34-RELAY-HARDEN: throttle control-connection attempts per source IP
-	// BEFORE spending a WS upgrade + CP entitlement round-trip on them. Return 429
-	// (with Retry-After) when a source exceeds its token bucket.
-	if !s.ctrlLimiter.allow(s.clientIP(r)) {
-		s.metrics.rateLimitReject(limitControl)
-		s.metrics.authFail(authFailRateLimited)
-		s.logDebug("control connection rate-limited", logFields{Remote: s.clientIP(r), Reason: string(authFailRateLimited)})
-		w.Header().Set("Retry-After", "1")
-		http.Error(w, "too many control-connection attempts", http.StatusTooManyRequests)
-		return
-	}
-
-	// Pre-auth: the bearer token must be present in the Authorization header. We
-	// validate token+name after reading the Register frame (the name comes from it),
-	// but reject obviously-unauthenticated connections before the WS upgrade to
-	// avoid spending an upgrade on anonymous clients.
-	if bearer(r) == "" {
-		s.metrics.authFail(authFailNoBearer)
-		s.logDebug("control connection missing bearer", logFields{Remote: s.clientIP(r), Reason: string(authFailNoBearer)})
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	// CONNECTION-FLOOD ADMISSION: run the CHEAP pre-upgrade gate first — per-IP +
+	// aggregate NEW-connection rate limits, the bearer presence check, and the
+	// hard-cap / saturation / draining SHEDS — so a connect flood (DoS or a reconnect
+	// storm) is rejected for the price of a map lookup, BEFORE we spend a WS upgrade,
+	// a register read, a token-authorize, and a yamux session on it. A "shed" is a
+	// graceful, retryable refusal (the agent re-resolves to another PoP).
+	if v := s.admitControlConn(r); !v.ok {
+		s.recordAdmissionReject(r, v)
+		if v.retryAfter != "" {
+			w.Header().Set("Retry-After", v.retryAfter)
+		}
+		http.Error(w, v.message, v.httpStatus)
 		return
 	}
 
@@ -94,8 +87,9 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	// migrates to a non-draining node rather than pinning this one. Existing tunnels
 	// are untouched — they were told to reconnect proactively and drain on their own.
 	if s.draining.Load() {
+		s.metrics.authFail(authFailDraining)
 		s.logInfo("connect refused: PoP draining", logFields{Name: nn, Remote: s.clientIP(r)})
-		writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "relay draining"})
+		writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "relay draining", Retryable: true})
 		c.Close(websocket.StatusPolicyViolation, "draining")
 		return
 	}
@@ -108,6 +102,19 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 		s.logDebug("authorize failed", logFields{Name: nn, Remote: s.clientIP(r), Reason: string(authFailUnauthorized)})
 		writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "unauthorized"})
 		c.Close(websocket.StatusPolicyViolation, "unauthorized")
+		return
+	}
+
+	// CONNECTION-FLOOD ADMISSION: per-ACCOUNT NEW-connection rate limit. The token
+	// authorized, so the account is known; bound a single tenant's reconnect burst
+	// BEFORE spending a yamux session on it. A retryable refusal (the agent backs off
+	// + retries). Empty (unbilled) accounts are not keyed.
+	if !s.admitAccountConnect(accountID) {
+		s.metrics.rateLimitReject(limitAccountConn)
+		s.metrics.authFail(authFailRateLimited)
+		s.logDebug("connect rate-limited (per account)", logFields{Name: nn, Account: accountID, Remote: s.clientIP(r), Reason: string(authFailRateLimited)})
+		writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "too many connections for this account", Retryable: true})
+		c.Close(websocket.StatusPolicyViolation, "rate limited")
 		return
 	}
 
@@ -166,7 +173,18 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	}
 	release, reconnect, err := s.registry.add(sess)
 	if err != nil {
-		// Name collision or capacity: fail closed, don't hijack.
+		// Distinguish a CAPACITY shed (the hard MaxAgents cap was reached in the race
+		// between the pre-upgrade check and here) from a NAME COLLISION. Capacity is a
+		// retryable shed → the agent re-resolves to another PoP; a collision is a
+		// terminal "name unavailable". Neither hijacks an existing tunnel.
+		if errors.Is(err, errRegistryFull) {
+			s.metrics.authFail(authFailCapacity)
+			s.logInfo("connect refused: at capacity", logFields{Name: nn, Account: accountID, Remote: s.clientIP(r), Reason: string(authFailCapacity)})
+			writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "relay at capacity, try another PoP", Retryable: true})
+			mux.Close()
+			c.Close(websocket.StatusPolicyViolation, "at capacity")
+			return
+		}
 		s.metrics.authFail(authFailNameTaken)
 		s.logInfo("connect refused: name unavailable", logFields{Name: nn, Account: accountID, Remote: s.clientIP(r), Reason: string(authFailNameTaken)})
 		writeAck(conn, wire.RegisterAck{Type: "register_ack", OK: false, Error: "name unavailable"})

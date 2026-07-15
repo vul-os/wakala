@@ -1,12 +1,19 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
 )
+
+// errRegistryFull is returned by add when the global agent cap (MaxAgents) is
+// reached. It is distinct from a name-collision error so the caller can shed the
+// connect as a CAPACITY refusal (retryable → the agent re-resolves to another PoP)
+// rather than a "name unavailable" auth failure.
+var errRegistryFull = errors.New("relay at capacity")
 
 // session is one live agent connection: a yamux client session (the server opens
 // streams into the agent) keyed by the name it serves.
@@ -90,7 +97,7 @@ func (r *registry) add(s *session) (release func(), reconnect bool, err error) {
 		return nil, false, fmt.Errorf("name %q already in use", s.name)
 	}
 	if r.maxAgents > 0 && len(r.byName) >= r.maxAgents {
-		return nil, false, fmt.Errorf("relay at capacity")
+		return nil, false, errRegistryFull
 	}
 	// Reconnect detection + prune of the recentlyLeft map (bounded cleanup).
 	now := time.Now()

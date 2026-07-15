@@ -102,6 +102,12 @@ func TestGracefulDrain_ZeroDropMigration(t *testing.T) {
 		Name:      testName,
 		LocalAddr: localAddr(target.URL),
 		Resolver:  res,
+		// This test isolates the make-before-break ZERO-DROP property, so it disables
+		// the reconnect STAGGER (that thundering-herd guard is exercised on its own in
+		// the agent package's staggered-reconnect test). With the stagger on, the
+		// migration window would span seconds and this test's tight availability probe
+		// would self-throttle against the per-tunnel request limiter.
+		ReconnectJitter: -1,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
