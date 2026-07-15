@@ -217,7 +217,7 @@ func TestCPClient_BadSecretRejected(t *testing.T) {
 
 func TestCPTokenStore_ResolvesAndFailsClosed(t *testing.T) {
 	fake := newFakeCP("shh")
-	fake.entByCred["cred-good"] = Entitlement{AccountID: "acct-7", Tier: "pro", RelayAllowed: true}
+	fake.entByCred["cred-good"] = Entitlement{AccountID: "acct-7", Tier: "pro", RelayAllowed: true, AuthorizedRelayNames: []string{"box1"}}
 	srv := fake.server(t)
 	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
 	ts := NewCPTokenStore(cp, time.Second)
@@ -234,6 +234,51 @@ func TestCPTokenStore_ResolvesAndFailsClosed(t *testing.T) {
 	fake.setEntErr(true)
 	if _, err := ts.Authorize("cred-new", "box1"); err == nil {
 		t.Fatal("expected CP outage to fail closed at connect")
+	}
+}
+
+// TestCPTokenStore_EnforcesNameBinding is the RELAY-NAME-BINDING regression: a
+// CP-validated account may register ONLY the names in its authorized_relay_names.
+// A valid account claiming a name outside its set (the route-hijack exploit) is
+// rejected; the owner (name ∈ set) is accepted; and an absent/empty set rejects
+// EVERY name (fail-closed).
+func TestCPTokenStore_EnforcesNameBinding(t *testing.T) {
+	fake := newFakeCP("shh")
+	// acct-owner owns "mybox" (and "mybox2"); it does NOT own "victim".
+	fake.entByCred["cred-owner"] = Entitlement{
+		AccountID: "acct-owner", RelayAllowed: true,
+		AuthorizedRelayNames: []string{"mybox", "mybox2"},
+	}
+	// acct-empty is a fully valid account whose CP response carries NO names
+	// (field omitted / still rolling out) — it must authorize nothing.
+	fake.entByCred["cred-empty"] = Entitlement{AccountID: "acct-empty", RelayAllowed: true}
+	srv := fake.server(t)
+	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
+	ts := NewCPTokenStore(cp, time.Hour)
+
+	// Owner registering its OWN name → accepted.
+	if acct, err := ts.Authorize("cred-owner", "mybox"); err != nil || acct != "acct-owner" {
+		t.Fatalf("owner claiming own name: acct=%q err=%v (want acct-owner, nil)", acct, err)
+	}
+	// The exploit: a valid account claiming a name it does NOT own → rejected,
+	// on both the fresh path and the subsequent cache-hit path.
+	if _, err := ts.Authorize("cred-owner", "victim"); err == nil {
+		t.Fatal("route-hijack: valid account must NOT register a name outside its authorized_relay_names")
+	}
+	if _, err := ts.Authorize("cred-owner", "victim"); err == nil {
+		t.Fatal("route-hijack (cache hit): still must NOT register an unauthorized name")
+	}
+	// A second authorized name for the same account still works (the cache-hit path
+	// enforces membership, not a blanket pass).
+	if acct, err := ts.Authorize("cred-owner", "mybox2"); err != nil || acct != "acct-owner" {
+		t.Fatalf("owner claiming second own name: acct=%q err=%v", acct, err)
+	}
+	// Empty/absent list ⇒ fail closed for every name.
+	if _, err := ts.Authorize("cred-empty", "anything"); err == nil {
+		t.Fatal("empty authorized_relay_names must reject every name (fail-closed)")
+	}
+	if _, err := ts.Authorize("cred-empty", "mybox"); err == nil {
+		t.Fatal("empty authorized_relay_names must reject every name (fail-closed)")
 	}
 }
 

@@ -238,7 +238,7 @@ func TestSweep_CPRevoke_StickyBeatsTransient(t *testing.T) {
 // unbounded bypass.
 func TestConnectRace_StaleCPTokenCacheBounded(t *testing.T) {
 	fake := newFakeCP("shh")
-	fake.entByCred["cred"] = Entitlement{AccountID: "acct-9", RelayAllowed: true}
+	fake.entByCred["cred"] = Entitlement{AccountID: "acct-9", RelayAllowed: true, AuthorizedRelayNames: []string{"box"}}
 	srv := fake.server(t)
 	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
 	ts := NewCPTokenStore(cp, 40*time.Millisecond)

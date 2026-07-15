@@ -76,6 +76,15 @@ type Entitlement struct {
 	// 404 for a previously-valid credential is treated the same way (see
 	// ErrCredentialRevoked below).
 	Revoked bool `json:"revoked"`
+	// AuthorizedRelayNames (RELAY-NAME-BINDING) is the exact set of relay
+	// names/hostnames this account may register. The CP is the authority on which
+	// names a credential owns; the relay MUST refuse any claimed name outside this
+	// set — mirroring the static store's grant.Names binding — so a CP-validated
+	// account cannot hijack another account's route. It is fail-closed: an absent or
+	// empty list authorizes NO name (during CP rollout an account with no names
+	// simply cannot register until the CP populates the field). Names are normalized
+	// (normalizeName) before the membership check.
+	AuthorizedRelayNames []string `json:"authorized_relay_names"`
 }
 
 // ErrCredentialRevoked is returned by the entitlement reads when the CP
@@ -207,17 +216,24 @@ func signBody(secret string, body []byte) string {
 // CP and resolves it to an account. Fails closed on a CP error at connect time.
 //
 // The presented "token" IS the account-bound install credential the install
-// obtained from the device-link flow. The CP resolves it → account and confirms
-// relay is allowed; the store caches the (token → account) mapping briefly to
-// avoid a CP round trip on every reconnect. ANY normalized name is allowed for a
-// validated account (the CP is the authority on billing; name uniqueness is still
-// enforced by the registry, and a revoked credential is refused via the CP
-// revoked/404 signal).
+// obtained from the device-link flow. The CP resolves it → account, confirms
+// relay is allowed, AND returns the exact set of names the account may register
+// (authorized_relay_names). The store caches the (token → account + names)
+// mapping briefly to avoid a CP round trip on every reconnect.
+//
+// RELAY-NAME-BINDING: the claimed name MUST be a member of the account's
+// authorized_relay_names — mirroring the static store's grant.Names binding
+// (auth.go). A CP-validated account may NOT register an arbitrary name just
+// because it is a valid account: that would let one account hijack another's
+// route. The check is fail-closed — an absent/empty list authorizes no name. A
+// revoked credential is still refused via the CP revoked/404 signal.
 // ──────────────────────────────────────────────────────────────────────────
 
 // CPTokenStore resolves tokens via the CP: it validates the presented install
-// credential against the CP and resolves it to an account, caching the mapping
-// for TTL. Name uniqueness is enforced by the registry, not here.
+// credential against the CP and resolves it to an account plus the names the
+// account may serve, caching the mapping for TTL. Name uniqueness is still
+// enforced by the registry; name AUTHORIZATION is enforced here against the CP's
+// authorized_relay_names.
 type CPTokenStore struct {
 	CP  *CPClient
 	TTL time.Duration // cache TTL for a validated token → account (default 60s)
@@ -228,6 +244,9 @@ type CPTokenStore struct {
 
 type cpTokenCacheEntry struct {
 	account string
+	// names is the normalized set of names the account may register
+	// (authorized_relay_names). A nil/empty set authorizes NO name (fail-closed).
+	names   map[string]struct{}
 	expires time.Time
 }
 
@@ -240,22 +259,31 @@ func NewCPTokenStore(cp *CPClient, ttl time.Duration) *CPTokenStore {
 }
 
 // Authorize validates the token as an install credential against the CP and
-// returns its account. name is accepted for any validated account (name
-// collision is still guarded by the registry). Fails closed on a CP error.
+// returns its account. RELAY-NAME-BINDING: the claimed name MUST be a member of
+// the account's CP-provided authorized_relay_names — a valid account may not
+// register an arbitrary name (route-hijack guard, mirroring the static store).
+// The membership check is fail-closed: an absent/empty list rejects every name.
+// Fails closed on a CP error.
 func (s *CPTokenStore) Authorize(token, name string) (string, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", fmt.Errorf("empty token")
 	}
-	if normalizeName(name) == "" {
+	norm := normalizeName(name)
+	if norm == "" {
 		return "", fmt.Errorf("invalid name")
 	}
 	h := sha256.Sum256([]byte(token))
 
 	s.mu.Lock()
 	if e, ok := s.cache[h]; ok && time.Now().Before(e.expires) {
-		acct := e.account
+		acct, names := e.account, e.names
 		s.mu.Unlock()
+		// Enforce the name binding on cache hits too — the cached entry carries the
+		// account's authorized names, not a blanket pass.
+		if _, ok := names[norm]; !ok {
+			return "", fmt.Errorf("name %q not authorized for account", name)
+		}
 		return acct, nil
 	}
 	s.mu.Unlock()
@@ -282,8 +310,19 @@ func (s *CPTokenStore) Authorize(token, name string) (string, error) {
 		return "", fmt.Errorf("unknown credential")
 	}
 
+	// RELAY-NAME-BINDING: build the account's authorized-name set from the CP
+	// response and cache it with the account. An absent/empty list yields an empty
+	// set, which authorizes NO name (fail-closed) — the CP is the sole authority on
+	// which names a credential owns, exactly as the static store binds grant.Names.
+	names := make(map[string]struct{}, len(ent.AuthorizedRelayNames))
+	for _, n := range ent.AuthorizedRelayNames {
+		if nn := normalizeName(n); nn != "" {
+			names[nn] = struct{}{}
+		}
+	}
+
 	s.mu.Lock()
-	s.cache[h] = cpTokenCacheEntry{account: ent.AccountID, expires: time.Now().Add(s.TTL)}
+	s.cache[h] = cpTokenCacheEntry{account: ent.AccountID, names: names, expires: time.Now().Add(s.TTL)}
 	// Opportunistic cleanup so the cache cannot grow without bound.
 	if len(s.cache) > 4096 {
 		now := time.Now()
@@ -294,6 +333,12 @@ func (s *CPTokenStore) Authorize(token, name string) (string, error) {
 		}
 	}
 	s.mu.Unlock()
+
+	// Enforce the name binding. A name outside the account's authorized set — or an
+	// empty set (CP omitted/withheld the field) — is rejected fail-closed.
+	if _, ok := names[norm]; !ok {
+		return "", fmt.Errorf("name %q not authorized for account", name)
+	}
 	return ent.AccountID, nil
 }
 

@@ -180,8 +180,8 @@ func TestGate_CP404_IsDefinitiveRevoke(t *testing.T) {
 
 func TestCPTokenStore_RefusesRevokedCredential(t *testing.T) {
 	fake := newFakeCP("shh")
-	fake.entByCred["cred-live"] = Entitlement{AccountID: "acct-7", RelayAllowed: true}
-	fake.entByCred["cred-revoked"] = Entitlement{AccountID: "acct-8", RelayAllowed: true, Revoked: true}
+	fake.entByCred["cred-live"] = Entitlement{AccountID: "acct-7", RelayAllowed: true, AuthorizedRelayNames: []string{"box1"}}
+	fake.entByCred["cred-revoked"] = Entitlement{AccountID: "acct-8", RelayAllowed: true, Revoked: true, AuthorizedRelayNames: []string{"box2"}}
 	srv := fake.server(t)
 	cp := &CPClient{BaseURL: srv.URL, SharedSecret: "shh", PoPID: "pop-1"}
 	ts := NewCPTokenStore(cp, time.Hour)
