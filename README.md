@@ -59,34 +59,34 @@ deliverables**:
 
 ## Part of VulOS
 
-**VulOS** is an open, self-hostable web OS + app suite. Each product is
+**VulOS** is an open, self-hostable sovereign web OS + app suite. Each product is
 self-hostable on its own, and hosted as an app by the **Vulos OS**:
 
 | Product | What it is |
 |---------|------------|
-| **Vulos Talk** | Team chat + channels/Spaces + huddles |
-| **Vulos Meet** | Video meetings (LiveKit SFU) |
+| **Vulos OS** | The web-native desktop shell that hosts the apps |
 | **Vulos Office** | Documents: docs, sheets, slides, PDF |
 | **Vulos Board** | Collaborative whiteboard (`@vulos/board-ui`) |
-| **Vulos Relay** | **← this repo** — sovereign connectivity fabric: `@vulos/relay-client` SDK + a self-hosted Go reverse-tunnel |
-| **Vulos Workspace** | An OS-hosted productivity hub consolidating Office, Talk, Meet & Board |
-| **Vulos OS** | The web-native desktop (the shell that hosts the suite apps) |
+| **Vulos Files** | File storage + P2P sharing, built into the OS |
+| **Vulos Relay** | **← this repo** — sovereign connectivity / reachability fabric: `@vulos/relay-client` SDK + a self-hosted Go reverse-tunnel |
+| **llmux** | Sovereign AI gateway |
+| **Cloud / CP** | Accounts, auth, provisioning and billing |
 
-**Mail is a connector, not a product:** bring your own mailbox (Gmail / Microsoft 365 / IMAP) into Workspace and the OS via **lilmail** (the IMAP/SMTP connector client) and the shared **`@vulos/mail-ui`** inbox surface.
+**Comms are third-party:** chat and video use established open protocols/apps (Matrix/Element for chat; Element Call / Jitsi for video), not products built by Vulos.
+
+**PIM is bring-your-own:** connect your own mailbox (Gmail / Microsoft 365 / IMAP) via **lilmail** (an independent connect-your-own-mailbox engine exposing `/v1`); the OS adds standalone **Calendar** and **Contacts** widgets over it. There is no hosted Vulos mail.
 
 **Relay's role:** it is the connectivity fabric the rest of the suite is built
-on. The SDK is consumed directly by the VulOS web surfaces — the
-[Vulos OS shell](https://github.com/vul-os/vulos),
-[Vulos Office](https://github.com/vul-os/vulos-office), and
-[Vulos Talk](https://github.com/vul-os/vulos-talk) — to power real-time
-collaboration. The [Vulos Workspace](https://github.com/vul-os/vulos-workspace)
-hub app surfaces Relay-powered surfaces first-class; it links to and embeds
-products but never imports their code, so the seams stay clean.
+on — a core cloud job. The SDK is consumed directly by the VulOS web surfaces —
+the [Vulos OS shell](https://github.com/vul-os/vulos) and
+[Vulos Office](https://github.com/vul-os/vulos-office) — to power reachability and
+real-time collaboration. The OS links to and embeds products but never imports
+their code, so the seams stay clean.
 
-Relay runs standalone **and** as an app hosted by the Vulos OS (the OS is the
-shell; the Workspace hub app can surface Relay-powered surfaces). The client is a
-plain npm package with no Vulos-specific runtime dependency — point it at any
-backend that implements the peering contract and it works on its own.
+Relay runs standalone **and** as a core service of the Vulos OS / cloud (the OS is
+the shell). The client is a plain npm package with no Vulos-specific runtime
+dependency — point it at any backend that implements the peering contract and it
+works on its own.
 
 ---
 
@@ -369,10 +369,10 @@ internet-facing:
   machinery placed onto big-call media: a box registers a self-hosted/BYO SFU worker
   (`POST /api/meet/host/register`, endpoint verified by the **same** directprobe
   verifier) and its clients **`resolve` a reachable SFU endpoint scoped by tunnel
-  name** for the Vulos Meet mesh→SFU escalation. Relay only registers and resolves the
+  name** for a video app's mesh→SFU escalation. Relay only registers and resolves the
   media node — the RTP never touches it (that's ICE/TURN). Gated behind
   `-sfu-host-registry`; inert until a box registers. See
-  [docs/TUNNEL.md](docs/TUNNEL.md#sfu-host-registry-optional-vulos-meet-phase-2-off-by-default).
+  [docs/TUNNEL.md](docs/TUNNEL.md#sfu-host-registry-optional-off-by-default).
 - **Bounds** — max agents, max streams/agent, request header cap, a **256 MiB
   request-body cap** (`-max-request-bytes`, `413` on overflow), and keepalive
   dead-peer detection keep memory bounded.

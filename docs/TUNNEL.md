@@ -77,12 +77,12 @@ box opts in, and it is **never trusted on the box's word**:
   transport. Disable relay-wide with `Config.DisableDirect` (advertised endpoints are
   then ignored and every box is served purely over the relay tunnel).
 
-## SFU-host registry (optional, Vulos Meet Phase 2, off by default)
+## SFU-host registry (optional, off by default)
 
 The same **direct-first / verify-then-serve** doctrine that powers the fast path
-above is reused, verbatim, to place a **big-call SFU media node**. A self-hoster who
-wants big calls on their **own** infra installs the SFU worker next to their box (the
-in-process Pion SFU, or a co-located `vulos-meet` LiveKit server) and registers it
+above is reused, verbatim, to place a **big-call SFU media node** for a video app.
+A self-hoster who wants big calls on their **own** infra installs an SFU worker next
+to their box (an in-process Pion SFU, or a co-located LiveKit server) and registers it
 here; when a call escalates past the mesh cap, the box resolves a reachable SFU
 endpoint and hands it back to the client as the join `serverUrl`. This mirrors the
 GPU streaming-host pattern (STREAM-BYO-01) and **reuses the same
@@ -251,7 +251,7 @@ VULOS_RELAY_TOKENS='[{"token":"SECRET1","names":["box1"]}]' \
 | `-cert` / `-key` | | — | Terminate TLS here (omit if behind an edge). |
 | `-max-agents` | | `256` | Max concurrent agents. |
 | `-max-request-bytes` | `VULOS_RELAY_MAX_REQUEST_BYTES` | `0` (⇒ 256 MiB) | Max public-request body in bytes; overflow returns `413`. `0` uses the 256 MiB default (covers the vast majority of single-file uploads); a negative value is refused. |
-| `-sfu-host-registry` | `VULOS_RELAY_SFU_HOST_REGISTRY=1` | `false` | Enable the Vulos Meet SFU-host registry (`/api/meet/host/*`). Off ⇒ those routes `404`. |
+| `-sfu-host-registry` | `VULOS_RELAY_SFU_HOST_REGISTRY=1` | `false` | Enable the SFU-host registry (`/api/meet/host/*`). Off ⇒ those routes `404`. |
 
 **Admin / metrics (WAVE50-RELAY-OBSERVABILITY)** — a SEPARATE listener from the
 public tunnel, serving `/metrics`, `/healthz`, `/readyz`.

@@ -3,7 +3,7 @@
 > <img src="../docs/assets/vulos-logo.png" height="14" alt="VulOS"> Part of **[VulOS](https://vulos.org)** — the open, self-hostable web OS &amp; app suite. This is the client SDK for **Vulos Relay**, the suite's connectivity fabric. Runs standalone, or as an app hosted by the Vulos OS.
 
 MIT-licensed JS client for the Vulos peer-fabric relay. Shared by every
-VulOS web surface (the Vulos OS shell, `vulos-office`, `vulos-talk`); previously
+VulOS web surface (the Vulos OS shell, `vulos-office`); previously
 duplicated as `src/lib/{endpoints,offlineBootstrap,signaling,fabric,
 presence,call,useLiveCursors,roundTripCheck}.js` across those repos.
 
@@ -14,13 +14,12 @@ It does not bundle a server.
 ## Part of VulOS
 
 **Vulos Relay** is the connectivity fabric of the [VulOS](https://vulos.org)
-suite — open, self-hostable products (Mail, Talk, Meet, Office, Relay,
-Workspace, OS), each usable alone and hosted as apps by the **Vulos OS**
-(the shell). This SDK is consumed directly by the suite's web surfaces (the Vulos
-OS shell, Vulos Office, Vulos Talk); the Workspace hub app surfaces Relay-powered
-surfaces but never imports product code. The package has no Vulos-specific runtime
-dependency — it **runs standalone** against any backend that implements the
-peering contract, **and** slots into the OS-hosted suite.
+suite — open, self-hostable products (OS, Office, Board, Files, Relay, llmux),
+each usable alone and hosted as apps by the **Vulos OS** (the shell). This SDK is
+consumed directly by the suite's web surfaces (the Vulos OS shell, Vulos Office);
+the OS surfaces Relay-powered features but never imports product code. The package
+has no Vulos-specific runtime dependency — it **runs standalone** against any
+backend that implements the peering contract, **and** slots into the OS-hosted suite.
 
 ## Install
 
@@ -38,9 +37,6 @@ repos:
 "@vulos/relay-client": "file:../vulos-relay/client"
 
 // vulos-office/package.json  (sibling)
-"@vulos/relay-client": "file:../vulos-relay/client"
-
-// vulos-talk/package.json  (sibling)
 "@vulos/relay-client": "file:../vulos-relay/client"
 ```
 
