@@ -1,0 +1,55 @@
+# fly.dev.toml — Vulos sovereign relay (vulos-relayd), DEV deploy (vulos-relay-dev)
+#
+# Single-region (fra) dev PoP pointed at the dev control plane
+# (https://vulos-cp-dev.fly.dev) for entitlement checks + usage metering. Built
+# from the repo Dockerfile (the GHCR image may not be published for dev).
+#
+# Deploy: cd vulos-relay && fly deploy --config fly.dev.toml --app vulos-relay-dev
+# Secrets (fly secrets set): CP_SHARED_SECRET (MUST equal the CP's), and
+# VULOS_RELAY_TOKENS if using static agent grants.
+
+app            = "vulos-relay-dev"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Base relay domain (host-header routing). Derived dev host per VULOS_DOMAIN.
+  VULOS_RELAY_DOMAIN = "dev-relay.vulos.org"
+  # No wildcard DNS in dev → also serve /t/<name>/ path-mode reachability.
+  VULOS_RELAY_PATH_MODE = "1"
+  # Fly edge terminates TLS and sets XFF — trust it.
+  VULOS_RELAY_TRUST_PROXY_HEADERS = "1"
+  # CP integration: entitlement gating + usage metering (HMAC'd with CP_SHARED_SECRET).
+  VULOS_CP_URL = "https://vulos-cp-dev.fly.dev"
+  VULOS_RELAY_POP_ID = "fra-dev-1"
+  VULOS_RELAY_NODE_ID = "fra-dev-1"
+  VULOS_RELAY_REGION = "eu-central"
+  VULOS_RELAY_PROVIDER = "fly"
+  VULOS_RELAY_PUBLIC_ENDPOINT = "wss://vulos-relay-dev.fly.dev"
+  # Resolve agent tokens as CP-issued install credentials (box enrollment path).
+  VULOS_RELAY_CP_TOKENS = "1"
+
+[http_service]
+  internal_port        = 8443
+  force_https          = true
+  auto_stop_machines   = "off"   # tunnels are long-lived control connections
+  auto_start_machines  = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+  [[http_service.checks]]
+    type         = "http"
+    path         = "/healthz"
+    interval     = "15s"
+    timeout      = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "512mb"
