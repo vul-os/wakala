@@ -5,7 +5,7 @@ priorities shift with Vulos OS milestones.
 
 ---
 
-## Stable / Shipped (1.0)
+## Shipped (1.0)
 
 - Endpoint failover (cloud ↔ LAN) with health probing and `configure()` seam
 - Offline-first bootstrap + IndexedDB write queue
@@ -22,7 +22,7 @@ priorities shift with Vulos OS milestones.
 
 ---
 
-## Near-term (1.x)
+## Next (1.x)
 
 ### Reliability
 - **Reconnect budget** — cap total reconnect attempts and surface a terminal
@@ -44,7 +44,7 @@ priorities shift with Vulos OS milestones.
 
 ---
 
-## Medium-term (2.x)
+## Later (2.x)
 
 ### Transport
 - **QUIC / WebTransport signaling** — fall back to WebSocket for browsers that
@@ -86,4 +86,4 @@ priorities shift with Vulos OS milestones.
 
 ---
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-17_
