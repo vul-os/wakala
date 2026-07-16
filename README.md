@@ -4,13 +4,11 @@
 
 # Vulos Relay
 
-**The sovereign connectivity fabric for VulOS — `@vulos/relay-client` peer-fabric SDK + a self-hosted Go reverse-tunnel**
+**The sovereign connectivity fabric — `@vulos/relay-client` peer-fabric SDK + a self-hosted Go reverse-tunnel**
 
 [![npm](https://img.shields.io/npm/v/%40vulos%2Frelay-client?label=%40vulos%2Frelay-client)](https://www.npmjs.com/package/@vulos/relay-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml)
-
-<sub><img src="docs/assets/vulos-logo.png" height="14" alt="VulOS"> Part of <strong><a href="https://vulos.org">VulOS</a></strong> — the open, self-hostable web OS &amp; app suite. Runs standalone, or as an app hosted by the Vulos OS.</sub>
 
 *Vulos — rooted in **vula**, the Zulu and Xhosa word for **open**.*
 
@@ -20,13 +18,13 @@
 
 ## What is Vulos Relay?
 
-Vulos Relay is the **sovereign connectivity fabric** for the VulOS suite — the
-**single reachability primitive** by which the suite reaches sovereign, self-hosted
-boxes across the network boundary. Its doctrine is **direct-first, relay-fallback**:
+Vulos Relay is a **sovereign connectivity fabric** — the **single reachability
+primitive** for reaching sovereign, self-hosted boxes across the network boundary.
+Its doctrine is **direct-first, relay-fallback**:
 a box is reached over its own public endpoint whenever it has one (near-native
 latency), and over the always-works relay tunnel otherwise (NAT/CGNAT). Relay carries
-**web-shaped traffic** — HTTP, WebSocket, and SSE — which is the request/response and
-event-stream shape every VulOS surface speaks. It is deliberately *not* the transport
+**web-shaped traffic** — HTTP, WebSocket, and SSE — the request/response and
+event-stream shape web surfaces speak. It is deliberately *not* the transport
 for the two workloads that have their own better path: **real-time media** rides
 WebRTC over **ICE/TURN** directly (mesh, or a self-hosted SFU/TURN node the box
 reaches over its verified direct endpoint — Relay never forwards RTP), and **mail**
@@ -57,53 +55,18 @@ deliverables**:
 
 ---
 
-## Part of VulOS
-
-**VulOS** is an open, self-hostable sovereign web OS + app suite. Each product is
-self-hostable on its own, and hosted as an app by the **Vulos OS**:
-
-| Product | What it is |
-|---------|------------|
-| **Vulos OS** | The web-native desktop shell that hosts the apps |
-| **Vulos Office** | Documents: docs, sheets, slides, PDF |
-| **Vulos Board** | Collaborative whiteboard (`@vulos/board-ui`) |
-| **Vulos Files** | File storage + P2P sharing, built into the OS |
-| **Vulos Relay** | **← this repo** — sovereign connectivity / reachability fabric: `@vulos/relay-client` SDK + a self-hosted Go reverse-tunnel |
-| **llmux** | Sovereign AI gateway |
-| **Cloud / CP** | Accounts, auth, provisioning and billing |
-
-**Comms are third-party:** chat and video use established open protocols/apps (Matrix/Element for chat; Element Call / Jitsi for video), not products built by Vulos.
-
-**PIM is bring-your-own:** connect your own mailbox (Gmail / Microsoft 365 / IMAP) via **lilmail** (an independent connect-your-own-mailbox engine exposing `/v1`); the OS adds standalone **Calendar** and **Contacts** widgets over it. There is no hosted Vulos mail.
-
-**Relay's role:** it is the connectivity fabric the rest of the suite is built
-on — a core cloud job. The SDK is consumed directly by the VulOS web surfaces —
-the [Vulos OS shell](https://github.com/vul-os/vulos) and
-[Vulos Office](https://github.com/vul-os/vulos-office) — to power reachability and
-real-time collaboration. The OS links to and embeds products but never imports
-their code, so the seams stay clean.
-
-Relay runs standalone **and** as a core service of the Vulos OS / cloud (the OS is
-the shell). The client is a plain npm package with no Vulos-specific runtime
-dependency — point it at any backend that implements the peering contract and it
-works on its own.
-
----
-
 ## Deployment modes
 
 Relay is connectivity **infrastructure**, so its deployment shape is about *who
-runs the relay server*, not a per-app `DEPLOY_MODE`. It lines up with the wider
-Vulos [three-shape model](https://github.com/vul-os/vulos/blob/dev/docs/ARCHITECTURE.md#deployment-modes)
-(self-host / OS-managed / cloud) like this:
+runs the relay server*, not a per-app `DEPLOY_MODE`:
 
 | Shape | Who runs the relay server | Billing |
 |---|---|---|
 | **Self-hosted relay** (sovereign) | You run `vulos-relayd` on a host you control; agents authorize with static grants | Unlinked, **unbilled** — no Vulos account needed |
-| **Vulos Relay** (the paid service) | Vulos runs it as a **multi-region, smart-autoscaled pool** of PoPs across superadmin-selected regions; you run only the agent, which dials its **CP-assigned nearest/least-loaded PoP** | Metered per-GB (region-stamped) against your Vulos account tier |
+| **Managed pool** (opt-in) | A hosted **multi-region, smart-autoscaled pool** of PoPs runs it; you run only the agent, which dials its **CP-assigned nearest/least-loaded PoP** | Metered per-GB (region-stamped) against your account tier |
 
-**Vulos Relay is the suite's paid reachability service** — a geo-distributed pool of
-relay PoPs (regions chosen by the superadmin registry) that a **CP-driven autoscaler**
+The **managed pool** is a geo-distributed set of
+relay PoPs that a **CP-driven autoscaler**
 grows, shrinks, and **gracefully drains** as load moves, so a PoP scale-down migrates
 every live tunnel with **zero dropped connectivity**. The **exact same binary** is
 fully **self-hostable and CP-optional**: run `vulos-relayd` with no CP link and it is
@@ -558,3 +521,7 @@ commit conventions, and scope constraints.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+<sub><img src="docs/assets/vulos-logo.png" height="16" alt="VulOS"> · <strong>Built with purpose. Open by design.</strong></sub>
