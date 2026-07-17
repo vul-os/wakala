@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -18,6 +20,22 @@ import (
 	"github.com/vul-os/vulos-relay/tunnel/internal/keepalive"
 	"github.com/vul-os/vulos-relay/tunnel/internal/wire"
 )
+
+// insecureWarnOnce ensures the InsecureSkipVerify warning is emitted at most once
+// per process, no matter how many times the agent reconnects.
+var insecureWarnOnce sync.Once
+
+// warnInsecureOnce emits a loud, one-time warning that TLS verification of the
+// token-bearing control connection is disabled. It goes to both the agent's
+// in-memory log (surfaced in Snapshot) and stderr so a library embedder cannot
+// ship -insecure / InsecureSkipVerify silently.
+func (a *Agent) warnInsecureOnce() {
+	const msg = "SECURITY WARNING: InsecureSkipVerify is set — TLS verification of the " +
+		"relay control connection (which carries the agent token) is DISABLED. This is " +
+		"for LOCAL TESTING ONLY; a network attacker can MITM the relay and steal the token."
+	a.appendLog("%s", msg)
+	insecureWarnOnce.Do(func() { log.Printf("vulos-relay-agent: %s", msg) })
+}
 
 const controlPath = wire.ControlPath
 
@@ -316,6 +334,10 @@ func (a *Agent) dial(ctx context.Context, endpoint string) (net.Conn, error) {
 
 	tlsCfg := a.opts.TLSConfig
 	if a.opts.InsecureSkipVerify {
+		// SECURITY (LOW): InsecureSkipVerify disables TLS verification of the control
+		// connection, which BEARS THE TOKEN. Emit a loud warning once per process (to
+		// the agent's own log AND stderr) so a library embedder cannot ship it silently.
+		a.warnInsecureOnce()
 		if tlsCfg == nil {
 			tlsCfg = &tls.Config{}
 		} else {

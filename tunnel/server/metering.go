@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -295,6 +297,12 @@ type countingReadCloser struct {
 	// req.Write wraps the read error in an unexported http.requestBodyReadError that
 	// does NOT unwrap to MaxBytesError, so we detect it at the source here.
 	overLimit bool
+
+	// timedOut is set when a read observed a net timeout (the body-ingestion read
+	// deadline fired — MEDIUM-2 slow-body DoS guard). Like overLimit, req.Write wraps
+	// the underlying read error, so we detect os.ErrDeadlineExceeded at the source
+	// here and let the proxy surface a clean 408 instead of a generic 502.
+	timedOut bool
 }
 
 func (c *countingReadCloser) Read(p []byte) (int, error) {
@@ -309,6 +317,14 @@ func (c *countingReadCloser) Read(p []byte) (int, error) {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			c.overLimit = true
+		}
+		// A fired read deadline surfaces as a timeout (os.ErrDeadlineExceeded /
+		// net.Error Timeout()). Distinguish it from a genuine gateway fault so the
+		// slow-body guard returns 408 rather than 502.
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			c.timedOut = true
+		} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			c.timedOut = true
 		}
 	}
 	return n, err

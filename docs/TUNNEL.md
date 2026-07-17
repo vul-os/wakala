@@ -224,6 +224,8 @@ VULOS_RELAY_TOKENS='[{"token":"SECRET1","names":["box1"]}]' \
 | `-cert` / `-key` | | — | Terminate TLS here (omit if behind an edge). |
 | `-max-agents` | | `256` | Max concurrent agents. |
 | `-max-request-bytes` | `VULOS_RELAY_MAX_REQUEST_BYTES` | `0` (⇒ 256 MiB) | Max public-request body in bytes; overflow returns `413`. `0` uses the 256 MiB default (covers the vast majority of single-file uploads); a negative value is refused. |
+| `-request-body-timeout` | `VULOS_RELAY_REQUEST_BODY_TIMEOUT` | `0` (⇒ 30s) | Overall deadline to ingest a public client's request body (slow-body/slowloris DoS guard). A dribbling/stalled upload is cut with `408` and its per-agent stream slot freed; it is cleared before the response streams, so SSE/downloads are unaffected. `0` uses the 30s default; a negative value disables it. |
+| `-ratelimit-direct-probe-rate` / `-ratelimit-direct-probe-burst` | `VULOS_RELAY_DIRECT_PROBE_RATE` / `_BURST` | `0` (⇒ 1/s, burst 5) | Budget for how often the relay emits an outbound direct-endpoint verification GET, per account (per name for unbilled) — a probe-reflection guard so a box cannot re-register in a loop to bounce GETs off the relay. Over-budget ⇒ the probe is skipped (tunnel still comes up on the relay path). `0`=default, `<0`=disable. |
 
 **Admin / metrics (WAVE50-RELAY-OBSERVABILITY)** — a SEPARATE listener from the
 public tunnel, serving `/metrics`, `/healthz`, `/readyz`.

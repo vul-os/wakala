@@ -62,6 +62,13 @@ Consequences, stated without varnish:
   ([logging.go](../tunnel/server/logging.go) — the log helper has no field a token
   could even be passed in). Metrics labels are fixed enums; no attacker-controlled
   value ever becomes a series.
+- **No phone-home / no telemetry.** The relay makes **no outbound call to any hard-coded
+  or Vulos-owned endpoint**. Every outbound request the binary can make goes to an
+  address **you configure**: the CP entitlement/usage/heartbeat calls only fire when you
+  set `-cp-url` (omit them and the relay runs fully offline/unbilled), and the
+  direct-endpoint probe only targets the **box's own advertised endpoint** (SSRF-screened
+  to public hosts). There is no analytics, crash-reporting, or usage-beacon path. A
+  self-hosted relay with no `-cp-url` talks to nobody but its own agents and clients.
 
 ---
 
@@ -207,14 +214,26 @@ entry — the real client — from the same trusted edge, falling back to `Remot
 XFF is absent. This is the *same* header, from the *same* edge, that the request-path
 header hygiene below already trusts as the client IP.
 
+A fourth limiter budgets the **direct-endpoint probe** ([admission.go `allowDirectProbe`](../tunnel/server/admission.go),
+default 1/s burst 5, keyed per account — per name for unbilled). The register-time probe
+is an outbound GET the relay emits on the box's behalf; the budget stops an authenticated
+box from re-registering in a loop, advertising a fresh public endpoint each time, to use
+the relay as a **GET reflector** (the probe is already SSRF-screened to public hosts —
+this bounds its *rate*). Over budget ⇒ the probe is skipped and the box simply stays on
+the relay path.
+
 On top of the limiters, hard bounds keep every resource finite: 256 agents, 128
 in-flight streams per agent, 64 KiB headers, 256 MiB request bodies (streamed, `413` on
 overflow — never unbounded, a negative cap is refused at startup), 8 KiB control
-messages, a 90 s idle/keepalive budget, and a 60 s time-to-response-headers deadline
-that stops a half-dead agent from pinning all its stream slots. Accounts past their
-billing cap are cut with `402`. Internal error details are never leaked to clients —
-the public side sees only generic `4xx`/`5xx` bodies, and register failures are equally
-terse.
+messages, a 90 s idle/keepalive budget, a 60 s time-to-response-headers deadline
+that stops a half-dead agent from pinning all its stream slots, and a **30 s request-body
+ingestion deadline** ([proxy.go](../tunnel/server/proxy.go), `-request-body-timeout`,
+`408` on expiry) that stops a **slow-body / slowloris upload** — a client that declares a
+large body then dribbles it — from pinning a goroutine and a stream slot indefinitely.
+The body deadline is cleared before the response is streamed, so long-lived SSE /
+downloads (response-side) are unaffected. Accounts past their billing cap are cut with
+`402`. Internal error details are never leaked to clients — the public side sees only
+generic `4xx`/`5xx` bodies, and register failures are equally terse.
 
 ### Header hygiene (no client-IP spoofing)
 

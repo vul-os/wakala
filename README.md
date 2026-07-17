@@ -345,8 +345,23 @@ internet-facing:
   reachability fabric and TURN-equivalent HTTP/WS fallback — **not** a first-party SFU or
   media-placement service. See [docs/TUNNEL.md](docs/TUNNEL.md#real-time-media-callsmeetings).
 - **Bounds** — max agents, max streams/agent, request header cap, a **256 MiB
-  request-body cap** (`-max-request-bytes`, `413` on overflow), and keepalive
+  request-body cap** (`-max-request-bytes`, `413` on overflow), a **slow-body
+  ingestion deadline** (`-request-body-timeout`, default 30s, `408` on a dribbling
+  upload so a slowloris body cannot pin a goroutine + stream slot), and keepalive
   dead-peer detection keep memory bounded.
+- **Confidentiality — honest, no overclaim.** The relay is a **content-visible
+  Layer-7 terminating proxy**, NOT an end-to-end-encrypted pipe: it (or its fronting
+  edge) terminates the client's TLS, so the **relay operator can read and modify all
+  tunneled HTTP** — URLs, headers, cookies, bearer tokens, bodies, WebSocket frames —
+  exactly like any reverse proxy / CDN / `frp`/ngrok. **Confidentiality rests on the
+  box being the trust root**, and on **who runs the relay**: self-host it (then *you*
+  are the operator who can see everything) or use a **verified direct endpoint** (TLS
+  runs client↔box, bypassing the relay). A privacy-sensitive self-hoster should run
+  their **own** relay or prefer **direct connectivity**; a *hosted* relay sees relayed
+  plaintext for a NAT'd box with no direct path. **SNI / TLS passthrough** (which would
+  make a NAT'd box↔user leg opaque to a hosted relay, e.g. for mail) is a **planned,
+  not-yet-implemented** item — there is no raw-TCP/SNI listener today, so it is **not a
+  current guarantee**. Full trust model in [docs/SECURITY.md](docs/SECURITY.md).
 - **Observability** — a dependency-free Prometheus `/metrics` endpoint plus
   `/healthz` / `/readyz` on a **separate loopback/token-gated admin listener** (never
   on the public tunnel), with bounded-cardinality labels and structured `slog`

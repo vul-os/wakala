@@ -52,6 +52,7 @@ const (
 	outcomeBusy        reqOutcome = "busy"         // 503: per-agent stream cap hit
 	outcomeBadGateway  reqOutcome = "bad_gateway"  // 502: stream/open/read/write failure
 	outcomeUpgrade     reqOutcome = "ws_upgrade"   // websocket upgrade proxied
+	outcomeSlowBody    reqOutcome = "slow_body"    // 408: client request body ingestion timed out (slow-body DoS guard)
 )
 
 // allReqOutcomes is used to pre-register every series at zero so scrapers see a
@@ -59,6 +60,7 @@ const (
 var allReqOutcomes = []reqOutcome{
 	outcomeOK, outcomeNoTunnel, outcomeOffline, outcomeRateLimited,
 	outcomeOverQuota, outcomeBusy, outcomeBadGateway, outcomeUpgrade,
+	outcomeSlowBody,
 }
 
 // byteDirection buckets proxied bytes. Fixed set.

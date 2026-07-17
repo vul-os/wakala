@@ -163,13 +163,42 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MEDIUM-2 (slow-body DoS guard): bound how long the relay will spend INGESTING
+	// this client's request body. ReadHeaderTimeout only covers the headers; a client
+	// that dribbles a large body one byte at a time would otherwise pin this goroutine
+	// AND the per-agent stream slot below indefinitely (MaxStreamsPerAgent such
+	// trickles brick the tunnel). Set a read deadline on the CLIENT connection that
+	// covers only the body-forward step (outReq.Write reads r.Body ⇒ the client conn).
+	// It is CLEARED immediately after the body is forwarded, BEFORE the agent's response
+	// is streamed back, so long-lived SSE / downloads (response-side, deadline-free) are
+	// untouched. WebSocket upgrades took the hijack path above and never reach here. A
+	// fired deadline surfaces as a net timeout on the body read, which the counting
+	// wrapper records (timedOut) so we can answer 408 rather than a generic 502.
+	bodyDeadlineSet := false
+	if s.cfg.RequestBodyTimeout > 0 && r.Body != nil {
+		if err := http.NewResponseController(w).SetReadDeadline(time.Now().Add(s.cfg.RequestBodyTimeout)); err == nil {
+			bodyDeadlineSet = true
+		}
+	}
+
 	// Write the request to the agent over the stream. If the write fails because
 	// the inbound body exceeded MaxRequestBytes, MaxBytesReader surfaces a
 	// *http.MaxBytesError; return a clean 413 (with the limit echoed) so the box UI
 	// can tell the user "file too big for a single upload" instead of a confusing
-	// gateway error. Any other write error is a genuine tunnel/gateway fault (502).
+	// gateway error. If it failed because the body-ingestion deadline fired, return
+	// 408. Any other write error is a genuine tunnel/gateway fault (502).
 	// (CONSOLIDATION A-1)
-	if err := outReq.Write(stream); err != nil {
+	writeErr := outReq.Write(stream)
+
+	// Clear the client-conn read deadline in EVERY case now that the body-forward step
+	// is over: on success it must not bleed into the response-streaming phase (SSE /
+	// downloads must stay deadline-free), and on failure it must not linger on a
+	// kept-alive connection and time out the NEXT request. (No-op if none was set.)
+	if bodyDeadlineSet {
+		_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
+	}
+
+	if writeErr != nil {
 		// req.Write wraps the body-read failure in an unexported
 		// http.requestBodyReadError that does NOT unwrap to *http.MaxBytesError, so
 		// we consult the counting wrapper (which saw the read error at the source)
@@ -178,6 +207,13 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 			s.metrics.request(outcomeBadGateway)
 			w.Header().Set("Connection", "close")
 			http.Error(w, fmt.Sprintf("request body too large (limit %d bytes)", s.cfg.MaxRequestBytes), http.StatusRequestEntityTooLarge)
+			return
+		}
+		if bodyCounter != nil && bodyCounter.timedOut {
+			s.metrics.request(outcomeSlowBody)
+			s.logInfo("request cut: slow request body (ingestion deadline exceeded)", logFields{Name: name, Account: sess.accountID})
+			w.Header().Set("Connection", "close")
+			http.Error(w, "request body ingestion timed out", http.StatusRequestTimeout)
 			return
 		}
 		s.metrics.request(outcomeBadGateway)

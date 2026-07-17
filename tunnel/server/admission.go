@@ -139,3 +139,18 @@ func (s *Server) admitAccountConnect(accountID string) bool {
 	}
 	return s.acctConnLimiter.allow(accountID)
 }
+
+// allowDirectProbe applies the per-account (per-name for unbilled) direct-endpoint
+// probe budget — the probe-reflection guard. It bounds how often a box can make the
+// relay emit an outbound endpoint-verification GET on its behalf, so a re-register
+// loop advertising a fresh endpoint each time cannot use the relay as a GET reflector
+// (the probe is already SSRF-screened to public hosts; this bounds its RATE). Keyed
+// on the account when billed, else the tunnel name so unbilled self-host is also
+// bounded. A nil/disabled limiter allows everything. Returns true to permit the probe.
+func (s *Server) allowDirectProbe(accountID, name string) bool {
+	key := accountID
+	if key == "" {
+		key = "name:" + name
+	}
+	return s.directProbeLimiter.allow(key)
+}

@@ -9,6 +9,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security — audit follow-ups (relay hardening + honest confidentiality docs)
+
+- **Slow-body DoS guard (MEDIUM-2).** The public listener now bounds request-body
+  ingestion for non-streaming requests with a `-request-body-timeout` (default 30s,
+  `408` on expiry): a client that declares a large `Content-Length` then dribbles/stalls
+  the body can no longer pin a goroutine + a per-agent yamux stream slot indefinitely
+  (`MaxStreamsPerAgent` such trickles would brick the tunnel). Applied as a read deadline
+  on the client connection covering only the body-forward step, **cleared before the
+  response streams** so SSE / downloads / WS stay deadline-free
+  (`tunnel/server/proxy.go`, `server.go`, `metering.go`; test `slowbody_test.go`).
+- **Direct-endpoint probe budget (probe-reflection guard).** The register-time
+  verification GET is now rate-limited per account (per name for unbilled), default
+  1/s burst 5 (`-ratelimit-direct-probe-*`), so a box cannot re-register in a loop
+  advertising a fresh public endpoint each time to reflect GETs off the relay. Over
+  budget ⇒ the probe is skipped and the box stays on the relay path
+  (`tunnel/server/admission.go`, `control.go`, `server.go`; test `directprobe_budget_test.go`).
+- **`account_id` URL-escaped** in the CP entitlement query (`cpclient.go`) so an opaque
+  id can never smuggle extra query parameters (test `cpclient_escape_test.go`).
+- **`-insecure` now warns LOUDLY.** The agent CLI shouts when `-insecure` disables TLS
+  verification of the token-bearing control connection — and shouts louder still against
+  a non-loopback relay; the agent library emits the same warning once per process so an
+  embedder cannot ship it silently (`cmd/vulos-relay-agent/main.go`, `tunnel/agent/conn.go`;
+  tests `main_test.go`, `insecure_warn_test.go`).
+- **Honest confidentiality docs.** README + `docs/SECURITY.md` now state plainly that the
+  relay is a **content-visible L7 terminating proxy** (the operator can read/modify all
+  tunneled HTTP), that confidentiality rests on the box as trust root + who runs the
+  relay (self-host or use a verified direct endpoint), and that **SNI / TLS passthrough**
+  (incl. for mail) is **planned, not implemented** — not a current guarantee. Also
+  documented the **no-phone-home** posture: the binary makes no outbound call to any
+  hard-coded/Vulos endpoint; CP calls fire only when `-cp-url` is set.
+
 ## [0.3.0] — 2026-07-17
 
 ### Added — smart CP-driven autoscaler (relay side): PoP heartbeat, graceful drain, zero-drop migration

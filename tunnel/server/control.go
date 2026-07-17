@@ -140,17 +140,29 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	// the endpoint fully passed.
 	var verifiedDirect, directErr string
 	if s.directVerifier != nil && strings.TrimSpace(directEndpoint) != "" {
-		probeCtx, probeCancel := context.WithTimeout(context.Background(), directProbeTimeout+2*time.Second)
-		norm, verr := s.directVerifier.verify(probeCtx, directEndpoint)
-		probeCancel()
-		if verr != nil {
-			directErr = verr.Error()
+		// DIRECT-PROBE BUDGET (probe-reflection guard): bound how often this account
+		// (or, for unbilled self-host, this name) can make the relay emit an outbound
+		// verification GET. When the budget is spent, skip the probe this connect —
+		// the tunnel still comes up on the relay path; the box just doesn't get its
+		// direct fast-path until it slows down. This blocks a re-register loop that
+		// advertises a fresh public endpoint each time to reflect GETs off the relay.
+		if !s.allowDirectProbe(accountID, nn) {
+			directErr = "probe rate limited"
 			s.metrics.directRejected()
-			s.logInfo("direct endpoint rejected", logFields{Name: nn, Account: accountID, Reason: directErr})
+			s.logInfo("direct endpoint probe skipped: rate limited", logFields{Name: nn, Account: accountID, Reason: "probe_rate_limited"})
 		} else {
-			verifiedDirect = norm
-			s.metrics.directVerified()
-			s.logInfo("direct endpoint verified", logFields{Name: nn, Account: accountID})
+			probeCtx, probeCancel := context.WithTimeout(context.Background(), directProbeTimeout+2*time.Second)
+			norm, verr := s.directVerifier.verify(probeCtx, directEndpoint)
+			probeCancel()
+			if verr != nil {
+				directErr = verr.Error()
+				s.metrics.directRejected()
+				s.logInfo("direct endpoint rejected", logFields{Name: nn, Account: accountID, Reason: directErr})
+			} else {
+				verifiedDirect = norm
+				s.metrics.directVerified()
+				s.logInfo("direct endpoint verified", logFields{Name: nn, Account: accountID})
+			}
 		}
 	}
 

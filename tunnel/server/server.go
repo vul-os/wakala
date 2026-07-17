@@ -82,6 +82,19 @@ type Config struct {
 	IdleTimeout        time.Duration // control-conn idle timeout / keepalive budget
 	RequestTimeout     time.Duration // per public request forward timeout
 
+	// RequestBodyTimeout bounds how long the relay will spend INGESTING a public
+	// client's request body for a NON-STREAMING request (MEDIUM-2 slow-body DoS
+	// guard). ReadHeaderTimeout only covers the request line + headers; without a
+	// body deadline a client that dribbles a large body one byte at a time ties up a
+	// goroutine AND a per-agent yamux stream slot indefinitely, and MaxStreamsPerAgent
+	// such trickles brick the whole tunnel. This is applied as a read deadline on the
+	// client connection covering only the request-body forward step; it is CLEARED
+	// before the agent's response is streamed back, so long-lived SSE / downloads / WS
+	// (all response-side, deadline-free) are unaffected. A slow-but-steady large upload
+	// still succeeds if it completes within the window; a stalled/dribbling one is cut
+	// with 408 and its slot freed. 0 => default 30s; a negative value DISABLES it.
+	RequestBodyTimeout time.Duration
+
 	// CP (WAVE24-RELAY-BILLING, optional) links this relay to Vulos Cloud so that
 	// account-bound tokens are gated against their relay entitlement and their
 	// traffic is metered to POST /api/relay/usage. When nil, the relay runs
@@ -142,6 +155,20 @@ type Config struct {
 	// Only active when a SoftCapacity is configured (saturation is otherwise 0). 0 =>
 	// default 0.95; a negative value DISABLES shedding (the hard cap still applies).
 	SheddingThreshold float64
+
+	// DIRECT-PROBE BUDGET (probe-reflection guard). DirectProbeRate / DirectProbeBurst
+	// throttle how often the relay will PROBE a box's advertised direct endpoint, keyed
+	// per ACCOUNT (per NAME for unbilled self-host). The register-time probe is an
+	// outbound GET the relay emits on the box's behalf; without a budget an authenticated
+	// box could re-register in a loop, each time advertising a fresh public endpoint, and
+	// use the relay as a reflector to emit a stream of GETs at arbitrary public targets
+	// (already SSRF-screened to public hosts, but still an amplification vector). When the
+	// budget is exceeded the endpoint is simply NOT probed this connect (treated as
+	// unverified: the tunnel still comes up on the relay path, the box just doesn't get
+	// its direct fast-path until it slows down). Defaults: 1/s, burst 5. A negative value
+	// DISABLES the budget.
+	DirectProbeRate  float64
+	DirectProbeBurst float64
 
 	// RateLimitIdleTTL evicts a per-key bucket unused for this long (bounds
 	// memory). Default 10m.
@@ -263,6 +290,16 @@ func (c *Config) applyDefaults() {
 	if c.RequestTimeout == 0 {
 		c.RequestTimeout = 60 * time.Second
 	}
+	// MEDIUM-2 slow-body DoS guard: 0 => default 30s body-ingestion deadline; a
+	// negative value DISABLES it (normalized to 0 so the proxy skips setting a
+	// deadline). The knob is separate from RequestTimeout (which bounds the AGENT's
+	// time-to-headers on the yamux stream): this one bounds the CLIENT-side body read.
+	switch {
+	case c.RequestBodyTimeout < 0:
+		c.RequestBodyTimeout = 0
+	case c.RequestBodyTimeout == 0:
+		c.RequestBodyTimeout = 30 * time.Second
+	}
 	// Rate-limit defaults (WAVE34-RELAY-HARDEN). A negative value means "disabled"
 	// and is normalized to 0 by rateLimitField at construction time.
 	c.ControlConnRate = rateLimitField(c.ControlConnRate, 5)
@@ -276,6 +313,9 @@ func (c *Config) applyDefaults() {
 	c.ConnPerAccountBurst = rateLimitField(c.ConnPerAccountBurst, 20)
 	c.GlobalConnRate = rateLimitField(c.GlobalConnRate, 100)
 	c.GlobalConnBurst = rateLimitField(c.GlobalConnBurst, 200)
+	// DIRECT-PROBE BUDGET (probe-reflection guard). Same negative=disabled convention.
+	c.DirectProbeRate = rateLimitField(c.DirectProbeRate, 1)
+	c.DirectProbeBurst = rateLimitField(c.DirectProbeBurst, 5)
 	// Saturation shed threshold: 0 => default 0.95, negative => disabled (0).
 	switch {
 	case c.SheddingThreshold < 0:
@@ -314,6 +354,11 @@ type Server struct {
 	// CONNECTION-FLOOD ADMISSION. Nil => disabled (allow all).
 	acctConnLimiter   *rateLimiter       // NEW control connections per account
 	globalConnLimiter *globalRateLimiter // aggregate NEW control-connection rate (cheap pre-upgrade gate)
+
+	// DIRECT-PROBE BUDGET (probe-reflection guard). Nil => disabled. Keyed per
+	// account (per name for unbilled) — bounds how often a box can make the relay
+	// emit an outbound endpoint-verification GET on its behalf.
+	directProbeLimiter *rateLimiter
 
 	// Revocation (WAVE41-RELAY-REVOCATION).
 	revoke       revocationSource // static revoked-list + CP revoked/404 signal
@@ -391,6 +436,8 @@ func New(cfg Config) (*Server, error) {
 
 		acctConnLimiter:   newRateLimiter(cfg.ConnPerAccountRate, cfg.ConnPerAccountBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		globalConnLimiter: newGlobalRateLimiter(cfg.GlobalConnRate, cfg.GlobalConnBurst),
+
+		directProbeLimiter: newRateLimiter(cfg.DirectProbeRate, cfg.DirectProbeBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 
 		revoke:       revocationSource{static: staticRevoker, expirer: expirer, gate: gate},
 		revokePeriod: cfg.RevokeSweepPeriod,

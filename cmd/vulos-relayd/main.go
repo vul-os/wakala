@@ -70,6 +70,12 @@ func main() {
 		// unbounded). Overflow yields a clean 413 to the public client.
 		maxReqBytes = flag.Int64("max-request-bytes", envInt64("VULOS_RELAY_MAX_REQUEST_BYTES", 0), "max upload request body in bytes (0=default 256MiB); overflow returns 413")
 
+		// MEDIUM-2 slow-body DoS guard: overall deadline on ingesting a public client's
+		// request body (non-streaming path). Bounds a dribbling body that would otherwise
+		// pin a goroutine + a per-agent stream slot. Cleared before the response streams,
+		// so SSE/downloads are unaffected. 0=default 30s, <0=disable.
+		reqBodyTimeout = flag.Duration("request-body-timeout", envDuration("VULOS_RELAY_REQUEST_BODY_TIMEOUT", 0), "overall deadline to ingest a client request body, slow-body DoS guard (0=default 30s, <0=disable)")
+
 		// WAVE50-RELAY-OBSERVABILITY: the admin/metrics surface. It is SEPARATE from
 		// the public tunnel listener and serves /metrics, /healthz, /readyz. Bind it
 		// to a loopback address (default) so it is never internet-reachable; binding
@@ -89,6 +95,12 @@ func main() {
 		reqBurst   = flag.Float64("ratelimit-req-burst", envFloat("VULOS_RELAY_REQ_BURST", 0), "public request burst per tunnel (0=default 100)")
 		globalRate = flag.Float64("ratelimit-global-rate", envFloat("VULOS_RELAY_GLOBAL_RATE", 0), "aggregate public requests/sec across all tunnels (0=default 500, <0=off)")
 		globBurst  = flag.Float64("ratelimit-global-burst", envFloat("VULOS_RELAY_GLOBAL_BURST", 0), "aggregate public request burst (0=default 1000)")
+
+		// DIRECT-PROBE BUDGET (probe-reflection guard): bound how often the relay emits
+		// an outbound direct-endpoint verification GET per account/name, so a box cannot
+		// re-register in a loop to reflect GETs off the relay at arbitrary public targets.
+		probeRate  = flag.Float64("ratelimit-direct-probe-rate", envFloat("VULOS_RELAY_DIRECT_PROBE_RATE", 0), "direct-endpoint probes/sec per account/name (0=default 1, <0=off)")
+		probeBurst = flag.Float64("ratelimit-direct-probe-burst", envFloat("VULOS_RELAY_DIRECT_PROBE_BURST", 0), "direct-endpoint probe burst per account/name (0=default 5)")
 
 		// AUTOSCALE-ON-SATURATION + MULTI-NODE POOL. This relay is one node of a
 		// geo-distributed pool (Hetzner primary, Vultr edge). node-id/region/provider
@@ -186,9 +198,10 @@ func main() {
 		Tokens:            store,
 		EnablePathMode:    *pathMode,
 		TrustProxyHeaders: *trustProxy,
-		MaxAgents:         *maxAgents,
-		MaxRequestBytes:   *maxReqBytes,
-		CP:                cp,
+		MaxAgents:          *maxAgents,
+		MaxRequestBytes:    *maxReqBytes,
+		RequestBodyTimeout: *reqBodyTimeout,
+		CP:                 cp,
 
 		NodeID:   *nodeID,
 		Region:   *region,
@@ -210,6 +223,9 @@ func main() {
 		PublicReqBurst:   *reqBurst,
 		GlobalReqRate:    *globalRate,
 		GlobalReqBurst:   *globBurst,
+
+		DirectProbeRate:  *probeRate,
+		DirectProbeBurst: *probeBurst,
 
 		RevokeSweepPeriod: *revokeSweep,
 	})

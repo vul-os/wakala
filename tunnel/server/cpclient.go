@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -100,7 +101,10 @@ func (c *CPClient) EntitlementForAccount(ctx context.Context, accountID string) 
 	if c.SharedSecret == "" {
 		return Entitlement{}, fmt.Errorf("cpclient: no shared secret")
 	}
-	u := c.base() + "/api/relay/entitlement?account_id=" + accountID
+	// QueryEscape the account id: it is an opaque identifier that must not be able to
+	// smuggle extra query parameters or break the URL if it ever contains reserved
+	// characters (&, =, #, spaces, …).
+	u := c.base() + "/api/relay/entitlement?account_id=" + url.QueryEscape(accountID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return Entitlement{}, err
