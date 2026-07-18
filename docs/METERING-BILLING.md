@@ -262,6 +262,85 @@ The honest error bars, all bounded and all in your favor or neutral:
 
 ---
 
+## Scaling & cost evidence (grounded, not hand-waved)
+
+The relay is the **only bandwidth-bound service** in the suite, so "does it scale
+gracefully *and* stay cost-managed" is a single question with a measured answer, not a
+marketing line. The numbers below come from race-checked, in-process tests on the real
+ws+yamux path (no mocks) — reproduce them yourself; nothing here is asserted only in
+prose.
+
+### Cost per TB — the €1/TB Hetzner data plane
+
+Marginal cost is a direct function of bytes moved. The projection lives in a tiny,
+unit-tested package ([`tunnel/cost`](../tunnel/cost/cost.go)) so the arithmetic is code,
+not a claim:
+
+```go
+cost.ProjectEUR(bytes, cost.HetznerEUEURPerTB)  // euros for `bytes` at ~€1 / decimal TB
+cost.TBFor(5.0, cost.HetznerEUEURPerTB)          // 5.0 TB — what a €5/mo bandwidth line covers
+```
+
+A "TB" here is the **decimal** TB (1e12 bytes) bandwidth is actually billed in — not the
+binary TiB — because mixing the two silently misprices by ~10%. Worked figures
+(`cost_test.go`, `TestProjectEUR_KnownVolumes`): 1 TB ⇒ €1.00, 500 GB ⇒ €0.50, 1 GB ⇒
+€0.001, and cost is exactly **linear** in volume. Fly Africa egress (~$0.12/GB ≈
+€110/TB, ~100× Hetzner) is the reference rate behind *not* running general traffic
+there — it is a gap-region fallback, and the per-region `region` tag on each usage report
+is what lets the CP price those bytes differently.
+
+The metering→cost path is proven end-to-end: `TestConcurrentTunnels_ExactBytesAndCost_NoLeak`
+([`tunnel/concurrency_cost_test.go`](../tunnel/concurrency_cost_test.go)) drives a
+concurrent fan-out across 16 real tunnels and asserts the relay's cumulative byte counter
+equals the moved volume **exactly** (GETs carry no request body and headers are
+unmetered), then projects the euro cost off that exact figure. So the number the CP bills
+on and the number this page prices on are the same number.
+
+### Concurrency ceiling — tunnels per node
+
+`TestTunnelScalingCost` (the `scaling_bench_test.go` harness, run it with
+`go test ./tunnel/ -run TestTunnelScalingCost -v`) opens many real tunnels against one
+relay and measures steady-state cost. Representative loopback run (**both** tunnel ends
+live in the process, so the per-tunnel figure covers agent **and** server; the
+server-only fraction is roughly half):
+
+| Metric | Measured |
+|---|---|
+| Per-tunnel heap (both ends) | ~66 KiB |
+| Aggregate forwarding throughput | ~18 MiB/s, ~280 req/s (32 workers, 64 KiB payloads) |
+| Idle-tunnel ceiling, Fly `shared-cpu-1x-256MB` | ~2,400 tunnels |
+| Idle-tunnel ceiling, Fly `shared-cpu-1x-512MB` | ~6,400 tunnels |
+| Idle-tunnel ceiling, Fly `shared-cpu-1x-1GB` | ~14,000 tunnels |
+
+These are **idle-registration** ceilings (a reserve is held back for the Go runtime +
+working set); concurrent *active* streams are separately capped per agent
+(`MaxStreamsPerAgent`) and per node (`SoftCapacity`), and the autoscaler provisions a new
+node before a node saturates (see [saturation signal](#how-measurements-reach-the-control-plane)
+and `docs/ARCHITECTURE.md`). The harness fails loudly if per-tunnel heap regresses past a
+sanity bound, so a leak or bloat can't silently erode the ceiling.
+
+### Graceful under load — no leaks, no starvation, clean drain
+
+Three race-checked guarantees back "scales *gracefully*"
+([`tunnel/concurrency_cost_test.go`](../tunnel/concurrency_cost_test.go)):
+
+- **No goroutine leak.** After N concurrent tunnels register, relay traffic, and tear
+  down, the process returns to its goroutine baseline (Δ ≤ 15). A per-tunnel or
+  per-request leak would blow the ceiling above — this pins it flat.
+- **Backpressure, not buffering.** Slow consumers that stop draining their response do
+  **not** starve other tunnels, and memory stays bounded — yamux per-stream flow control
+  holds in-flight bytes to ~a receive window, so K parked 8 MiB readers cost ~K×window,
+  not K×8 MiB (measured ~4.5 MiB held vs. 33 MiB if buffered in full). This is the
+  positive-capacity counterpart to the [slow-body DoS guard](SECURITY.md) that cuts the
+  malicious-upload case.
+- **Graceful drain under load.** With N in-flight streams flowing, a `Shutdown` (the
+  SIGTERM path) **blocks** until every stream completes with its full, un-mixed body —
+  no dropped in-flight bytes — while **new** connections are refused the moment the drain
+  starts. Combined with the final metering flush on shutdown, this is why a deploy or
+  scale-down neither drops a live download nor loses its last window of billable bytes.
+
+---
+
 ## Operator configuration recap
 
 All billing wiring on `vulos-relayd` (see [TUNNEL.md](TUNNEL.md#flags--env) for the
