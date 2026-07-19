@@ -172,6 +172,12 @@ type pinStore struct {
 	objects  map[string]int64      // "kind:addr" -> size on disk
 	verified map[string]bool       // "kind:addr" -> hashed OK in this process
 	bytes    int64                 // sum of unique object sizes
+	// pending holds objects an in-flight pin has written but not yet committed
+	// to the index. Reclamation treats them as live: without this, a quarantine
+	// running concurrently with a pin would see freshly-written objects as
+	// unreferenced (their pin record does not exist yet) and delete them out
+	// from under it.
+	pending map[string]int
 
 	pinned, unpinned, refused, hits, corrupted, dropped atomic.Uint64
 }
@@ -196,6 +202,7 @@ func newPinStore(dir string, maxBytes, maxPinBytes, maxObjBytes int64, maxPins i
 		pins:        make(map[string]*PinRecord),
 		objects:     make(map[string]int64),
 		verified:    make(map[string]bool),
+		pending:     make(map[string]int),
 	}
 	if err := os.MkdirAll(filepath.Join(dir, pinObjectDir), 0o700); err != nil {
 		return nil, fmt.Errorf("pubcache: pin dir: %w", err)
@@ -236,6 +243,17 @@ func (p *pinStore) load() error {
 		complete := true
 		for _, obj := range rec.Objects {
 			kind, addr, ok := splitStoreKey(obj)
+			// A kind is one of three fixed names and an address is canonical
+			// base64url. Both are re-validated rather than trusted: the index is
+			// a local file, and a hand-edited or corrupted one must not be able
+			// to steer a path outside the object directory.
+			if ok {
+				if _, valid := parseObjectKind(kind); !valid {
+					ok = false
+				} else if _, err := ParseAddr(addr); err != nil {
+					ok = false
+				}
+			}
 			if !ok {
 				complete = false
 				break
@@ -295,6 +313,20 @@ func (p *pinStore) sweepOrphans() error {
 // storeKeyStr is the "kind:addr" store key. It matches cacheKey's shape so the
 // two stores are addressable by the same string, but they never share entries.
 func storeKeyStr(kind, addr string) string { return kind + ":" + addr }
+
+// parseObjectKind maps a stored kind name back onto a Kind, rejecting anything
+// that is not one of the three the addressing rules cover.
+func parseObjectKind(s string) (Kind, bool) {
+	switch s {
+	case "announce":
+		return KindAnnounce, true
+	case "manifest":
+		return KindManifest, true
+	case "chunk":
+		return KindChunk, true
+	}
+	return 0, false
+}
 
 func splitStoreKey(k string) (kind, addr string, ok bool) {
 	for i := 0; i < len(k); i++ {
@@ -374,9 +406,15 @@ func (p *pinStore) get(kind Kind, addr Addr) ([]byte, bool) {
 
 // quarantine removes a bad object and every pin that depended on it, then
 // persists the reduced index so the damage is not rediscovered every restart.
+//
+// It deliberately takes ONLY p.mu, never p.opMu. Quarantine is reached from the
+// read path, and the read path is reached from INSIDE a pin operation (a pin
+// resolves its objects through the ordinary verified lookup, which consults the
+// pin store first). Taking opMu here would therefore deadlock a pin against
+// itself the moment it touched an object that had rotted on disk. All the state
+// quarantine mutates is guarded by p.mu, and p.pending keeps a concurrent pin's
+// uncommitted objects safe from reclamation, so opMu buys nothing.
 func (p *pinStore) quarantine(badKey string) {
-	p.opMu.Lock()
-	defer p.opMu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -485,6 +523,21 @@ func (p *pinStore) pin(kind Kind, addr Addr, owner string, src objectSource) (*P
 		objects  = make([]string, 0, len(set))
 		pinBytes int64
 	)
+	// releasePending drops this operation's claim on the objects it wrote, once
+	// they are either committed to the index or rolled back.
+	releasePending := func() {
+		p.mu.Lock()
+		for _, k := range wrote {
+			if n := p.pending[k]; n <= 1 {
+				delete(p.pending, k)
+			} else {
+				p.pending[k] = n - 1
+			}
+		}
+		p.mu.Unlock()
+	}
+	defer releasePending()
+
 	rollback := func() {
 		p.mu.Lock()
 		for _, k := range wrote {
@@ -559,6 +612,8 @@ func (p *pinStore) pin(kind Kind, addr Addr, owner string, src objectSource) (*P
 		// re-hash it on the first serve.
 		p.verified[key] = true
 		p.bytes += n
+		// Claim it until this operation commits or rolls back.
+		p.pending[key]++
 		p.mu.Unlock()
 
 		wrote = append(wrote, key)
@@ -630,6 +685,10 @@ func (p *pinStore) reclaimUnreferencedLocked() {
 		for _, o := range rec.Objects {
 			live[o] = struct{}{}
 		}
+	}
+	// An in-flight pin's objects are live even though no record names them yet.
+	for k := range p.pending {
+		live[k] = struct{}{}
 	}
 	for key, sz := range p.objects {
 		if _, ok := live[key]; ok {

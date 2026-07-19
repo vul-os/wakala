@@ -945,3 +945,98 @@ func assertNoStrayTmpFiles(t *testing.T, dir string) {
 		return nil
 	})
 }
+
+// TestQuarantineConcurrentWithPinIsSafe is a regression test for two coupled
+// hazards a review caught before they shipped.
+//
+// Quarantine runs from the READ path and reclaims every object no pin
+// references. A pin operation writes its objects BEFORE its pin record exists.
+// So the two hazards are:
+//
+//  1. LOCK ORDER. Quarantine must not take the operation lock a pin may already
+//     hold — the read path is reachable from inside a pin (a pin resolves its
+//     objects through the ordinary verified lookup, which consults the pin store
+//     first), so sharing that lock would wedge the daemon on exactly the input it
+//     most needs to survive: a disk that has gone bad.
+//  2. IN-FLIGHT RECLAMATION. Quarantine must not mistake a concurrent pin's
+//     freshly-written objects for garbage just because that pin has not committed
+//     its record yet.
+//
+// This drives a serve of a corrupted pinned object concurrently with a stream of
+// pins, and asserts both that nothing wedges and that every pin that reported
+// success is actually complete and servable.
+func TestQuarantineConcurrentWithPinIsSafe(t *testing.T) {
+	h := newPinHarness(t, nil)
+
+	// A pinned announce that we then rot on disk.
+	rotten := []byte("this object will be corrupted on disk")
+	rottenAddr := h.seedAnnounce(t, rotten)
+	if code, _ := h.pin(t, "announce", rottenAddr); code != http.StatusOK {
+		t.Fatal("pin of the soon-to-rot object failed")
+	}
+
+	// Seed a batch of manifests to pin concurrently with the quarantine.
+	var ids []Addr
+	for i := 0; i < 12; i++ {
+		ids = append(ids, h.seedManifest(t,
+			[]byte("c-"+strconv.Itoa(i)+"-0"),
+			[]byte("c-"+strconv.Itoa(i)+"-1"),
+		))
+	}
+
+	if err := os.WriteFile(h.svc.pins.objectPath("announce", rottenAddr.String()), []byte("rot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Drop the in-process "already verified" memo so the next serve re-hashes,
+	// exactly as it would after a restart.
+	h.svc.pins.mu.Lock()
+	h.svc.pins.verified = map[string]bool{}
+	h.svc.pins.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Triggers verification failure -> quarantine -> reclaim sweep.
+		get(t, h.svc, defaultPrefix+"/announce/"+rottenAddr.String(), nil)
+	}()
+
+	// Track which ORIGINAL index each success corresponds to, so the chunk-set
+	// assertion below checks the right chunk names.
+	pinned := map[int]Addr{}
+	for i, id := range ids {
+		if code, _ := h.pin(t, "manifest", id); code == http.StatusOK {
+			pinned[i] = id
+		}
+	}
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("quarantine concurrent with pinning deadlocked")
+	}
+
+	if h.svc.pins.stats().Corrupted == 0 {
+		t.Fatal("corruption was not detected")
+	}
+	if h.svc.pins.has(storeKeyStr("announce", rottenAddr.String())) {
+		t.Fatal("the corrupted object was not removed")
+	}
+	if len(pinned) == 0 {
+		t.Fatal("no pins succeeded; the test is not exercising the race")
+	}
+	// EVERY pin that reported success must still be whole: the quarantine sweep
+	// must not have reclaimed objects belonging to an in-flight pin.
+	for i, id := range pinned {
+		resp := get(t, h.svc, defaultPrefix+"/manifest/"+id.String(), nil)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("manifest %s reported pinned but is not servable: %d", id, resp.StatusCode)
+		}
+		// And its whole chunk set survived the sweep.
+		for _, suffix := range []string{"-0", "-1"} {
+			c := []byte("c-" + strconv.Itoa(i) + suffix)
+			if !h.svc.pins.has(storeKeyStr("chunk", HashBytes(c).String())) {
+				t.Fatalf("chunk %q of a committed pin was reclaimed by the quarantine sweep", c)
+			}
+		}
+	}
+}

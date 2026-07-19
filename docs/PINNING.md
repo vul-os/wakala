@@ -120,6 +120,18 @@ caught at exactly the moment it would otherwise do harm. When it is caught:
 orphaned bytes reclaimed. A pin that cannot be served in full is not a pin, and
 honouring it would mean claiming durability the node cannot deliver.
 
+### Concurrency
+
+Quarantine runs from the **read** path, and the read path is reachable from
+*inside* a pin operation — a pin resolves its objects through the ordinary
+verified lookup, which consults the pin store first. Quarantine therefore takes
+only the state lock, never the operation lock a pin may already hold; sharing one
+would wedge the daemon on exactly the input it most needs to survive.
+
+Reclamation also treats an **in-flight pin's** already-written objects as live,
+because a pin writes its objects before its index record exists. Without that,
+a quarantine sweep running mid-pin would mistake them for garbage.
+
 ### Durability of the writes themselves
 
 Objects and the index are both written **temp file → `fsync` → atomic rename**
