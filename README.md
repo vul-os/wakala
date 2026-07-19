@@ -167,6 +167,19 @@ vs Path B (Vulos-hosted) — are in [GETTING-STARTED.md](docs/GETTING-STARTED.md
   content-blind**: it serves public plaintext the operator can read. Any node may
   serve this role — a Vulos PoP is just a well-run instance. Protocol + limits:
   **[docs/PUBCACHE.md](docs/PUBCACHE.md)**.
+- **Durable pinning** — the other half of that role: `-pubcache-pin-dir` turns on
+  a **persistent, content-addressed pin store** that **survives restart** and is
+  **never evicted by cache pressure** (it is a separate store with its own hard
+  byte budget, sharing no bytes and no code with the LRU). Pinning a manifest
+  **recursively pins its whole chunk set**, all-or-nothing — a manifest without
+  its chunks is a list of hashes for bytes nobody holds. Objects are verified
+  against their content address before they are written and again on first serve
+  after a restart, so **nothing is ever served unverified**; when the budget is
+  full a pin is **refused with a typed `507`, never admitted by dropping another
+  pin**. Writes are **Ed25519-signed and replay-protected** against an operator
+  key allowlist (empty by default — enabling storage never implies letting anyone
+  fill it); reads of pinned content stay public. Availability is emergent, so a
+  pin-capable holder is what makes *"your data survives"* true: **[docs/PINNING.md](docs/PINNING.md)**.
 - **Tree-shakeable subpaths** — import only what you need
   (`@vulos/relay-client/endpoints`, `/fabric`, `/presence`, `/rendezvous`, …); the
   `xlsx`-using `roundTripCheck` is deliberately kept out of the root barrel.
@@ -536,6 +549,7 @@ go vet ./...
 | [docs/TUNNEL.md](docs/TUNNEL.md) | Full server flag/env reference & deploy notes for the Go reverse tunnel (server + agent) |
 | [docs/RENDEZVOUS.md](docs/RENDEZVOUS.md) | The open key-addressed reachability role — announce/resolve/signal/mailbox + ICE wire protocol, auth, and canonical signing (implementable by anyone) |
 | [docs/PUBCACHE.md](docs/PUBCACHE.md) | The open cache/pin role — serving public, self-verifying DMTAP-PUB objects, the verification gate, and every bound on the surface |
+| [docs/PINNING.md](docs/PINNING.md) | Durable retention — the pin store, its hard budget and refusal semantics, restart/verification strategy, and the signed pin/unpin wire protocol |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Fabric / signaling / endpoint-failover design |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All SDK options and constructor params |
 | [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Demo harness + screenshot regeneration |

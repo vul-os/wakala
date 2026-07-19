@@ -9,6 +9,62 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added — durable pinning (the fifth substrate infrastructure role)
+
+- **`vulos-relayd` now implements the PIN role** — durable retention of DMTAP-PUB
+  public objects (`substrate/ROLES.md` § 6, § 5.5.2) — closing the last of the
+  five substrate infrastructure roles. Enable with `-pubcache-pin-dir`. Documented
+  as a role anyone may implement in **`docs/PINNING.md`**; a Vulos-operated pin
+  service is just a well-run instance of this code, and a self-hoster gets the
+  identical binary.
+  - **A PIN IS NOT A CACHE ENTRY.** Availability in a decentralised network is
+    emergent — an object no holder retains is gone (§ 5.5.1) — so durability is
+    bought by an explicit act with a real storage cost. The pin store is on disk,
+    reloaded at boot, and has **no eviction path at all**. It shares **no bytes,
+    no budget, and no code** with the LRU cache, which is what makes *"cache
+    pressure can never evict a pin"* structural rather than a rule to remember.
+    Pins take **precedence** over the cache and upstreams on every read, and the
+    § 5.3 range-proof endpoint works over them unchanged.
+  - **VERIFICATION ON STORE, unchanged and mandatory**, including DS-tagged
+    Merkle-root recomputation for manifests. Persisting bytes that do not match
+    their content address would be strictly worse than caching them: a cached lie
+    dies at restart, a persisted one does not.
+  - **RESTART VERIFIES LAZILY, ON FIRST SERVE**, then remembers for the process
+    lifetime. Rehashing at boot would make startup time proportional to pinned
+    volume — minutes of I/O before a node could answer anything, on every restart.
+    The invariant is not *"the disk is known-good"* but *"nothing is ever served
+    unverified"*, and that holds either way. Detected corruption deletes the
+    object, drops every pin that referenced it, rewrites the index, and refuses
+    honestly (`0x090C`). A pin whose objects are not all present at startup is
+    dropped rather than half-honoured. Objects and index are written temp →
+    `fsync` → atomic rename.
+  - **RECURSIVE CHUNK PINNING, all-or-nothing with rollback.** Pinning a manifest
+    pins every chunk it names; a manifest without its chunks is a list of hashes
+    for bytes nobody holds. Shared chunks are stored once — content addressing
+    makes dedup free, and the budget counts unique bytes. Retention is *derived*
+    from the index on each mutation, so it cannot drift like a refcount.
+  - **THE BUDGET REFUSES, IT DOES NOT EVICT.** Hard total-byte, per-pin, per-object
+    and pin-count bounds; exceeding one returns `507` with a typed
+    `pin_budget_exceeded` code, checked incrementally so an oversized pin is
+    refused early and rolled back. Silently dropping a pin to admit another is the
+    one failure mode that would make the durability claim a lie.
+  - **SIGNED WRITES, PUBLIC READS.** `pin`/`unpin` carry the rendezvous role's
+    signed-request discipline — Ed25519 over a domain-separated, length-prefixed
+    canonical message, ±5 min freshness, nonce replay protection — via a new
+    shared `tunnel/internal/keyauth`, so the two surfaces cannot drift apart. The
+    `pin` and `unpin` domain tags mean a captured pin request can never be
+    replayed as a deletion. Authorisation is an operator allowlist
+    (`-pubcache-pin-keys`), **empty by default**, because enabling storage must
+    never imply enabling anyone to fill it; a malformed key is a startup error.
+    Only the key that created a pin may remove it. Reads of pinned content stay
+    anonymous, as § 22 requires.
+  - **Usage counters** at `{prefix}/pins/status` and in `/healthz` (reported
+    separately from cache totals). Counters only: metering, pricing, and charging
+    live in the control plane, never in the daemon that serves the role.
+  - New flags: `-pubcache-pin-dir`, `-pubcache-pin-keys`, `-pubcache-pin-max-bytes`,
+    `-pubcache-pin-max-pin-bytes`, `-pubcache-pin-max-pins` (each with a
+    `VULOS_RELAY_PUBCACHE_PIN_*` env equivalent).
+
 ### Added — the open cache/pin role (DMTAP-PUB public objects)
 
 - **`vulos-relayd` can now serve the DMTAP-PUB public-object read surface** (new
