@@ -308,7 +308,11 @@ export class RendezvousClient {
   // ── shared internals ─────────────────────────────────────────────────────────
 
   async _deposit(domain, pathBase, recipientKey, payload, ttl) {
-    const payloadB64 = payload instanceof Uint8Array ? b64urlEncode(payload) : String(payload)
+    // ArrayBuffer.isView() is realm-agnostic (unlike `instanceof Uint8Array`,
+    // which fails for a Uint8Array minted in a different realm, e.g. a TextEncoder
+    // output under jsdom) — so byte payloads are always base64url-encoded, and
+    // only genuine strings are passed through as pre-encoded base64url.
+    const payloadB64 = ArrayBuffer.isView(payload) ? b64urlEncode(payload) : String(payload)
     const req = {
       from: this.key,
       to: recipientKey,
