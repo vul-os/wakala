@@ -159,6 +159,26 @@ export class RendezvousClient {
     this._fetch = fetchImpl || ((...a) => (globalThis.fetch)(...a))
   }
 
+  /**
+   * Return a new RendezvousClient that talks to the SAME relay (base URL, mount
+   * prefix, auth token, fetch impl) under a DIFFERENT Ed25519 identity. Used by
+   * the rendezvous signaling transport to hold both a per-peer "self" client and
+   * a session-derived "room" client (whose private key every session member can
+   * derive) against one relay without re-plumbing the transport config.
+   *
+   * @param {RendezvousIdentity} identity
+   * @returns {RendezvousClient}
+   */
+  withIdentity(identity) {
+    return new RendezvousClient({
+      baseUrl: this.baseUrl,
+      identity,
+      prefix: this.prefix,
+      authToken: this._authToken,
+      fetch: this._fetch,
+    })
+  }
+
   _url(path) {
     return this.baseUrl + this.prefix + path
   }
