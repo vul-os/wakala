@@ -48,6 +48,17 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// RENDEZVOUS ROLE: when enabled, the relay serves the open announce/resolve/
+	// signal/mailbox + ICE surface on its OWN apex host. It is dispatched here BEFORE
+	// tunnel routing, but ONLY when the request is NOT for a tunnel subdomain
+	// (nameFromHost == "") — so a box reached at <name>.<domain> keeps full control of
+	// its own /rendezvous/* paths and is never shadowed. The rendezvous path prefix is
+	// distinct from the /t/<name>/ path-mode prefix, so the two never collide.
+	if s.rendezvous != nil && s.nameFromHost(r.Host) == "" && underPrefix(r.URL.Path, s.rendezvous.Prefix()) {
+		s.rendezvous.ServeHTTP(w, r)
+		return
+	}
+
 	name, trimmedPath, matched := s.route(r)
 	if !matched {
 		s.metrics.request(outcomeNoTunnel)
@@ -251,6 +262,16 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// pooledCopy (not io.Copy) so the per-response scratch buffer is reused from a
 	// pool instead of allocated per request — the relay's egress path is hot.
 	_, _ = pooledCopy(w, &meterReader{r: resp.Body, meter: s.meter, account: outAcct, metrics: s.metrics, dir: dirOutbound})
+}
+
+// underPrefix reports whether path is exactly prefix or a child of it (prefix +
+// "/..."). Used to dispatch the relay's apex-host rendezvous surface without
+// matching an unrelated path that merely shares the prefix as a string.
+func underPrefix(path, prefix string) bool {
+	if prefix == "" {
+		return false
+	}
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
 
 // route resolves an inbound request to a tunnel name. Subdomain mode is primary;

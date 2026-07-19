@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/vul-os/vulos-relay/tunnel/autoscale"
+	"github.com/vul-os/vulos-relay/tunnel/rendezvous"
 	"github.com/vul-os/vulos-relay/tunnel/server"
 )
 
@@ -133,6 +134,19 @@ func main() {
 		cpSecret    = flag.String("cp-shared-secret", envOr("CP_SHARED_SECRET", ""), "CP_SHARED_SECRET for usage HMAC + entitlement service auth")
 		popID       = flag.String("pop-id", envOr("VULOS_RELAY_POP_ID", ""), "this relay's PoP id (usage reports dedup per-PoP)")
 		cpTokenMode = flag.Bool("cp-token-store", envOr("VULOS_RELAY_CP_TOKENS", "") == "1", "resolve agent tokens as CP install credentials instead of a static grants file")
+
+		// RENDEZVOUS ROLE: the open key-addressed reachability substrate
+		// (announce/resolve/signal/mailbox + ICE). CP-OPTIONAL and self-hostable — it
+		// holds only soft-state and needs no Vulos Cloud. Served on the relay's apex
+		// host under -rendezvous-prefix. OFF by default (a plain reverse-tunnel relay).
+		enableRDV     = flag.Bool("rendezvous", envOr("VULOS_RELAY_RENDEZVOUS", "") == "1", "enable the open announce/resolve/signal/mailbox + ICE rendezvous role (or VULOS_RELAY_RENDEZVOUS=1)")
+		rdvPrefix     = flag.String("rendezvous-prefix", envOr("VULOS_RELAY_RENDEZVOUS_PREFIX", "/rendezvous"), "mount prefix for the rendezvous role")
+		rdvNoResolve  = flag.Bool("rendezvous-no-public-resolve", envOr("VULOS_RELAY_RENDEZVOUS_NO_RESOLVE", "") == "1", "disable unauthenticated presence resolve reads")
+		rdvStun       = flag.String("rendezvous-stun", envOr("VULOS_RELAY_STUN", ""), "comma-separated STUN URLs advertised via /rendezvous/ice (empty=public default)")
+		rdvNoPubStun  = flag.Bool("rendezvous-disable-public-stun", envOr("VULOS_RELAY_DISABLE_PUBLIC_STUN", "") == "1", "drop the built-in public STUN fallback (sovereign deployments)")
+		rdvTurn       = flag.String("rendezvous-turn", envOr("VULOS_RELAY_TURN", ""), "comma-separated TURN URLs (requires -rendezvous-turn-secret to emit ephemeral creds)")
+		rdvTurnSecret = flag.String("rendezvous-turn-secret", envOr("VULOS_RELAY_TURN_SECRET", ""), "coturn static-auth-secret used to mint short-lived TURN credentials (never sent to clients)")
+		rdvTurnTTL    = flag.Duration("rendezvous-turn-ttl", envDuration("VULOS_RELAY_TURN_TTL", 0), "lifetime of a minted TURN credential (0=default 12h)")
 	)
 	flag.Parse()
 
@@ -194,10 +208,10 @@ func main() {
 	}
 
 	srv, err := server.New(server.Config{
-		Domain:            *domain,
-		Tokens:            store,
-		EnablePathMode:    *pathMode,
-		TrustProxyHeaders: *trustProxy,
+		Domain:             *domain,
+		Tokens:             store,
+		EnablePathMode:     *pathMode,
+		TrustProxyHeaders:  *trustProxy,
 		MaxAgents:          *maxAgents,
 		MaxRequestBytes:    *maxReqBytes,
 		RequestBodyTimeout: *reqBodyTimeout,
@@ -228,6 +242,19 @@ func main() {
 		DirectProbeBurst: *probeBurst,
 
 		RevokeSweepPeriod: *revokeSweep,
+
+		EnableRendezvous: *enableRDV,
+		Rendezvous: rendezvous.Config{
+			PathPrefix:           *rdvPrefix,
+			DisablePublicResolve: *rdvNoResolve,
+			ICE: rendezvous.ICEConfig{
+				STUNURLs:          splitCSV(*rdvStun),
+				DisablePublicSTUN: *rdvNoPubStun,
+				TURNURLs:          splitCSV(*rdvTurn),
+				TURNSecret:        *rdvTurnSecret,
+				TURNCredentialTTL: *rdvTurnTTL,
+			},
+		},
 	})
 	if err != nil {
 		log.Fatalf("vulos-relayd: %v", err)
@@ -244,6 +271,13 @@ func main() {
 	if *softMaxAgents > 0 || *softMaxStreams > 0 || *softMaxBPS > 0 {
 		log.Printf("vulos-relayd: saturation sampler ON (soft caps agents=%d streams=%d bps=%d) — vulos_relay_saturation_ratio on /metrics",
 			*softMaxAgents, *softMaxStreams, *softMaxBPS)
+	}
+	if *enableRDV {
+		turn := "STUN-only"
+		if *rdvTurn != "" && *rdvTurnSecret != "" {
+			turn = "STUN+TURN(ephemeral creds)"
+		}
+		log.Printf("vulos-relayd: RENDEZVOUS role ENABLED prefix=%s ice=%s (announce/resolve/signal/mailbox on the apex host; content-blind, CP-optional)", *rdvPrefix, turn)
 	}
 	if *trustProxy {
 		log.Printf("vulos-relayd: TRUSTING X-Forwarded-* from a fronting proxy (ensure a trusted TLS-terminating edge fronts this relay)")
@@ -303,6 +337,21 @@ func main() {
 		}
 		log.Printf("vulos-relayd: stopped")
 	}
+}
+
+// splitCSV splits a comma-separated flag value into trimmed, non-empty items.
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // sanitizePoP derives a DNS-ish PoP id fallback from the relay domain.

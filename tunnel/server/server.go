@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/vul-os/vulos-relay/tunnel/autoscale"
+	"github.com/vul-os/vulos-relay/tunnel/rendezvous"
 )
 
 // Config configures a relay Server.
@@ -240,6 +241,20 @@ type Config struct {
 	// value disables the sampler even if SoftCapacity is set.
 	SaturationSamplePeriod time.Duration
 
+	// RENDEZVOUS ROLE (open reachability substrate). When EnableRendezvous is set,
+	// the relay ALSO serves the key-addressed announce/resolve/signal/mailbox +
+	// ICE surface (tunnel/rendezvous) on its OWN apex domain — so apps get
+	// P2P/discovery from this relay with no Vulos OS required. It is CP-OPTIONAL and
+	// fully self-hostable: the rendezvous service holds only soft-state (presence +
+	// short-TTL opaque blobs), needs no CP, and is content-blind. The routes are
+	// mounted under Rendezvous.PathPrefix (default "/rendezvous") and served ONLY on
+	// the relay's apex host, so a tunnel subdomain's own paths are never shadowed.
+	// Default OFF (a plain reverse-tunnel relay is unchanged).
+	EnableRendezvous bool
+	// Rendezvous configures the rendezvous service (ICE STUN/TURN, caps, rate
+	// limits). Ignored unless EnableRendezvous is true.
+	Rendezvous rendezvous.Config
+
 	// RevokeSweepPeriod is how often the server rechecks every LIVE session against
 	// the revocation sources (static revoked-list + CP revoked/404 via the
 	// entitlement poll) and drops any that are now definitively revoked. This
@@ -384,6 +399,11 @@ type Server struct {
 	// advertised endpoint is reachable + owned before it is surfaced to clients.
 	directVerifier directEndpointVerifier
 
+	// RENDEZVOUS ROLE: the announce/resolve/signal/mailbox + ICE service, served on
+	// the relay's apex host. nil unless EnableRendezvous is set (self-host default
+	// is a plain reverse-tunnel relay).
+	rendezvous *rendezvous.Service
+
 	// Observability (WAVE50-RELAY-OBSERVABILITY). metrics is always non-nil; log is
 	// the structured logger. adminSrv is the running admin/metrics *http.Server (nil
 	// until ServeAdmin runs) so Close can shut it down.
@@ -477,6 +497,18 @@ func New(cfg Config) (*Server, error) {
 	// unless a CP is configured AND a public endpoint is advertised — the
 	// CP-optional / self-host contract).
 	s.startPoPHeartbeat()
+	// RENDEZVOUS ROLE: construct the open reachability service when enabled. It is
+	// CP-optional and self-contained (soft-state only); it inherits the relay's
+	// structured logger unless the caller set one. Mounted in Handler() and dispatched
+	// on the apex host in handlePublic.
+	if cfg.EnableRendezvous {
+		rcfg := cfg.Rendezvous
+		if rcfg.Logger == nil {
+			rcfg.Logger = s.log
+		}
+		s.rendezvous = rendezvous.New(rcfg)
+		s.logInfo("rendezvous role enabled", logFields{Reason: s.rendezvous.Prefix()})
+	}
 	// WAVE50-RELAY-OBSERVABILITY: background loops are up ⇒ mark ready for /readyz.
 	s.metrics.setReady(true)
 	return s, nil
@@ -492,6 +524,9 @@ func (s *Server) Close() {
 	s.stopRevocationSweep()
 	s.stopSaturationSampler()
 	s.stopPoPHeartbeat()
+	if s.rendezvous != nil {
+		s.rendezvous.Close()
+	}
 	if s.meter != nil {
 		s.meter.stopAndFlush()
 	}
