@@ -140,9 +140,15 @@ func main() {
 		// (announce/resolve/signal/mailbox + ICE). CP-OPTIONAL and self-hostable — it
 		// holds only soft-state and needs no Vulos Cloud. Served on the relay's apex
 		// host under -rendezvous-prefix. OFF by default (a plain reverse-tunnel relay).
-		enableRDV     = flag.Bool("rendezvous", envOr("VULOS_RELAY_RENDEZVOUS", "") == "1", "enable the open announce/resolve/signal/mailbox + ICE rendezvous role (or VULOS_RELAY_RENDEZVOUS=1)")
-		rdvPrefix     = flag.String("rendezvous-prefix", envOr("VULOS_RELAY_RENDEZVOUS_PREFIX", "/rendezvous"), "mount prefix for the rendezvous role")
-		rdvNoResolve  = flag.Bool("rendezvous-no-public-resolve", envOr("VULOS_RELAY_RENDEZVOUS_NO_RESOLVE", "") == "1", "disable unauthenticated presence resolve reads")
+		enableRDV    = flag.Bool("rendezvous", envOr("VULOS_RELAY_RENDEZVOUS", "") == "1", "enable the open announce/resolve/signal/mailbox + ICE rendezvous role (or VULOS_RELAY_RENDEZVOUS=1)")
+		rdvPrefix    = flag.String("rendezvous-prefix", envOr("VULOS_RELAY_RENDEZVOUS_PREFIX", "/rendezvous"), "mount prefix for the rendezvous role")
+		rdvNoResolve = flag.Bool("rendezvous-no-public-resolve", envOr("VULOS_RELAY_RENDEZVOUS_NO_RESOLVE", "") == "1", "disable unauthenticated presence resolve reads")
+		// BROWSER ACCESS: the rendezvous surface is CORS-enabled so a page can call
+		// it directly with no proxy — its writes are Ed25519-signed and it never
+		// accepts credentials, so origin is not its security boundary. This flag
+		// NARROWS that to an allow-list. It is courtesy/traffic-shaping, NOT access
+		// control: a non-browser client ignores CORS entirely. Empty = any origin.
+		rdvOrigins    = flag.String("rendezvous-allowed-origins", envOr("VULOS_RELAY_RENDEZVOUS_ORIGINS", ""), "comma-separated browser origins allowed to call the rendezvous role (empty=any; NOT an access control — writes are signed)")
 		rdvStun       = flag.String("rendezvous-stun", envOr("VULOS_RELAY_STUN", ""), "comma-separated STUN URLs advertised via /rendezvous/ice (empty=public default)")
 		rdvNoPubStun  = flag.Bool("rendezvous-disable-public-stun", envOr("VULOS_RELAY_DISABLE_PUBLIC_STUN", "") == "1", "drop the built-in public STUN fallback (sovereign deployments)")
 		rdvTurn       = flag.String("rendezvous-turn", envOr("VULOS_RELAY_TURN", ""), "comma-separated TURN URLs (requires -rendezvous-turn-secret to emit ephemeral creds)")
@@ -312,6 +318,7 @@ func main() {
 		Rendezvous: rendezvous.Config{
 			PathPrefix:           *rdvPrefix,
 			DisablePublicResolve: *rdvNoResolve,
+			AllowedOrigins:       splitCSV(*rdvOrigins),
 			ICE: rendezvous.ICEConfig{
 				STUNURLs:          splitCSV(*rdvStun),
 				DisablePublicSTUN: *rdvNoPubStun,

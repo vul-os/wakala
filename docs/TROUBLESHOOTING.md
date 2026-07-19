@@ -57,6 +57,24 @@ loopback-only). The ones you will actually reach for:
 | `vulos_relay_reconnects_total` | flapping agents |
 | `vulos_relay_direct_verified_total` / `direct_rejected_total` | direct fast-path health |
 
+**Rendezvous role** — emitted **only when `-rendezvous` is enabled**, so an absent
+series means "role off", not "role on, zero traffic".
+
+| Metric | Tells you |
+|---|---|
+| `vulos_relay_rendezvous_live_presence` | presence entries currently live (not expired) |
+| `vulos_relay_rendezvous_announces_total` / `announce_rejects_total` | accepted vs refused presence writes |
+| `vulos_relay_rendezvous_resolves_total` | presence lookups served |
+| `vulos_relay_rendezvous_signal_deposits_total` / `signal_pickups_total` | WebRTC signalling flowing (deposits with no pickups ⇒ peers are not polling) |
+| `vulos_relay_rendezvous_mailbox_deposits_total` / `mailbox_pickups_total` | relay-circuit fallback in use |
+| `vulos_relay_rendezvous_auth_failures_total` | bad signature / stale timestamp / replayed nonce |
+| `vulos_relay_rendezvous_rate_limited_total` | a client hitting the per-key or global limiter |
+
+Reading them when P2P "does not work": announces rising with resolves flat means
+peers are publishing but nobody is looking them up; signal **deposits** rising with
+**pickups** flat means one side is not polling its inbox; mailbox counters moving at
+all means the direct path failed and peers fell back to the relay circuit.
+
 ---
 
 ## Tunnel won't connect

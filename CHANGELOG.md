@@ -9,6 +9,71 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed — the rendezvous P2P path, as exercised by a real browser
+
+A genuine end-to-end test (a real `relayd`, two standalone servers, two browser
+contexts, real WebRTC) proved the documented architecture — *"point any app at any
+relayd and get P2P"* — **did not work from a browser**. Four defects, all fixed.
+
+- **CORS on the rendezvous surface (the blocker).** The endpoints sent no CORS
+  headers and answered `OPTIONS /rendezvous/announce` with `405`, so a browser
+  `fetch()` to `/ice` or `/announce` failed with *"Failed to fetch"*. Every app had
+  to front the relay with its own same-origin proxy, which defeats the point of a
+  shared public substrate. **Apps currently shipping such a proxy can drop it.**
+  - **Policy: any origin, WITHOUT credentials** — a decision, not a shrug.
+    Every write here is Ed25519-signed over a domain-separated canonical message
+    with a fresh timestamp and a replay-guarded nonce, so **origin is not the
+    security boundary**: authority rides in the body and a hostile page gains
+    nothing `curl` could not already do. `Allow-Credentials` is **never** sent, so
+    there is no ambient authority to ride and no CSRF surface. The open reads
+    (`/ice`, `/resolve`, `/healthz`) are public by design, and abuse is bounded by
+    the per-key/global rate limits — never by an origin string a non-browser client
+    forges for free. Error responses carry the headers too, so an app can read a
+    `400` instead of an opaque network failure.
+  - **Containment is the load-bearing part.** This applies to the rendezvous
+    surface **only**. The tunnel/proxy paths emit no CORS headers and must never
+    emit them — they proxy a box's own app, which *does* carry ambient authority.
+    Asserted by tests on the apex host, on tunnel subdomains, and on unrelated apex
+    paths. Reasoning documented in `docs/RENDEZVOUS.md` § 5.0 and `cors.go`.
+  - `-rendezvous-allowed-origins` / `VULOS_RELAY_RENDEZVOUS_ORIGINS` narrows the
+    policy to an allow-list, documented as traffic-shaping and **not** access
+    control (a non-browser client ignores CORS entirely).
+- **Glare deadlock in `FabricClient`.** Over rendezvous both peers see each other's
+  `join` on the shared presence board, so both send an offer; with no tie-break each
+  side reset its own connection to answer the other's, both negotiations were
+  abandoned, and the connection deadlocked until the 8s relay timer — **~1 run in
+  3**. Adds the standard perfect-negotiation polite/impolite tie-break. The host-box
+  WebSocket path, where only one side ever initiates, is unaffected by construction.
+- **Relay-circuit fallback was one-directional, and reconnect was a single shot.**
+  Only the side that gave up on the direct path polled, so its peer never read the
+  deposits and never answered — the documented content-blind fallback degraded to
+  silence instead of to a working circuit. Polling now starts when a negotiation is
+  armed, continues while a peer is `connecting`, and a peer whose blob we decrypted
+  is adopted as a relay peer. Separately, a dropped connection got exactly **one**
+  retry 2s after close — usually spent while still offline, after which nothing ever
+  tried again and the session stayed dead until a page reload. Now backs off
+  2s→16s, stopping on connect, on an explicit `leave`, and on teardown.
+- 16 client regression tests cover all three (verified non-vacuous by reverting each
+  hunk); client suite 329 green.
+
+### Added — rendezvous operability
+
+- **A role-only node starts without agent grants.** `vulos-relayd` refused to boot
+  without tunnel grants even in pure-rendezvous mode, so operators invented a dummy
+  token authorizing a box that did not exist — a live credential for a name nobody
+  owns, strictly worse than no grant. Role-only mode now uses an explicit **deny-all
+  token store**: the reverse-tunnel surface authorizes **nobody**. This is the
+  opposite of running open, and a relay that *does* serve tunnels still refuses an
+  empty grant set, as before (both halves tested).
+- **Rendezvous `/metrics` counters.** Only the tunnel role was instrumented, leaving
+  no relay-side ground truth for a P2P problem. Adds announce / announce-reject /
+  resolve / signal-deposit / signal-pickup / mailbox-deposit / mailbox-pickup /
+  auth-failure / rate-limited counters plus a live-presence gauge, in the existing
+  tunnel-metrics style. Emitted **only when the role is enabled**, so a scraper can
+  distinguish "role off" from "role on, zero traffic" and a tunnel-only relay's
+  exposition is unchanged. No key, endpoint, origin, or IP is ever a label — this
+  node is content-blind and its metrics must not become where that leaks.
+
 ### Added — durable pinning (the fifth substrate infrastructure role)
 
 - **`vulos-relayd` now implements the PIN role** — durable retention of DMTAP-PUB

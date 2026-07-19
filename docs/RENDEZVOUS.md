@@ -118,6 +118,64 @@ GET  {p}/ice                  ICE (STUN + ephemeral-cred TURN)  (open)
 GET  {p}/healthz              liveness                          (open)
 ```
 
+### 5.0 Browser access (CORS) — you do **not** need a proxy
+
+**A browser can call these endpoints directly, cross-origin, with no proxy in
+front of the relay.** That is the point of the role: point any app at any relayd
+and get P2P. Every rendezvous route answers a preflight and carries CORS headers.
+
+```
+Access-Control-Allow-Origin: *          (or the echoed origin, if the operator
+                                         configured an allow-list)
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Max-Age: 600
+```
+
+`Access-Control-Allow-Credentials` is **never** sent, so browsers strip cookies
+and HTTP auth from these requests.
+
+**Why allowing any origin is safe here — and is a decision, not a shrug:**
+
+1. **Origin is not the security boundary.** Every write (§4) is Ed25519-signed
+   over a domain-separated canonical message with a fresh timestamp and a
+   replay-guarded nonce. Authority rides *in the request body*, never in ambient
+   browser state. A hostile page that reaches this endpoint can do exactly what
+   `curl` can do — which is nothing, without a private key.
+2. **No credentials means no CSRF surface.** This role has no cookie or session
+   concept at all. With `Allow-Credentials` never sent there is no ambient
+   authority for a malicious origin to ride. (It is also spec-illegal alongside
+   `*` — but we would not want it here regardless.)
+3. **The open reads are already public.** `/ice` is STUN URLs plus short-lived
+   TURN credentials, `/resolve` is self-signed public presence, `/healthz` is
+   liveness. CORS-blocking a browser from data any HTTP client can already fetch
+   protected nothing.
+4. **Abuse is bounded by rate limits, not by origin** (§7). An origin string is
+   forged for free by any non-browser client, so it was never a usable throttle.
+
+**Error responses carry the headers too.** A `400`/`401`/`429` must be *readable*
+by the calling app — otherwise the browser collapses an informative rejection into
+an opaque "Failed to fetch" and the app cannot tell a bad signature from a dead
+node.
+
+**Scope — this is the rendezvous surface only.** The reverse-tunnel/proxy paths
+emit **no** CORS headers and must never emit them: they proxy a box's own app,
+which *does* carry ambient authority (cookies, sessions). Cross-origin reads there
+are exactly what the same-origin policy should stop. This is asserted by tests on
+the apex host, on tunnel subdomains, and on unrelated apex paths.
+
+**Operator override.** `-rendezvous-allowed-origins` (or
+`VULOS_RELAY_RENDEZVOUS_ORIGINS`, comma-separated) narrows the policy: only a
+listed origin is echoed back, with `Vary: Origin`. Treat this as
+courtesy/traffic-shaping, **not** access control — for reason (1), a non-browser
+client ignores CORS entirely. Never rely on it as a security mechanism.
+
+> **Note for apps that currently front this role with a same-origin proxy:** that
+> proxy is no longer necessary. Browsers were previously unable to reach these
+> endpoints at all — the surface sent no CORS headers and answered
+> `OPTIONS /rendezvous/announce` with `405` — so apps had to add one. With CORS
+> in place a page can `fetch()` the relay directly and such proxies can be dropped.
+
 ### 5.1 ANNOUNCE
 
 Publish/refresh your presence. `endpoints` are **opaque connection hints** (URLs,
@@ -240,6 +298,26 @@ peer drains it on next connect. The relay only ever moves opaque bytes.
 - **Server**: `tunnel/rendezvous` in this repo; enable on `vulos-relayd` with
   `-rendezvous` (see `docs/TUNNEL.md` / `--help` for the STUN/TURN/prefix flags). It
   is **CP-optional** and holds only soft-state, so it runs fully self-hosted.
+
+  **Rendezvous-only nodes need no agent grants.** A node running only this role
+  (and/or the pubcache role) has no reverse tunnels to authorize, so it starts
+  cleanly with no `-tokens-file` / `VULOS_RELAY_TOKENS`:
+
+  ```sh
+  vulos-relayd -domain rdv.example.com -rendezvous
+  # → no agent grants — running ROLE-ONLY (rendezvous);
+  #   the reverse-tunnel surface authorizes nobody
+  ```
+
+  This is **not** running open: the tunnel surface is wired to a deny-all token
+  store and refuses every agent. Do not invent a placeholder grant to get past
+  startup — a dummy token is a live credential for a name nobody owns, which is
+  strictly worse than no grant at all. A relay that *does* serve tunnels still
+  refuses to start with an empty grant set, exactly as before.
+
+  **Observability**: the role exports its own `/metrics` counters
+  (announce/resolve/signal/mailbox/auth/rate-limit plus a live-presence gauge) —
+  see `docs/TROUBLESHOOTING.md` for the table and how to read it when P2P misbehaves.
 - **Client**: `@vulos/relay-client` exposes `RendezvousClient` + `RendezvousIdentity`
   (`import { RendezvousClient } from '@vulos/relay-client/rendezvous'`), and
   `FabricClient` accepts a `rendezvousBaseUrl` option to use any relayd's rendezvous
