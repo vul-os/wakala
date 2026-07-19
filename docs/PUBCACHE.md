@@ -314,16 +314,34 @@ together.**
 
 ---
 
-## 6. Eviction is not deletion; pinning is not implemented
+## 6. Eviction is not deletion — and pinning is the other half
 
 A content address is **a name, not a promise** (§ 5.5.1). When this node evicts or
-expires an object it is simply **ceasing to be one of the holders** — it has not
-deleted anything, and it makes no claim the object is gone.
+expires a **cached** object it is simply **ceasing to be one of the holders** — it
+has not deleted anything, and it makes no claim the object is gone.
 
-**Pinning** (durable retention with a real storage budget) is deliberately *not*
-implemented here: `vulos-relayd` holds soft state only. A pin-capable holder is a
-compatible, separate implementation of the **same wire protocol** — which is the
-point of describing this as a role rather than a service.
+That is fine for a cache and useless as a durability story, because availability
+in a decentralised network is **emergent**: an object no holder retains is gone.
+So the role has a second half — **pinning**, durable retention bought with real
+disk (§ 5.5.2) — and `vulos-relayd` now implements it.
+
+The two halves are **separate stores on purpose**:
+
+| | Cache (§ 1–5 above) | Pin |
+|---|---|---|
+| Where | memory | disk |
+| Lifetime | LRU + TTL | until explicitly unpinned |
+| Under pressure | evicted | **never evicted** |
+| After restart | gone | still there |
+| Budget | `-pubcache-max-bytes` | `-pubcache-pin-max-bytes` (separate, hard) |
+| Full behaviour | evict something | **refuse, with a typed error** |
+
+They share no bytes, no budget, and no code, which is what makes *"cache pressure
+can never evict a pin"* a property of the structure rather than a rule someone has
+to remember. Pins also take **precedence** on reads: a pinned copy is answered
+from disk before the cache or any upstream is consulted.
+
+**Full details, wire protocol, and signing: [docs/PINNING.md](PINNING.md).**
 
 ---
 
@@ -341,6 +359,11 @@ point of describing this as a role rather than a service.
 | `-pubcache-max-inflight` | `VULOS_RELAY_PUBCACHE_MAX_INFLIGHT` | 16 | concurrent upstream fetches, role-wide |
 | `-pubcache-serve-feeds` | `VULOS_RELAY_PUBCACHE_SERVE_FEEDS=1` | off | also proxy the mutable feed reads (never cached) |
 | `-pubcache-serve-proofs` | `VULOS_RELAY_PUBCACHE_SERVE_PROOFS=1` | off | also serve the optional chunk-tree range proofs (§ 5) |
+| `-pubcache-pin-dir` | `VULOS_RELAY_PUBCACHE_PIN_DIR` | *(none)* | enable **durable pinning** rooted here (§ 6, [PINNING.md](PINNING.md)) |
+| `-pubcache-pin-keys` | `VULOS_RELAY_PUBCACHE_PIN_KEYS` | *(none)* | base64url Ed25519 keys allowed to pin/unpin (empty = serve existing pins, accept no new ones) |
+| `-pubcache-pin-max-bytes` | `VULOS_RELAY_PUBCACHE_PIN_MAX_BYTES` | 1 GiB | **hard** pin budget over unique stored bytes; over it, pins are refused |
+| `-pubcache-pin-max-pin-bytes` | `VULOS_RELAY_PUBCACHE_PIN_MAX_PIN_BYTES` | 256 MiB | per-pin cap, so one blob cannot take the whole budget |
+| `-pubcache-pin-max-pins` | `VULOS_RELAY_PUBCACHE_PIN_MAX_PINS` | 10000 | maximum number of distinct pins |
 
 With **no upstreams configured** the role is still valid: it is a holder that
 holds nothing and answers `404` to everything. That is a legitimate node, not a
@@ -350,6 +373,8 @@ misconfiguration — and it is the safest thing an accidental `-pubcache` can do
 
 ## 8. Related
 
+- **[docs/PINNING.md](PINNING.md)** — the durable half of this role: the pin
+  store, its budget, and the signed pin/unpin wire protocol.
 - **[docs/RENDEZVOUS.md](RENDEZVOUS.md)** — the sibling reachability role
   (announce / resolve / signal / mailbox + ICE), which *is* content-blind.
 - **[docs/SECURITY.md](SECURITY.md)** — what a relay operator can and cannot see.

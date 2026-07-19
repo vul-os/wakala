@@ -26,10 +26,15 @@ import (
 // is exactly the § 22.6.2 posture — availability is the emergent sum of
 // independent holder choices, and dropping an object is always a holder's right.
 //
-// PINNING (durability by explicit retention) is a deliberate non-feature for
-// now: pinned objects would need a persistent store and a real storage budget,
-// and this node holds only soft state. A pin-capable holder is a compatible,
-// separate implementation of the same role — the wire protocol is identical.
+// PINNING lives in pin.go, NOT here, and the separation is load-bearing. This
+// store is soft state: in memory, LRU-evicted, gone on restart. A pin is the
+// opposite of all three — on disk, never evicted, reloaded at boot — because it
+// is a durability promise rather than a performance cache (§ 5.5.2).
+//
+// The two stores share no bytes, no byte cap, and no code, which is what makes
+// "cache pressure can never evict a pin" a structural property instead of a rule
+// someone has to remember to honour. Nothing in evictLocked below can reach a
+// pinned object, because pinned objects are not in this data structure at all.
 
 // entry is one cached object.
 type entry struct {

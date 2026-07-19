@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vul-os/vulos-relay/tunnel/internal/keyauth"
 )
 
 // service.go — the § 22.5.1 read surface, served as a read-through cache in
@@ -23,7 +26,12 @@ import (
 //	GET {p}/chunk/{h}                chunk bytes   cached, immutable  (verified)
 //	GET {p}/feed/{pub}/head          FeedHead      NEVER cached, must-revalidate
 //	GET {p}/feed/{pub}/range?from=&to=  [FeedEntry] NEVER cached, must-revalidate
-//	GET {p}/healthz                  liveness + cache counters
+//	GET {p}/healthz                  liveness + cache & pin counters
+//
+//	POST {p}/pin                     SIGNED   durably retain an announce/manifest
+//	POST {p}/unpin                   SIGNED   release a pin, reclaim its bytes
+//	GET  {p}/pins                    public   what this holder durably retains
+//	GET  {p}/pins/status             public   pin usage vs budget (billing reads this)
 //
 // THE CACHEABILITY SPLIT IS A SECURITY BOUNDARY, not a performance tweak. The
 // three content-addressed endpoints are immutable and self-verifying, so this
@@ -94,6 +102,48 @@ type Config struct {
 	// every other thing this role does.
 	ServeProofs bool
 
+	// ── DURABLE PINNING (substrate/ROLES.md § 6) ───────────────────────────
+	//
+	// PinDir turns on the durable pin store, rooted at this directory. Empty =>
+	// no pinning at all: the node is a pure cache holding soft state, which is
+	// the default because durable retention costs real disk and § 5.5.2 makes
+	// that an explicit, budgeted act rather than something a node drifts into.
+	//
+	// Pinned objects survive restart, are NEVER evicted by cache pressure (they
+	// are a separate store with a separate budget and no eviction path), and
+	// take precedence over the cache on every read.
+	PinDir string
+
+	// PinKeys is the operator's allowlist of base64url Ed25519 keys permitted
+	// to pin and unpin here. Empty (the default) => the pin store still SERVES
+	// what it already holds, but accepts no new writes. Enabling storage must
+	// never imply enabling anyone to fill it.
+	//
+	// This list is also the seam a billing layer drives: a control plane adds a
+	// key when storage is bought and removes it when it is not. Nothing in this
+	// package knows what any of that costs.
+	PinKeys []string
+
+	// PinMaxBytes is the HARD budget for durable pins, counted over unique
+	// (deduplicated) stored bytes. A pin that would exceed it is REFUSED with a
+	// typed error — never admitted by evicting another pin. 0 => 1 GiB.
+	PinMaxBytes int64
+
+	// PinMaxPinBytes caps a single pin (a manifest plus its whole chunk set), so
+	// one enormous blob cannot consume the entire budget. 0 => 256 MiB.
+	PinMaxPinBytes int64
+
+	// PinMaxObjectBytes caps one pinned object. 0 => MaxObjectBytes.
+	PinMaxObjectBytes int64
+
+	// PinMaxPins caps the number of distinct pins, bounding index size and
+	// startup reconciliation cost independently of bytes. 0 => 10000.
+	PinMaxPins int
+
+	// PinClockSkew is the accepted timestamp window for signed pin writes, and
+	// how long a nonce is remembered against replay. 0 => 5m.
+	PinClockSkew time.Duration
+
 	// HTTPClient overrides the upstream client (tests, custom transports).
 	// A nil client gets one that does NOT follow redirects.
 	HTTPClient *http.Client
@@ -121,6 +171,15 @@ type Service struct {
 
 	reqLimiter    *limiter
 	globalLimiter *limiter
+
+	// pins is the DURABLE store (pin.go). nil unless PinDir is configured. It is
+	// deliberately a different type from `store` above: the cache evicts and the
+	// pin store cannot, and keeping them structurally distinct is what makes
+	// "a pin is never evicted under cache pressure" a property of the code
+	// rather than a rule someone has to remember.
+	pins      *pinStore
+	pinKeys   []string
+	pinReplay *keyauth.Guard
 }
 
 const (
@@ -137,6 +196,13 @@ const (
 	immutableMaxAge = 365 * 24 * 60 * 60
 	// maxFeedKeyB64Len bounds the {pub} path component before any decoding.
 	maxFeedKeyB64Len = 64
+
+	// Pin defaults. They are modest on purpose: durable retention spends the
+	// operator's disk, so the out-of-the-box budget is one an operator would not
+	// mind having chosen for them, and every real deployment sets its own.
+	defaultPinMaxBytes    = 1 << 30   // 1 GiB total
+	defaultPinMaxPinBytes = 256 << 20 // 256 MiB per pin
+	defaultPinMaxPins     = 10_000
 )
 
 // New builds the service. It returns an error only for an unusable
@@ -172,6 +238,18 @@ func New(cfg Config) (*Service, error) {
 	if cfg.GlobalRate == 0 {
 		cfg.GlobalRate, cfg.GlobalBurst = 500, 1000
 	}
+	if cfg.PinMaxBytes <= 0 {
+		cfg.PinMaxBytes = defaultPinMaxBytes
+	}
+	if cfg.PinMaxPinBytes <= 0 {
+		cfg.PinMaxPinBytes = defaultPinMaxPinBytes
+	}
+	if cfg.PinMaxObjectBytes <= 0 {
+		cfg.PinMaxObjectBytes = cfg.MaxObjectBytes
+	}
+	if cfg.PinMaxPins <= 0 {
+		cfg.PinMaxPins = defaultPinMaxPins
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -202,6 +280,28 @@ func New(cfg Config) (*Service, error) {
 		fetch:         newFetcher(client, ups, cfg.MaxObjectBytes, cfg.MaxUpstreamInflight),
 		reqLimiter:    newLimiter(cfg.RequestRate, cfg.RequestBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		globalLimiter: newLimiter(cfg.GlobalRate, cfg.GlobalBurst, cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
+		pinReplay:     keyauth.NewGuard(cfg.PinClockSkew, cfg.RateLimitMaxKeys),
+	}
+
+	// DURABLE PIN STORE. Opening it reconciles the on-disk index against the
+	// objects actually present, so a node comes up holding exactly what it can
+	// prove it still has (pin.go/load).
+	if cfg.PinDir != "" {
+		for _, k := range cfg.PinKeys {
+			// Normalise once, at construction: a key that cannot be parsed is a
+			// configuration error, not something to discover at request time.
+			norm := keyauth.NormalizeKey(k)
+			if norm == "" {
+				return nil, fmt.Errorf("pubcache: invalid pin key %q (want unpadded base64url Ed25519 public key)", k)
+			}
+			s.pinKeys = append(s.pinKeys, norm)
+		}
+		pins, err := newPinStore(cfg.PinDir, cfg.PinMaxBytes, cfg.PinMaxPinBytes,
+			cfg.PinMaxObjectBytes, cfg.PinMaxPins, cfg.Logger, cfg.now)
+		if err != nil {
+			return nil, err
+		}
+		s.pins = pins
 	}
 	return s, nil
 }
@@ -233,16 +333,38 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// Reads only. The role has no write surface at all: an operator's cache is
-	// filled by reads through it, never by anyone pushing objects into it.
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, s.prefix), "/")
+	parts := strings.Split(rest, "/")
+
+	// The CACHE has no write surface: it is filled by reads through it, never by
+	// anyone pushing objects into it. The PIN role does have one — durable
+	// retention is an explicit act someone has to ask for — and it is the only
+	// non-GET path here, gated by a signed request and an operator allowlist
+	// (pinapi.go).
+	if len(parts) == 1 && (parts[0] == "pin" || parts[0] == "unpin") {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.globalLimiter.allow("global") || !s.reqLimiter.allow(s.clientKey(r)) {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		if parts[0] == "pin" {
+			s.handlePin(w, r)
+		} else {
+			s.handleUnpin(w, r)
+		}
+		return
+	}
+
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, s.prefix), "/")
-	parts := strings.Split(rest, "/")
 
 	if len(parts) == 1 && parts[0] == "healthz" {
 		s.serveHealth(w)
@@ -266,6 +388,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveChunkProof(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "feed" && (parts[2] == "head" || parts[2] == "range"):
 		s.serveFeed(w, r, parts[1], parts[2])
+	case len(parts) == 1 && parts[0] == "pins":
+		s.handlePinList(w)
+	case len(parts) == 2 && parts[0] == "pins" && parts[1] == "status":
+		s.handlePinStatus(w)
 	default:
 		s.notServed(w)
 	}
@@ -320,6 +446,20 @@ func (s *Service) serveObject(w http.ResponseWriter, r *http.Request, kind Kind,
 // through to an upstream. It is the only path by which anything reaches the
 // store, and Verify gates it unconditionally.
 func (s *Service) lookup(r *http.Request, kind Kind, key string, addr Addr) ([]byte, bool) {
+	// PINS FIRST. A pinned copy is the durable one — retained by an explicit
+	// operator act, and guaranteed present for as long as the pin lives —
+	// whereas a cache entry may vanish at any moment under LRU pressure or TTL.
+	// Consulting the cache first would mean a TTL expiry could send a request
+	// upstream for an object this node is holding on its own disk, which is both
+	// slower and a pointless load on the swarm.
+	//
+	// This is also the read path the § 5.3 proof endpoint runs through, so
+	// proofs are served over pinned manifests exactly as over cached ones.
+	if s.pins != nil {
+		if body, ok := s.pins.get(kind, addr); ok {
+			return body, true
+		}
+	}
 	if body, _, ok := s.store.get(key); ok {
 		return body, true
 	}
@@ -540,7 +680,7 @@ func (s *Service) serveHealth(w http.ResponseWriter) {
 	st := s.store.stats()
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	out := map[string]any{
 		"role":       "dmtap-pub-cache",
 		"upstreams":  len(s.upstreams),
 		"serveFeeds": s.cfg.ServeFeeds,
@@ -553,5 +693,13 @@ func (s *Service) serveHealth(w http.ResponseWriter) {
 		"evictions":  st.Evictions,
 		"expired":    st.Expired,
 		"rejected":   st.Rejected,
-	})
+	}
+	// The pin store is reported SEPARATELY, never folded into the cache totals:
+	// the two have different budgets and different guarantees, and an operator
+	// reading one number for both would have no way to tell how much of their
+	// disk is a promise and how much is scratch.
+	if s.pins != nil {
+		out["pin"] = s.pins.stats()
+	}
+	_ = json.NewEncoder(w).Encode(out)
 }

@@ -165,7 +165,17 @@ func main() {
 		pcUpstreamTO   = flag.Duration("pubcache-upstream-timeout", envDuration("VULOS_RELAY_PUBCACHE_UPSTREAM_TIMEOUT", 0), "timeout for one upstream read (0=default 15s)")
 		pcInflight     = flag.Int("pubcache-max-inflight", int(envInt64("VULOS_RELAY_PUBCACHE_MAX_INFLIGHT", 0)), "max concurrent upstream fetches across the role (0=default 16)")
 		pcServeFeeds   = flag.Bool("pubcache-serve-feeds", envOr("VULOS_RELAY_PUBCACHE_SERVE_FEEDS", "") == "1", "also proxy the MUTABLE feed head/range reads (never cached; a feed head is signature-authenticated, which this node cannot verify)")
-		pcServeProofs  = flag.Bool("pubcache-serve-proofs", envOr("VULOS_RELAY_PUBCACHE_SERVE_PROOFS", "") == "1", "also serve the OPTIONAL chunk-tree range proofs (FEEDS.md § 5.3: manifest/{id}/proof?chunk=i) for O(log n) verified partial fetch")
+		// DURABLE PINNING (substrate/ROLES.md § 6). The cache holds soft state;
+		// a PIN is a durability promise kept on disk across restarts, never
+		// evicted under cache pressure, and bounded by its own hard byte budget.
+		// It is off until an operator names a directory, and even then accepts
+		// no writes until the operator names the keys allowed to spend that disk.
+		pcPinDir      = flag.String("pubcache-pin-dir", envOr("VULOS_RELAY_PUBCACHE_PIN_DIR", ""), "enable DURABLE PINNING rooted at this directory (empty=cache only, soft state). Pinned objects survive restart and are never evicted by cache pressure")
+		pcPinKeys     = flag.String("pubcache-pin-keys", envOr("VULOS_RELAY_PUBCACHE_PIN_KEYS", ""), "comma-separated base64url Ed25519 public keys allowed to pin/unpin here (empty=serve existing pins but accept no new ones)")
+		pcPinMaxBytes = flag.Int64("pubcache-pin-max-bytes", envInt64("VULOS_RELAY_PUBCACHE_PIN_MAX_BYTES", 0), "HARD durable-pin byte budget over unique stored bytes; a pin over it is REFUSED, never admitted by evicting another pin (0=default 1 GiB)")
+		pcPinMaxPin   = flag.Int64("pubcache-pin-max-pin-bytes", envInt64("VULOS_RELAY_PUBCACHE_PIN_MAX_PIN_BYTES", 0), "per-pin size cap, so one blob cannot consume the whole budget (0=default 256 MiB)")
+		pcPinMaxPins  = flag.Int("pubcache-pin-max-pins", int(envInt64("VULOS_RELAY_PUBCACHE_PIN_MAX_PINS", 0)), "maximum number of distinct pins (0=default 10000)")
+		pcServeProofs = flag.Bool("pubcache-serve-proofs", envOr("VULOS_RELAY_PUBCACHE_SERVE_PROOFS", "") == "1", "also serve the OPTIONAL chunk-tree range proofs (FEEDS.md § 5.3: manifest/{id}/proof?chunk=i) for O(log n) verified partial fetch")
 	)
 	flag.Parse()
 
@@ -273,6 +283,12 @@ func main() {
 			MaxUpstreamInflight: *pcInflight,
 			ServeFeeds:          *pcServeFeeds,
 			ServeProofs:         *pcServeProofs,
+
+			PinDir:         *pcPinDir,
+			PinKeys:        splitCSV(*pcPinKeys),
+			PinMaxBytes:    *pcPinMaxBytes,
+			PinMaxPinBytes: *pcPinMaxPin,
+			PinMaxPins:     *pcPinMaxPins,
 		},
 
 		EnableRendezvous: *enableRDV,
@@ -319,6 +335,14 @@ func main() {
 		log.Printf("vulos-relayd: PUBCACHE (DMTAP-PUB cache/pin) role ENABLED prefix=%s upstreams=%d %s", *pcPrefix, len(splitCSV(*pcUpstreams)), feeds)
 		if *pcServeProofs {
 			log.Printf("vulos-relayd: pubcache CHUNK-TREE RANGE PROOFS ENABLED (FEEDS.md § 5.3, optional) — manifest/{id}/proof?chunk=i serves an O(log n) audit path for verified seek/resume; clients still verify locally")
+		}
+		if *pcPinDir != "" {
+			keys := len(splitCSV(*pcPinKeys))
+			log.Printf("vulos-relayd: pubcache DURABLE PINNING ENABLED dir=%s authorized-keys=%d (pins survive restart, are never evicted by cache pressure, and are verified on first serve)", *pcPinDir, keys)
+			if keys == 0 {
+				log.Printf("vulos-relayd: pubcache pin store accepts NO new pins — set -pubcache-pin-keys to authorize who may spend this disk (it still serves pins it already holds)")
+			}
+			log.Printf("vulos-relayd: pubcache pin budget is HARD — a pin over it is refused with 507, never admitted by dropping another pin; usage counters at %s/pins/status", *pcPrefix)
 		}
 		log.Printf("vulos-relayd: NOTE this role serves PUBLIC PLAINTEXT you can read (dmtap § 22.6.1) — unlike the tunnel/mailbox/rendezvous roles it is NOT content-blind; every object is verified against its content address before it is cached or served")
 	}
