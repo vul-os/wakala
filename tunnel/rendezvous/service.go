@@ -58,6 +58,17 @@ type Config struct {
 	// ICE configures the STUN/TURN surface. See ICEConfig.
 	ICE ICEConfig
 
+	// AllowedOrigins narrows the browser CORS policy. EMPTY (the default) means
+	// "any origin, without credentials", which is what makes this an open
+	// substrate a browser app can point at directly. When set, only a listed
+	// origin is echoed back and others get no CORS headers.
+	//
+	// This is a courtesy/traffic-shaping knob, NOT an access control: every write
+	// here is Ed25519-signed and replay-guarded, credentials are never allowed,
+	// and a non-browser client ignores CORS entirely. See cors.go for the full
+	// policy rationale.
+	AllowedOrigins []string
+
 	// ClockSkew is the ± freshness window for signed writes. 0 => 5m.
 	ClockSkew time.Duration
 
@@ -182,6 +193,11 @@ type Service struct {
 	pollLim     *limiter
 	globalLim   *limiter
 
+	// corsOrigins is the normalized Config.AllowedOrigins. Empty (the default)
+	// means the permissive "any origin, no credentials" policy — see cors.go for
+	// why that is safe on this specific self-authenticating surface.
+	corsOrigins []string
+
 	st  stats
 	now func() time.Time
 }
@@ -247,6 +263,8 @@ func New(cfg Config) *Service {
 		depositLim:  newLimiter(limitOr(cfg.DepositRate, 30), limitOr(cfg.DepositBurst, 60), cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		pollLim:     newLimiter(limitOr(cfg.PollRate, 30), limitOr(cfg.PollBurst, 60), cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
 		globalLim:   newLimiter(limitOr(cfg.GlobalRate, 2000), limitOr(cfg.GlobalBurst, 4000), cfg.RateLimitIdleTTL, cfg.RateLimitMaxKeys),
+
+		corsOrigins: normalizeOrigins(cfg.AllowedOrigins),
 	}
 	return s
 }
@@ -277,7 +295,12 @@ func (s *Service) Handler() http.Handler {
 
 	mux.HandleFunc("GET "+p+"/ice", s.handleICE)
 	mux.HandleFunc("GET "+p+"/healthz", s.handleHealth)
-	return mux
+	// BROWSER ACCESS: wrap the whole rendezvous surface — and nothing else — in
+	// the CORS policy, which also answers preflight OPTIONS (an unregistered
+	// method on a registered ServeMux path is a 405, which is exactly what blocked
+	// browsers before). See cors.go for the policy and why it is safe here but
+	// must never be extended to the tunnel/proxy paths.
+	return s.withCORS(mux)
 }
 
 // ServeHTTP lets the Service be used directly as an http.Handler.
