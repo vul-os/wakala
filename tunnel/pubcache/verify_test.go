@@ -42,6 +42,12 @@ func cborHead(major byte, arg uint64) []byte {
 func cborUint(v uint64) []byte  { return cborHead(0, v) }
 func cborBytes(b []byte) []byte { return append(cborHead(2, uint64(len(b))), b...) }
 
+// cborNegInt encodes a CBOR major-type-1 negative integer with the given
+// additional-info argument (value = -1-arg). Used only to construct
+// spec-illegal fixtures: § 22's field tables type size/chunk_sz/seq/ts as
+// unsigned, so a well-formed object never contains one of these.
+func cborNegInt(arg uint64) []byte { return cborHead(1, arg) }
+
 func cborMap(pairs ...[]byte) []byte {
 	out := cborHead(5, uint64(len(pairs)/2))
 	for _, p := range pairs {
@@ -340,6 +346,93 @@ func TestVerifyManifestToleratesExtensionKeys(t *testing.T) {
 	)
 	if err := Verify(KindManifest, id, body); err != nil {
 		t.Fatalf("extension key rejected: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FEEDS.md § 4.3 ordered-domain invariant, applied to PubManifest.size (u64)
+// and PubManifest.chunk_sz (u32) — the Feeds twin of SYNC.md § 3's fixed-width
+// HLC rule.
+//
+// Before this guard, verifiedManifestChunks presence-checked keys 2 and 3 but
+// never inspected the encoded value — neither field participates in the
+// Merkle-root computation Verify actually checks — so a manifest carrying a
+// negative size (CBOR major type 1) or a chunk_sz above 2^32-1 passed
+// entirely unexamined and would have been cached and re-served as "verified."
+// A u64/u32-typed implementation (dmtap-core, kerf-pub) cannot represent such
+// a value at all, so the two engines would disagree about whether the object
+// even parses — indistinguishable from a fork to anyone diffing them. This is
+// the same class of defect kerf-pub fixed for FeedEntry/FeedHead.seq (exo/kerf
+// 66ea6e33): the width is enforced at the decode boundary, not inferred from
+// whatever downstream check happens to ignore the value today.
+
+func TestVerifyManifestRejectsNegativeSize(t *testing.T) {
+	h := HashBytes([]byte("a"))
+	hc := h
+	id := ManifestRoot([]Addr{h})
+	idb := id
+	body := cborMap(
+		cborUint(1), cborBytes(idb[:]),
+		cborUint(2), cborNegInt(0), // size = -1
+		cborUint(3), cborUint(1<<20),
+		cborUint(4), cborArray(cborBytes(hc[:])),
+		cborUint(6), cborUint(0),
+	)
+	if err := Verify(KindManifest, id, body); !errors.Is(err, ErrMalformedObject) {
+		t.Fatalf("negative size accepted: %v", err)
+	}
+}
+
+func TestVerifyManifestRejectsNegativeChunkSz(t *testing.T) {
+	h := HashBytes([]byte("a"))
+	hc := h
+	id := ManifestRoot([]Addr{h})
+	idb := id
+	body := cborMap(
+		cborUint(1), cborBytes(idb[:]),
+		cborUint(2), cborUint(1),
+		cborUint(3), cborNegInt(4), // chunk_sz = -5
+		cborUint(4), cborArray(cborBytes(hc[:])),
+		cborUint(6), cborUint(0),
+	)
+	if err := Verify(KindManifest, id, body); !errors.Is(err, ErrMalformedObject) {
+		t.Fatalf("negative chunk_sz accepted: %v", err)
+	}
+}
+
+func TestVerifyManifestRejectsChunkSzAboveU32(t *testing.T) {
+	h := HashBytes([]byte("a"))
+	hc := h
+	id := ManifestRoot([]Addr{h})
+	idb := id
+	body := cborMap(
+		cborUint(1), cborBytes(idb[:]),
+		cborUint(2), cborUint(1),
+		cborUint(3), cborUint(uint64(1)<<32), // one past u32
+		cborUint(4), cborArray(cborBytes(hc[:])),
+		cborUint(6), cborUint(0),
+	)
+	if err := Verify(KindManifest, id, body); !errors.Is(err, ErrMalformedObject) {
+		t.Fatalf("oversized chunk_sz accepted: %v", err)
+	}
+}
+
+// TestVerifyManifestAcceptsBoundaryWidths: the guard rejects *outside* the
+// declared width, not *at* it — the boundary value itself remains legal.
+func TestVerifyManifestAcceptsBoundaryWidths(t *testing.T) {
+	h := HashBytes([]byte("a"))
+	hc := h
+	id := ManifestRoot([]Addr{h})
+	idb := id
+	body := cborMap(
+		cborUint(1), cborBytes(idb[:]),
+		cborUint(2), cborUint(^uint64(0)),        // size at the u64 boundary
+		cborUint(3), cborUint((uint64(1)<<32)-1), // chunk_sz at the u32 boundary
+		cborUint(4), cborArray(cborBytes(hc[:])),
+		cborUint(6), cborUint(0),
+	)
+	if err := Verify(KindManifest, id, body); err != nil {
+		t.Fatalf("boundary-width size/chunk_sz rejected: %v", err)
 	}
 }
 

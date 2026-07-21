@@ -85,6 +85,42 @@ const (
 	manifestKeyExtensionFloor = 64
 )
 
+// requireUintField decodes a manifest field the § 22.2.1 table types as a
+// fixed-width unsigned integer (`size`/`u64`, `chunk_sz`/`u32`), rejecting
+// anything outside that domain AT THE DECODE BOUNDARY rather than admitting it
+// into a bare presence check.
+//
+// CBOR major type 1 (negative int) is structurally well-formed CBOR —
+// skipValue and parseUintKeyedMap happily walk past it, because their job is
+// syntax, not the spec's field typing — so without this, a manifest carrying a
+// negative `size` or a `chunk_sz` above 2^32-1 would pass verifiedManifestChunks
+// entirely unexamined: the field is never used in the Merkle-root computation,
+// only presence-checked. That is exactly the cross-engine well-formedness gap
+// FEEDS.md § 4.3's ordered-domain invariant names: a u64/u32-typed
+// implementation (dmtap-core, kerf-pub) cannot represent such a value at all,
+// so this cache would consider "valid and cacheable" an object the reference
+// implementations consider unparseable — indistinguishable from a fork to
+// anyone diffing the two. Enforced here the same way kerf-pub's
+// `_require_uint` enforces it for `seq`/`ts` (exo/kerf 66ea6e33): the boundary
+// value itself (2^bits - 1) stays legal, only values outside the width are
+// rejected.
+func requireUintField(val []byte, what string, bits int) (uint64, error) {
+	major, arg, n, err := readHead(val)
+	if err != nil {
+		return 0, err
+	}
+	if major != cborMajorUint {
+		return 0, fmt.Errorf("%w: PubManifest.%s must be an unsigned integer, got cbor major type %d", ErrMalformedObject, what, major)
+	}
+	if n != len(val) {
+		return 0, fmt.Errorf("%w: PubManifest.%s has trailing bytes", ErrMalformedObject, what)
+	}
+	if bits < 64 && arg >= uint64(1)<<uint(bits) {
+		return 0, fmt.Errorf("%w: PubManifest.%s exceeds u%d range: %d", ErrMalformedObject, what, bits, arg)
+	}
+	return arg, nil
+}
+
 // verifiedManifestChunks checks a PubManifest against the address it was
 // fetched by (§ 22.2.1, § 22.2.3) and, on success, returns its ordered
 // plaintext chunk list.
@@ -139,8 +175,14 @@ func verifiedManifestChunks(want Addr, body []byte) ([]Addr, error) {
 			}
 			haveChunk = true
 		case manifestKeySize:
+			if _, err := requireUintField(e.val, "size", 64); err != nil {
+				return nil, err
+			}
 			haveSize = true
 		case manifestKeyChunkSz:
+			if _, err := requireUintField(e.val, "chunk_sz", 32); err != nil {
+				return nil, err
+			}
 			haveCsz = true
 		case manifestKeySuite:
 			haveSuite = true
