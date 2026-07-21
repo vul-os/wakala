@@ -6,8 +6,6 @@
 
 **The sovereign connectivity fabric — `@vulos/relay-client` peer-fabric SDK + a self-hosted Go reverse-tunnel**
 
-<sub><img src="logo.png" height="14" alt="VulOS"> Part of <strong><a href="https://vulos.org">VulOS</a></strong> — the open, self-hostable web OS &amp; app suite. Runs standalone, or as an app hosted by the Vulos OS.</sub>
-
 [![npm](https://img.shields.io/npm/v/%40vulos%2Frelay-client?label=%40vulos%2Frelay-client)](https://www.npmjs.com/package/@vulos/relay-client)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![CI](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/vul-os/vulos-relay/actions/workflows/ci.yml)
@@ -54,28 +52,6 @@ deliverables**:
 > (with auth-token injection) is the VulOS shell's own internal reverse proxy —
 > a separate concern that stays in the OS. Relay is for crossing the *network*
 > boundary (P2P + public exposure), not the in-box one.
-
----
-
-## Part of VulOS
-
-<sub><img src="logo.png" height="14" alt="VulOS"> Part of <strong><a href="https://vulos.org">VulOS</a></strong> — the open, self-hostable web OS &amp; app suite. Runs standalone, or as an app hosted by the Vulos OS.</sub>
-
-**Vulos = free, open-source software + two paid services.** The Vulos OS, all its
-apps, and the app store are OSS and free — you self-host them. Vulos bills for **only
-two things**: **Vulos Relay** (reachability — this repo) and **backup storage**
-(buckets). There is no compute/box billing, no mail billing, and no app-store
-subscription.
-
-Vulos Relay is one of those **two paid services** — but the paid part is only the
-**managed, multi-region, autoscaled PoP pool**. The **software and the protocols are
-fully open and self-hostable**: `vulos-relayd` is MIT, runs with **no Vulos account
-and no Vulos Cloud** (CP-optional), and the **rendezvous role** it serves
-(announce/resolve/signal/mailbox — see **[docs/RENDEZVOUS.md](docs/RENDEZVOUS.md)**)
-is an **open protocol anyone can implement**. `vulos-relayd` is the *reference*
-implementation of that role; any conforming node interoperates. Apps take a hard
-runtime dependency on no relay — reachability/discovery is a feature that lights up
-when a relay (yours or Vulos-run) is present.
 
 ---
 
@@ -655,3 +631,10 @@ VulOS project; source and issues at
 ---
 
 <sub><img src="docs/assets/vulos-logo.png" height="16" alt="VulOS"> · <strong>Built with purpose. Open by design.</strong></sub>
+
+---
+
+<p align="center">
+  <a href="https://vulos.org"><img src="docs/assets/vulos-logo.png" alt="vulos" height="20"></a><br>
+  <sub><a href="https://vulos.org"><b>vulos</b></a> — open by design</sub>
+</p>
