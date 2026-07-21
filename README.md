@@ -627,11 +627,6 @@ commit conventions, and scope constraints.
 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Vulos Relay is a
 VulOS project; source and issues at
 [github.com/vul-os/vulos-relay](https://github.com/vul-os/vulos-relay).
-
----
-
-<sub><img src="docs/assets/vulos-logo.png" height="16" alt="VulOS"> · <strong>Built with purpose. Open by design.</strong></sub>
-
 ---
 
 <p align="center">
