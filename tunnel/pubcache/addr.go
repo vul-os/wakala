@@ -4,7 +4,10 @@
 //
 // The role in one sentence: a node may cache and re-serve PUBLIC,
 // content-addressed, self-verifying objects — announces, manifests, chunks —
-// on behalf of upstream § 22 gateways, so readers get a nearby copy.
+// on behalf of upstream § 22.5.1 PUB servers, so readers get a nearby copy.
+// (DMTAP now reserves "gateway" for the unrelated § 7 legacy-mail role; the
+// upstreams this package reads through are the public-object HTTP endpoint /
+// "PUB server" profile, dmtap commit f2243c4.)
 //
 // Why this is safe to run on shared infrastructure: every object served here is
 // authenticated by the address it is fetched by. A cache therefore CANNOT FORGE

@@ -35,7 +35,7 @@ import (
 // correct response is to rotate to another holder, not to trust this one.
 var ErrNotServed = errors.New("pubcache: object not served by this holder")
 
-// parseUpstreams validates the operator-configured gateway list.
+// parseUpstreams validates the operator-configured PUB server list.
 func parseUpstreams(raw []string) ([]*url.URL, error) {
 	out := make([]*url.URL, 0, len(raw))
 	for _, s := range raw {

@@ -164,7 +164,7 @@ func main() {
 		// to serve, never forge.
 		enablePubCache = flag.Bool("pubcache", envOr("VULOS_RELAY_PUBCACHE", "") == "1", "enable the DMTAP-PUB public-object cache/pin role (or VULOS_RELAY_PUBCACHE=1) — serves PLAINTEXT, explicit operator opt-in")
 		pcPrefix       = flag.String("pubcache-prefix", envOr("VULOS_RELAY_PUBCACHE_PREFIX", "/.well-known/dmtap-pub"), "mount prefix for the cache/pin role")
-		pcUpstreams    = flag.String("pubcache-upstreams", envOr("VULOS_RELAY_PUBCACHE_UPSTREAMS", ""), "comma-separated § 22.5.1 gateway base URLs to read through, tried in order (the ONLY hosts this role will contact)")
+		pcUpstreams    = flag.String("pubcache-upstreams", envOr("VULOS_RELAY_PUBCACHE_UPSTREAMS", ""), "comma-separated § 22.5.1 PUB server base URLs to read through, tried in order (the ONLY hosts this role will contact)")
 		pcMaxObject    = flag.Int64("pubcache-max-object-bytes", envInt64("VULOS_RELAY_PUBCACHE_MAX_OBJECT", 0), "per-object size cap (0=default 16 MiB)")
 		pcMaxCache     = flag.Int64("pubcache-max-bytes", envInt64("VULOS_RELAY_PUBCACHE_MAX_BYTES", 0), "total cache size cap, LRU-evicted (0=default 256 MiB)")
 		pcTTL          = flag.Duration("pubcache-ttl", envDuration("VULOS_RELAY_PUBCACHE_TTL", 0), "per-object cache lifetime (0=default 1h)")

@@ -18,8 +18,8 @@ import (
 // verification gate on the miss path, the never-cached feed passthrough, rate
 // limits, bounded fan-out, and the SSRF-free upstream story.
 
-// fakeUpstream is a stand-in § 22.5.1 gateway. It counts requests so tests can
-// assert that a hit does NOT touch it and that a herd is coalesced.
+// fakeUpstream is a stand-in § 22.5.1 PUB server. It counts requests so tests
+// can assert that a hit does NOT touch it and that a herd is coalesced.
 type fakeUpstream struct {
 	mu      sync.Mutex
 	objects map[string][]byte // path -> body
@@ -285,7 +285,7 @@ func TestMalformedAddressNeverReachesUpstream(t *testing.T) {
 }
 
 // TestOversizeUpstreamObjectRefused: the per-object cap is enforced against the
-// upstream, so a hostile gateway cannot stream unbounded bytes into this node.
+// upstream, so a hostile PUB server cannot stream unbounded bytes into this node.
 func TestOversizeUpstreamObjectRefused(t *testing.T) {
 	big := make([]byte, 4096)
 	addr := HashBytes(big)

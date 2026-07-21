@@ -136,8 +136,8 @@ vs Path B (Vulos-hosted) — are in [GETTING-STARTED.md](docs/GETTING-STARTED.md
   **[docs/RENDEZVOUS.md](docs/RENDEZVOUS.md)** (§ *Using FabricClient without a host box*).
 - **Open cache/pin role** — `vulos-relayd` can also serve the DMTAP-PUB
   **public-object read surface** (`/.well-known/dmtap-pub/{announce,manifest,chunk}`)
-  as a **verifying read-through cache** in front of configured upstream gateways
-  (enable with `-pubcache`). Public objects are **self-verifying**, so a cache
+  as a **verifying read-through cache** in front of configured upstream PUB
+  servers (enable with `-pubcache`). Public objects are **self-verifying**, so a cache
   **cannot forge one — only fail to serve it**; this node additionally **refuses to
   store any object whose bytes do not match its content address**, so a poisoned
   upstream never becomes a poisoned cache. It is **OFF by default and explicit

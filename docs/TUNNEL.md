@@ -321,7 +321,7 @@ is cached or served unless its bytes match its content address.
 |---|---|---|---|
 | `-pubcache` | `VULOS_RELAY_PUBCACHE` | `off` | Enable the cache/pin role. |
 | `-pubcache-prefix` | `VULOS_RELAY_PUBCACHE_PREFIX` | `/.well-known/dmtap-pub` | Mount prefix for the role's routes. |
-| `-pubcache-upstreams` | `VULOS_RELAY_PUBCACHE_UPSTREAMS` | — | Comma-separated § 22.5.1 gateway base URLs, tried in order. **The only hosts this role will contact** — a client can never name one. Empty ⇒ a holder that holds nothing (404s everything). |
+| `-pubcache-upstreams` | `VULOS_RELAY_PUBCACHE_UPSTREAMS` | — | Comma-separated § 22.5.1 PUB server base URLs, tried in order. **The only hosts this role will contact** — a client can never name one. Empty ⇒ a holder that holds nothing (404s everything). |
 | `-pubcache-max-object-bytes` | `VULOS_RELAY_PUBCACHE_MAX_OBJECT` | `0` (⇒ 16 MiB) | Per-object size cap; an oversize object is refused, not stored. |
 | `-pubcache-max-bytes` | `VULOS_RELAY_PUBCACHE_MAX_BYTES` | `0` (⇒ 256 MiB) | Total cache cap, enforced by LRU eviction. |
 | `-pubcache-ttl` | `VULOS_RELAY_PUBCACHE_TTL` | `0` (⇒ 1h) | Per-object cache lifetime (a space/freshness policy — objects are immutable). |

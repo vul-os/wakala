@@ -135,7 +135,7 @@ relayd and get P2P"* — **did not work from a browser**. Four defects, all fixe
 - **`vulos-relayd` can now serve the DMTAP-PUB public-object read surface** (new
   `tunnel/pubcache` package), enabled with `-pubcache`. It is a **verifying
   read-through cache** in front of operator-configured upstream § 22.5.1
-  gateways, mounted on the relay's apex host under `/.well-known/dmtap-pub`
+  PUB servers, mounted on the relay's apex host under `/.well-known/dmtap-pub`
   (never shadowing a tunnel subdomain's own well-known paths). `vulos-relayd` is
   a reference implementation; **any node may serve this role** — the behaviour is
   documented in **`docs/PUBCACHE.md`** for anyone to implement.
@@ -189,9 +189,9 @@ relayd and get P2P"* — **did not work from a browser**. Four defects, all fixe
     hashes in value; the two are asserted equal to the § 3.2 RFC 6962 split rule
     for every `n` up to 300, and a 5-chunk interop vector is pinned byte-for-byte.
   - **BROWSER VERIFIER — `@vulos/relay-client/chunkProof` (new subpath).** The
-    Go verifier only removed trust from the gateway for *server-to-server*
+    Go verifier only removed trust from the PUB server for *server-to-server*
     readers; the clients that most need partial fetch run in a **browser**, and
-    without a verifier there they still had to take the gateway's word for the
+    without a verifier there they still had to take the PUB server's word for the
     bytes — the exact trust this design exists to remove. The JS module
     reimplements § 3.2 term for term (DS-tagged leaves over the chunk **address**,
     bare 32-byte interior nodes, bottom-up path, odd-node promotion contributing

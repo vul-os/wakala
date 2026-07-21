@@ -225,7 +225,7 @@ same fold shape for a given index accept the same proof, and correctly so — th
 
 Server-side verification alone leaves the feature half-built. If only a Go node
 can check a path, then a **web** client — the one that most needs partial fetch —
-still has to trust whichever gateway handed it the bytes, which is the exact
+still has to trust whichever PUB server handed it the bytes, which is the exact
 trust the content-addressed design exists to remove. So the JS client ships the
 same verifier:
 
@@ -253,7 +253,7 @@ are available separately for callers that already have the path in hand, and
 already a dependency of the rendezvous client.
 
 `verifyChunkResponse` also cross-checks the index **inside** the proof against
-the one you requested. A gateway answering a seek for chunk 3 with a perfectly
+the one you requested. A PUB server answering a seek for chunk 3 with a perfectly
 valid proof of chunk 1 would otherwise pass every hash check and hand a player
 the wrong bytes at the wrong offset.
 
@@ -351,7 +351,7 @@ from disk before the cache or any upstream is consulted.
 |---|---|---|---|
 | `-pubcache` | `VULOS_RELAY_PUBCACHE=1` | off | enable the role (serves readable plaintext — opt in deliberately) |
 | `-pubcache-prefix` | `VULOS_RELAY_PUBCACHE_PREFIX` | `/.well-known/dmtap-pub` | mount prefix |
-| `-pubcache-upstreams` | `VULOS_RELAY_PUBCACHE_UPSTREAMS` | *(none)* | comma-separated gateway base URLs, tried in order |
+| `-pubcache-upstreams` | `VULOS_RELAY_PUBCACHE_UPSTREAMS` | *(none)* | comma-separated PUB server base URLs, tried in order |
 | `-pubcache-max-object-bytes` | `VULOS_RELAY_PUBCACHE_MAX_OBJECT` | 16 MiB | per-object size cap |
 | `-pubcache-max-bytes` | `VULOS_RELAY_PUBCACHE_MAX_BYTES` | 256 MiB | total cache cap (LRU) |
 | `-pubcache-ttl` | `VULOS_RELAY_PUBCACHE_TTL` | 1h | per-object cache lifetime |

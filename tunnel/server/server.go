@@ -259,7 +259,7 @@ type Config struct {
 	// CACHE/PIN ROLE (DMTAP-PUB public objects, dmtap substrate/ROLES.md § 6).
 	// When EnablePubCache is set, the relay ALSO serves the § 22.5.1 well-known
 	// read surface (tunnel/pubcache) on its OWN apex host, as a verifying
-	// read-through cache in front of operator-configured upstream gateways.
+	// read-through cache in front of operator-configured upstream PUB servers.
 	//
 	// UNLIKE every other role this relay serves, THIS ONE IS NOT CONTENT-BLIND:
 	// public objects are plaintext the operator can read, which shifts the

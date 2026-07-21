@@ -3,8 +3,9 @@
 // This is the module that makes verified partial fetch mean anything on the web.
 // The Go side (tunnel/pubcache/proof.go) can already serve an audit path and
 // verify one server-to-server; without a counterpart here, a browser reading a
-// large object has no choice but to TRUST THE GATEWAY that handed it the bytes —
-// which is precisely the property the content-addressed design exists to remove.
+// large object has no choice but to TRUST THE PUB SERVER that handed it the
+// bytes — which is precisely the property the content-addressed design exists
+// to remove.
 //
 // What it buys, concretely: a video player seeking into the middle of a
 // multi-gigabyte blob, or any client resuming a large download, fetches chunk i

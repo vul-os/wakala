@@ -25,8 +25,8 @@ import {
 //     an implementation checked only against itself is checked against nothing.
 //  2. ADVERSARIAL BEHAVIOUR — that every way of lying about a chunk is
 //     REJECTED. A proof checker tested only on valid proofs is not tested at
-//     all, and this one runs in a browser against an untrusted gateway, so most
-//     of what follows is an attack.
+//     all, and this one runs in a browser against an untrusted PUB server, so
+//     most of what follows is an attack.
 
 const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('')
 const utf8 = (s) => new TextEncoder().encode(s)
@@ -140,7 +140,7 @@ describe('tree shape', () => {
 
 // ── adversarial: the verifier must reject every lie ──────────────────────────
 
-describe('adversarial — a lying gateway', () => {
+describe('adversarial — a lying PUB server', () => {
   const chunks = () => vectorChunks()
   const root = INTEROP_ROOT_B64
   const good = (i) => ({ root, nChunks: VECTOR_N, index: i, chunk: VECTOR_DATA[i], path: chunkProof(chunks(), i) })

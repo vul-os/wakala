@@ -17,7 +17,7 @@ import (
 )
 
 // service.go — the § 22.5.1 read surface, served as a read-through cache in
-// front of operator-configured upstream gateways.
+// front of operator-configured upstream PUB servers.
 //
 // Endpoint map (PathPrefix defaults to "/.well-known/dmtap-pub"):
 //
@@ -53,10 +53,11 @@ type Config struct {
 	// PathPrefix is the mount prefix. Default "/.well-known/dmtap-pub".
 	PathPrefix string
 
-	// Upstreams is the OPERATOR-CONFIGURED list of § 22.5.1 gateway base URLs
-	// this cache reads through to, tried in order. This list is the ONLY set of
-	// hosts the role will ever contact — a client can never name one, which is
-	// what makes the role SSRF-free by construction rather than by filtering.
+	// Upstreams is the OPERATOR-CONFIGURED list of § 22.5.1 PUB server base
+	// URLs this cache reads through to, tried in order. This list is the ONLY
+	// set of hosts the role will ever contact — a client can never name one,
+	// which is what makes the role SSRF-free by construction rather than by
+	// filtering.
 	Upstreams []string
 
 	// MaxObjectBytes caps a single object. 0 => 16 MiB (comfortably above the
