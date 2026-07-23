@@ -146,3 +146,40 @@ freeze, but it doesn't block current Wakala work.
 [2026-07-24 wire] ✓ RESOLVED — added descriptor key 6 = visibility {class, level} to §18; pushed
 kotva@core-v0.2. Pin that tag.
 -->
+
+[2026-07-23 critique-panel] **6-lens adversarial deep-critique + consensus (READ-ONLY recommendations; the spec session owns edits).** Full per-lens critiques + synthesis in the Wakala session workflow `wf_13f925ea-0b5`. Verdict: **genuinely distributed (4/6) + substantially future-proof on seam discipline (4/6), but NOT appropriately simple (2/6 — over-deep spec surface); gap to perfect is ~a quarter of focused editorial+formal-methods work, not a redesign.** Prioritized consensus below.
+
+## Synthesis Judge — Consensus Review of KOTVA (6 lenses)
+
+_Read-only recommendations. The spec session owns all edits; nothing below changes the tree._
+_Note: the KOTVA spec tree is not in this checkout — findings rest on the six critiques' cited evidence and their cross-lens agreement._
+
+### Founder's three questions
+- **Future-proof?** Substantially (4/6). Seam discipline is mature; but 2 load-bearing seams have no bytes, the mixnet is pinned not seamed, and the flagship seam example doesn't compose.
+- **Genuinely distributed?** Yes, architecturally (4/6 — strongest axis). Residual centralization is economic/enforcement-shaped, not architectural, but real.
+- **Simple / not too deep?** **No (2/6 — decisive weak axis).** Waist is thin; realized spec is deep and sprawling. Five own non-interoperable implementations prove the cost.
+
+### CRITICAL (multi-lens)
+1. **Mixnet contradiction** — DIRECTION/THREAT-MODEL/README say non-normative research (no file in research/), but 04-transport/06-privacy/00-overview ship it as normative headline crypto + default privacy tier. Governing docs factually false for the most security-critical mechanism. _[crypto, pragmatist, +3]_
+2. **'Accountable' has no wire bytes** — GatewayAuthz, CoordinatorDescriptor, SignedTariff cited as MUST-gates with error codes but zero CDDL/DS-tag exist. Coordinator accountability not wire-checkable. _[protocol, +4]_
+3. **'Authorize never classify' unenforceable** — no detection, attested tier, or reproducible-build requirement at the default level. The anti-recentralization keystone can't be observed. _[redteam]_
+
+### HIGH (multi-lens)
+4. Spec-alone interop unproven; ~5 non-byte-interoperable implementations; actual plan is one shared Rust core. _[protocol, distsys, simplicity, pragmatist]_
+5. Suite 0x02 (mandatory) has zero KATs; PQ combiner drafts unratified. _[protocol, redteam]_
+6. Discovery/indexer re-centralization unsolved, "no deployed precedent" for the fix. _[pragmatist, redteam, distsys, crypto]_
+7. Coordinator economics remove every historical funding mechanism → may not exist at quality. _[pragmatist, redteam]_
+8. World ID single-vendor personhood anchor under multi-jurisdiction bans. _[redteam, pragmatist]_
+9. Custodial escrow held to weaker bonding bar than lesser kinds; licensing exception uncounted. _[redteam, pragmatist]_
+10. RecoveryPolicy §1.4 shipped + patched a real auth bypass by inspection; no formal model. _[crypto]_
+11. Spec surface enormous + self-restating; capability count stated 5 vs 6 (MOTE missing). _[simplicity, pragmatist, +2]_
+
+### MED
+12. REPUTATION→OpenRank broken as specified (REP-1/REP-2 severs transitivity). _[simplicity, pragmatist, crypto]_
+13. SYNC is a general-purpose CRDT framework; open-namespace admission can diverge honest replicas + false HALT_ALERT. _[distsys, simplicity]_
+14. Premature generality: suites 0x03-0x05, zero-consumer `compute`, transport-split kinds. _[crypto, redteam, simplicity]_
+15. Roles layer: no multi-homing rule vs the clustering failure it cites. _[distsys]_
+16. Vouch deanonymized by a single exit mix (≈f vs ≈f² floor). _[redteam]_
+
+### Prioritized path to perfect+consensus (~1 quarter, not a redesign)
+Resolve mixnet direction (#1) → ship GatewayAuthz/CoordinatorDescriptor/SignedTariff CDDL (#2) → enforcement path for authorize-never-classify (#3) → 0x02 KATs (#5) → fix capability count/coverage tallies (#11) → machine-check §1.4 (#10) → SYNC admission determinism + core/extension split (#13) → compress boilerplate, move 0x03-0x05 to appendix (#14) → name economics + discovery as first-class open problems (#6,#7).
