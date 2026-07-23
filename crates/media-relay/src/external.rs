@@ -60,6 +60,32 @@ impl ExternalSfuKind {
     }
 }
 
+/// Peer addresses this generated coturn config MUST deny (anti-SSRF, see [`CoturnConfig::to_conf_text`]):
+/// every non-forwardable/private range from RFC 1918, RFC 6598 (carrier-grade NAT), RFC 3927 /
+/// RFC 4291 (link-local, incl. the `169.254.169.254` cloud-metadata endpoint), RFC 5737/RFC 3068
+/// (documentation/6to4 anycast), and the IPv6 equivalents (loopback, link-local, unique-local).
+/// `0.0.0.0/8` and `240.0.0.0/4` (reserved/multicast) are included for completeness alongside the
+/// dedicated `no-multicast-peers` directive.
+const DENIED_PEER_IP_RANGES: &[&str] = &[
+    "0.0.0.0-0.255.255.255",
+    "10.0.0.0-10.255.255.255",
+    "100.64.0.0-100.127.255.255",
+    "127.0.0.0-127.255.255.255",
+    "169.254.0.0-169.254.255.255",
+    "172.16.0.0-172.31.255.255",
+    "192.0.0.0-192.0.0.255",
+    "192.0.2.0-192.0.2.255",
+    "192.88.99.0-192.88.99.255",
+    "192.168.0.0-192.168.255.255",
+    "198.18.0.0-198.19.255.255",
+    "198.51.100.0-198.51.100.255",
+    "203.0.113.0-203.0.113.255",
+    "240.0.0.0-255.255.255.255",
+    "::1",
+    "fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+    "fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+];
+
 /// A coturn `turnserver.conf` fragment (RFC 8656). Only the fields a media-relay operator
 /// actually needs to hand a real coturn binary; coturn's own documentation covers the rest — this
 /// type does not attempt to model coturn's full config surface.
@@ -112,6 +138,22 @@ impl CoturnConfig {
         // fingerprint-free; a documented coturn hardening default, not a Wakala invention.
         out.push_str("fingerprint\n");
         out.push_str("no-cli\n");
+        // Anti-SSRF: a TURN relay that will happily open a relayed transport address onto the
+        // operator's own loopback/private/link-local network is the #1 real-world coturn
+        // misconfiguration (it turns an authenticated call participant into a client that can
+        // reach 127.0.0.1 services, RFC 1918 internal hosts, or a cloud metadata endpoint like
+        // 169.254.169.254 through the operator's own relay). `no-loopback-peers` and
+        // `no-multicast-peers` are coturn's own built-in denials; the explicit `denied-peer-ip`
+        // ranges below cover every RFC 1918 / RFC 6598 / RFC 3927 / RFC 5737 / IPv6 ULA /
+        // link-local block a TURN peer address must never resolve to, generated safe-by-default
+        // rather than left to the operator to remember (the reachability-adapter's REACH-6/REACH-9
+        // box-side denial is the same discipline applied here, since coturn — unlike the adapter —
+        // does dial an arbitrary peer address on the client's behalf).
+        out.push_str("no-loopback-peers\n");
+        out.push_str("no-multicast-peers\n");
+        for range in DENIED_PEER_IP_RANGES {
+            out.push_str(&format!("denied-peer-ip={range}\n"));
+        }
         out
     }
 
@@ -405,6 +447,29 @@ mod tests {
         assert!(text.contains("max-port=49452"));
         // No media key, no room/participant PII — only sidecar transport config.
         assert!(!text.to_lowercase().contains("sframe"));
+    }
+
+    /// Anti-SSRF: the generated config must deny relaying to loopback/private/link-local/
+    /// cloud-metadata peer addresses by default — an operator who never edits the generated file
+    /// still gets a safe TURN relay, not an open pivot into their own network (the #1 real-world
+    /// coturn misconfiguration).
+    #[test]
+    fn coturn_config_denies_private_and_loopback_peer_ranges_by_default() {
+        let cfg = CoturnConfig::reference("wakala.example", "s3cr3t");
+        let text = cfg.to_conf_text();
+        assert!(text.contains("no-loopback-peers\n"));
+        assert!(text.contains("no-multicast-peers\n"));
+        // RFC 1918 private ranges.
+        assert!(text.contains("denied-peer-ip=10.0.0.0-10.255.255.255\n"));
+        assert!(text.contains("denied-peer-ip=172.16.0.0-172.31.255.255\n"));
+        assert!(text.contains("denied-peer-ip=192.168.0.0-192.168.255.255\n"));
+        // Loopback and link-local (incl. the 169.254.169.254 cloud-metadata endpoint).
+        assert!(text.contains("denied-peer-ip=127.0.0.0-127.255.255.255\n"));
+        assert!(text.contains("denied-peer-ip=169.254.0.0-169.254.255.255\n"));
+        // IPv6 loopback, unique-local, and link-local.
+        assert!(text.contains("denied-peer-ip=::1\n"));
+        assert!(text.contains("denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff\n"));
+        assert!(text.contains("denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff\n"));
     }
 
     #[test]
