@@ -147,6 +147,31 @@ freeze, but it doesn't block current Wakala work.
 kotva@core-v0.2. Pin that tag.
 -->
 
+[2026-07-23 reach] **DECISION (founder-authorised "decide + deep-research"; overridable) — REACH-2
+tunnel auth = libp2p-Noise `XX`, NOT §13 DMTAP-Auth.** Deep multi-lens research (workflow
+`wf_4ff01382-713`: libp2p-noise-standard · reverse-tunnel-prior-art · cryptographer/channel-binding ·
+kotva-fit) → decisive **Option A**. The box↔adapter tunnel is a libp2p-Noise XX handshake with each
+peer's **libp2p identity key = its kotva Ed25519 IK** (suite 0x01; PeerId = its multihash); the signed
+X25519-static-key payload gives mutual IK-auth channel-bound by construction (SIGMA sign-and-bind).
+**Why:** the current `auth.rs` signs `nonce ‖ name` with ZERO channel binding = Asokan tunnelled-auth
+vulnerable; §13 DMTAP-Auth is a web-login/RP ceremony (§13.3.1 flags relayed node-signed challenge as
+critical) — the wrong tool, and its mis-citation is what produced the vulnerable impl. Spec side (agent
+RCH-1, `profiles/reachability.md`): REACH-2 rewritten + REACH-2b control frames; §18-wire/§21-errors
+UNCHANGED (control frames session-local/unsigned; descriptor already = §18.8a `CoordinatorDescriptor`
+kind='reachability-adapter'; subdomain map stays in-memory/rebuildable). **Impl side (follows the spec
+freeze):** gut `auth.rs` (delete NonceRegistry/AuthAnnounce/Challenge/Response/signing_preimage/
+TUNNEL_AUTH_DS); add `libp2p-noise` + `libp2p-identity` on the workspace libp2p 0.56 line (as
+`crates/relay` pins), KEEP `yamux = 0.13`; run yamux over the Noise `Output` stream; move Registration
+inside the encrypted channel + add `ReachRegisterAck`; bind name→proven-PeerId-IK (TunnelRegistry
+already correct). **Impl-only OPEN (needs a ~1-day API spike before coding, NOT spec-blocking):** confirm
+libp2p-noise 0.56 exposes a standalone Inbound/Outbound upgrade over a bare `TcpStream` returning
+`(PeerId, Output<T>)` so we keep bare yamux 0.13 without importing the full Swarm/Transport stack
+(RECOMMENDED minimal path; escalate to full libp2p only if PeerId-native dialing/DCUtR is later wanted).
+**Atomicity MUST:** land libp2p-Noise as ONE step — do NOT ship an interim `nonce‖name over plaintext`
+or a `Noise-XX + unbound inner challenge`; both invite a false "authenticated" belief, worse than the
+current honestly-disclosed plaintext state. Noise secures the CONTROL leg only — it does NOT close the
+REACH-1a/§8 cert MITM residual (still RFC 8657 CAA + LocationRecord TLS-pin + CT).
+
 [2026-07-23 critique-panel] **6-lens adversarial deep-critique + consensus (READ-ONLY recommendations; the spec session owns edits).** Full per-lens critiques + synthesis in the Wakala session workflow `wf_13f925ea-0b5`. Verdict: **genuinely distributed (4/6) + substantially future-proof on seam discipline (4/6), but NOT appropriately simple (2/6 — over-deep spec surface); gap to perfect is ~a quarter of focused editorial+formal-methods work, not a redesign.** Prioritized consensus below.
 
 ## Synthesis Judge — Consensus Review of KOTVA (6 lenses)
