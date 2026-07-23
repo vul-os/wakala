@@ -1,5 +1,100 @@
 # Changelog
 
+## Wakala broker — Rust reference implementation (Unreleased)
+
+The all-Rust coordinator (broker) reference implementation of the KOTVA standard, living in
+`crates/` (`coordinator/CONTRACT.md`). New top section — the Go reverse-tunnel relay + JS SDK's
+own changelog, preserved unchanged, follows below.
+
+### The carve
+
+- `kotva-core`/`kotva-mail` split out of envoir into the kotva repo, consumed by **pinned tag**
+  `core-v0.2.0` only, never HEAD or a path dependency (the isango-churn guardrail). Wire bytes
+  unchanged — DS-tags stay `dmtap-*`, only the Rust crate identifiers renamed `dmtap_core` →
+  `kotva_core`.
+- envoir is now **node-only**: the mail gateway and its conformance/fuzz moved here.
+- The mail gateway **folded into wakala** as `crates/gateway`, the sole `terminating` kind.
+
+### The broker model
+
+- **Content-visibility as a checkable type**, not a policy promise: `VisibilityClass`
+  (`blind` / `blind-routing` / `terminating`) × `AssuranceLevel` (`structural` / `attested` /
+  `declared`) in `broker-economics`. A coordinator declares exactly one pair; the type says when
+  that declaration is verifiable and when it MUST NOT be presented as verified.
+- **COORD-1..8 conformance harness** (`broker-conformance`): the `Coordinator` trait every kind
+  implements, and the checklist runner from `CONTRACT.md` §7. Some clauses are decidable from the
+  descriptor alone; others (COORD-5, observed-vs-declared visibility) are behavioral and can only
+  be caught against real traffic — the harness marks those `Outcome::Behavioral` rather than
+  falsely passing them, and per-kind runtime tests discharge them where a real implementation
+  exists (gateway, reachability-adapter).
+- **Real Ed25519 signing** over deterministic CBOR (canonical §18.1.1) for descriptor, tariff, and
+  usage-receipt — no stub, no mock crypto. **No token, anywhere** (DIRECTION §5): settlement and
+  stake are existing-asset, verified-on-rail seams by construction, not a protocol currency.
+
+### The kinds
+
+Ten coordinator kinds now exist in `crates/`, each declaring exactly one content-visibility pair:
+
+- **gateway** — `terminating`. The legacy SMTP/IMAP/POP3 bridge, the one kind that unavoidably
+  sees plaintext (folded out of envoir).
+- **relay** — `blind` / `structural`. Real libp2p 0.56 Circuit Relay v2 server; forwards
+  ciphertext for NAT'd mesh peers, holds no decrypting key.
+- **media-relay** — `blind-routing` / `structural`. Orchestrates an external SFU (coturn/LiveKit
+  sidecar) for real-time media; routing metadata visible, SFrame-sealed payload opaque to it
+  (RFC 9605). Landing under W6 — see Honest limits below.
+- **reachability-adapter** — `blind-routing`. SNI-passthrough public reach for box services; the
+  box terminates TLS, the adapter forwards ciphertext it holds no key to read. REACH-2 tunnel
+  control-channel key-auth (challenge-response against the box's kotva-core identity) is real;
+  see Honest limits for what is still open.
+- **indexer / labeler / matcher** — `terminating` (default) / `declared`, with an `attested` (TEE)
+  option documented for indexer/matcher. Each declares `Gate::DerivedViewOnly` per CONTRACT §4's
+  carve-out: they rank/label/match only within their own opt-in, non-authoritative, subscribable
+  view — never a delivery/authoritative path.
+- **arbiter / oracle / compute** — `terminating` / `declared`, disclosed evidence, `Gate::NoDeliveryPath`
+  (dispute resolution / physical-fact attestation / outsourced compute are neither a delivery path
+  nor a §4 derived view). compute additionally documents an `attested` (TEE) "blind compute"
+  option, provisional per CONTRACT §5's own table.
+
+### Economics, admin, and conformance
+
+- **`broker-billing`** — kind-agnostic metering (`Meter`/`ResourceKind`), a signed
+  `TariffSchedule`, a `ReceiptLog` issuing signed `UsageReceipt`s per billed line item, and a
+  `SettlementRail` seam (no-token invariant) with one reference `InMemoryLedger` mock adapter plus
+  x402-style `PaymentRequired`/`PaymentProof` shapes. `StakeVerifier` defaults fail-closed
+  (`NoStakeRail`) — an unverifiable stake claim is no stake.
+- **`admin`** — the operator HTTP API (axum), composing broker-economics/broker-billing/
+  broker-conformance without reimplementing any of them: descriptor and tariff GET/PUT+sign
+  (rejects a silent visibility downgrade and any `token` field), metering/receipts GET, quota/rate
+  GET/PUT (declared, not enforced), key GET/rotate, and `/conformance` running the live COORD-1..8
+  checklist. Auth is a constant-time bearer token, fail-closed default-deny; reference binary
+  `wakala-admin` binds loopback by default.
+- **Runtime conformance tests** — real sign/verify + tamper cases and observed-vs-declared
+  visibility checks against the live wire path, for the kinds with real implementations (gateway,
+  reachability-adapter), discharging the COORD-1/COORD-5 behavioral findings the static harness
+  can only flag.
+
+### Honest limits
+
+Disclosed residuals, not silently fixed:
+
+- **reachability-adapter REACH-2**: the box↔adapter control channel is key-authenticated
+  (challenge-response against the box's identity, replay-inert) but **not yet Noise-encrypted** —
+  an on-path attacker can observe/DoS the control channel but not impersonate a box. Transport
+  confidentiality/integrity is still open.
+- **broker-billing receipts are a one-directional audit**: `UsageReceipt::verify()` proves the
+  coordinator signed a claim, never that the claim is true or that no unreceipted charge exists
+  elsewhere. Demonstrated by a test — a receipt for a fabricated, never-metered operation verifies
+  identically to a real one's.
+- **Settlement and stake are seams, not rails**: `SettlementRail`/`StakeVerifier` are traits with
+  exactly one reference adapter each (`InMemoryLedger`, a mock double-entry ledger; `NoStakeRail`,
+  fail-closed). No external custody or real settlement is wired.
+- **media-relay orchestrates an external SFU**, it does not embed one — bind-don't-reinvent, per
+  DECISIONS.md. Large-scale SFU capacity is out of scope for this crate by design.
+- **The Go reverse-tunnel relay + JS SDK remain the working implementation** until the Rust port
+  is proven (see below for their own history) — nothing in this section retires them yet.
+
+---
+
 All notable changes to `@vulos/relay-client` are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)  

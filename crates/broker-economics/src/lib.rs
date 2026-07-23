@@ -19,6 +19,13 @@
 //! re-exports [`kotva_core::identity::IdentityKey`] at the top level as
 //! [`IdentityKey`] so consumers construct real identities without a separate
 //! `kotva-core` dependency of their own.
+//!
+//! ## Honest limits
+//! This crate makes a visibility declaration **checkable**; it does not itself **prove** a
+//! coordinator's runtime matches what it declares. Whether observed behavior agrees with a
+//! declared [`ContentVisibility`] (CONTRACT §3, COORD-5) is a per-kind, per-implementation
+//! question — see `broker-conformance`'s `Outcome::Behavioral` and each kind crate's own
+//! `tests/conformance_runtime.rs` where one exists (`gateway`, `reachability-adapter` today).
 
 pub mod descriptor;
 pub mod kinds;
