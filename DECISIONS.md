@@ -15,3 +15,6 @@ build loop appends here whenever it makes a non-obvious call.
 
 ## Loop decisions
 <!-- the build loop appends below -->
+- `[2026-07-23 git]` Consolidated all three repos onto `main` (founder ask): committed kotva (39) + envoir (60) WIP; retired the fully-merged `dev` branches (kotva+envoir, local+origin); pushed.
+- `[2026-07-23 repoint]` envoir's 14 substrate consumers repointed from `path` to `kotva-core@core-v0.2.0` via `[workspace.dependencies]` + cargo dependency-rename alias (zero source churn). The other envoir substrate crates (auth/mls/naming/sync/p2p/send/deniable) stay in envoir, consuming kotva-core@tag.
+- `[2026-07-23 gwtests]` Gateway conformance cases (conformance-runner) + fuzz targets (gateway_admission/gateway_alias) move **with** the gateway to wakala (W2); envoir drops them to become node-only.
