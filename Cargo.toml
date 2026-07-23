@@ -20,6 +20,34 @@ resolver = "2"
 members = [
     "crates/broker-economics",
     "crates/broker-billing",
+    "crates/broker-billing-patala",
+    "crates/broker-conformance",
+    "crates/reachability-adapter",
+    "crates/gateway",
+    "crates/admin",
+    "crates/relay",
+    "crates/media-relay",
+    "crates/indexer",
+    "crates/labeler",
+    "crates/matcher",
+    "crates/arbiter",
+    "crates/oracle",
+    "crates/compute",
+]
+
+# `crates/broker-billing-patala` is a real workspace member (listed above) but is deliberately
+# left OUT of `default-members`: it path-depends on the sibling `patala` repo
+# (`../../../patala/{patala-core,patala-stellar}`), an OPTIONAL reference `SettlementRail` adapter
+# for `broker-billing`'s provider-agnostic settlement seam — never a hard dependency of
+# `broker-billing` or any coordinator kind. This mirrors exactly the trick envoir's
+# `dmtap-postage-patala` (and patala's own workspace, for `patala-solana`/`patala-stellar`/
+# `patala-hyperswitch`) already use: plain `cargo build`/`cargo test` at this workspace root never
+# pulls patala in; only `cargo build -p broker-billing-patala` / `cargo test -p
+# broker-billing-patala` does. `broker-billing` alone stays the default, patala-free settlement
+# seam (see `crates/broker-billing/src/settlement.rs`).
+default-members = [
+    "crates/broker-economics",
+    "crates/broker-billing",
     "crates/broker-conformance",
     "crates/reachability-adapter",
     "crates/gateway",

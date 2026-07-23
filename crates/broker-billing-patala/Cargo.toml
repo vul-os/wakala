@@ -1,0 +1,57 @@
+[package]
+name = "broker-billing-patala"
+description = "OPTIONAL patala-backed reference implementation of broker-billing's SettlementRail (CONTRACT §6, DIRECTION §5): prepaid credit top-ups verified against a patala PaymentRail (patala-stellar shipped as the one reference crypto rail; patala-hyperswitch noted for an optional card/monthly path), settlement charged synchronously from the resulting local credit balance. Never a hard dependency of broker-billing or any wakala coordinator kind. Wakala takes no cut. UNVERIFIED AGAINST LIVE STELLAR — see README.md."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+# ── Why this crate exists, and why it is deliberately isolated ──────────────────────────────
+#
+# `broker_billing::settlement::SettlementRail` (the trait this crate implements) names NO
+# payment provider — see that trait's docs ("every real implementation... is operator-supplied
+# config"). `patala` (a separate, sibling repo: ../../../patala, a non-custodial,
+# provider-agnostic payment-rail substrate — see ../../../patala/PATALA.md) is simply ONE way an
+# operator could supply one; its Stellar rail suits prepaid micropayment top-ups (~$0.0001/tx,
+# 3-5s finality, Ed25519-native so a coordinator's own substrate identity key can double as the
+# receiving wallet — PATALA.md §6). An operator who wants Stripe, a bank rail, or their own
+# ledger instead writes their own SettlementRail impl and never touches this crate.
+#
+# This crate lives under `crates/*` (matched by the wakala workspace's member glob) but is
+# deliberately left OUT of that workspace's `default-members` (see the root Cargo.toml) — exactly
+# the trick envoir's `dmtap-postage-patala` and patala's own workspace use for their
+# network/crypto-dependent optional adapters. Plain `cargo build`/`cargo test` at the wakala
+# workspace root therefore never pulls in patala or any of its crypto/network dependencies; only
+# `cargo build -p broker-billing-patala` / `cargo test -p broker-billing-patala` does.
+# `broker-billing` alone stays the offline, patala-free default.
+
+[dependencies]
+# The SettlementRail trait this crate implements, plus the real signed Tariff/UsageReceipt
+# machinery it composes with in tests — reused, never reinvented.
+broker-billing = { path = "../broker-billing" }
+
+# The sibling patala repo (NOT part of this workspace) — path deps to its published seam + the
+# one reference rail this adapter demonstrates (Stellar: cheap, fast-finality, Ed25519-native).
+patala-core = { path = "../../../patala/patala-core" }
+patala-stellar = { path = "../../../patala/patala-stellar" }
+
+# Errors, not billing logic (PatalaSettlementError carries no price/plan/invoice).
+thiserror = "1"
+
+[dev-dependencies]
+# Only `patala_core::PaymentRail` methods are `async fn` (via `async-trait`); this adapter's own
+# `SettlementRail` impl stays fully synchronous (see src/lib.rs). Tests exercise the async
+# top-up/credit path, so they need a minimal executor — mirrors patala-stellar's/
+# dmtap-postage-patala's own dev-dependency exactly.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# Only to let one test define a fake `PaymentRail` (an operational-failure double for `verify`) —
+# the same macro patala-core itself uses to define the trait.
+async-trait = "0.1"
+
+[lib]
+name = "broker_billing_patala"
+path = "src/lib.rs"

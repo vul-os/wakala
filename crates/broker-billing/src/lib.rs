@@ -14,16 +14,42 @@
 //! - [`tariff`] — a concrete [`tariff::TariffSchedule`] shape built via
 //!   `broker_economics::Cbor::from_cv`, and [`tariff::TariffSchedule::evaluate`] turning usage
 //!   into an itemized [`tariff::Bill`].
+//! - [`pricing`] — **USD recommended pricing**: [`pricing::HostingProfile`] (an operator's real
+//!   infra costs) and [`pricing::recommended_tariff`], a cost-plus starting-point
+//!   [`tariff::TariffSchedule`] per coordinator kind. Loudly a recommendation, never a mandate —
+//!   §6 keeps the actual numbers operator policy.
+//! - [`prepaid`] — **the primary billing model** (see `DECISIONS.md`): [`prepaid::PrepaidLedger`]
+//!   top-up/debit/refund credit accounting, [`prepaid::BillingState`], and wiring debits straight
+//!   into a signed [`receipt::ReceiptLog`] entry. Custody-free by construction — see the module
+//!   doc.
+//! - [`subscription`] — an OPTIONAL, secondary monthly postpaid policy
+//!   ([`subscription::Subscription`]), riding the same [`settlement::SettlementRail`] as
+//!   everything else.
+//! - [`sim`] — [`sim::BillingEvent`]/[`sim::SimEngine`]: a deterministic simulated event stream
+//!   (`TopUp`, `MeteredUsage`, `TariffChange`, `LowBalance`, `Refund`, `MonthlyCharge`) driving
+//!   the real meter/tariff/prepaid/receipt/settlement pipeline for tests.
 //! - [`receipt`] — issuing signed [`broker_economics::UsageReceipt`]s for a [`tariff::Bill`]
 //!   ([`receipt::ReceiptLog`]), and — importantly — the documented **one-directional audit**
 //!   residual (CONTRACT §6, R-6): read `receipt`'s module doc before treating "receipts verify"
 //!   as "billing is honest."
 //! - [`settlement`] — the [`settlement::SettlementRail`] trait (charge/settle in an *existing*
 //!   asset — no token, ever) plus the one reference adapter, [`settlement::InMemoryLedger`], which
-//!   is explicitly a mock.
+//!   is explicitly a mock. A real, optional adapter over this trait lives in the sibling
+//!   `broker-billing-patala` crate (a Stellar-backed prepaid top-up rail) — never a dependency of
+//!   this crate.
 //! - [`stake`] — the [`stake::StakeVerifier`] seam for staked kinds (`arbiter`, `oracle`), with
 //!   the CONTRACT §6 fail-closed default ([`stake::NoStakeRail`]): an unverifiable stake claim
 //!   MUST be treated as no stake.
+//!
+//! ## Prepaid is primary; monthly postpaid is optional
+//!
+//! CONTRACT §2.2 (zero lock-in), §2.4/SEC-7 (anonymous-but-accountable anti-abuse), and §6
+//! (signed usage receipts against metered usage) together point at **prepaid top-up credit
+//! metered against usage** as the model that best fits this crate's own constraints — see
+//! [`prepaid`]'s module doc for the full rationale. [`subscription::Subscription`] (fixed monthly
+//! postpaid) exists because an operator MAY still offer it, not because it is preferred; both
+//! ride the exact same [`settlement::SettlementRail`] seam, so there is never a second money path
+//! to keep in sync.
 //!
 //! ## What this crate is, and is not
 //! This is a **model + seams**: real, testable metering/tariff/receipt/ledger logic, wired to the
@@ -41,15 +67,23 @@
 #![forbid(unsafe_code)]
 
 pub mod meter;
+pub mod pricing;
+pub mod prepaid;
 pub mod receipt;
 pub mod settlement;
+pub mod sim;
 pub mod stake;
+pub mod subscription;
 pub mod tariff;
 
 pub use meter::{InMemoryMeter, Meter, ResourceKind};
+pub use pricing::{CoordinatorPricingKind, HostingProfile};
+pub use prepaid::{BillingState, PrepaidError, PrepaidLedger};
 pub use receipt::{BilledOperation, ReceiptError, ReceiptLog};
 pub use settlement::{InMemoryLedger, LedgerError, PaymentProof, PaymentRequired, SettlementRail};
+pub use sim::{BillingEvent, BillingOutcome, SimEngine};
 pub use stake::{NoStakeRail, StakeVerifier};
+pub use subscription::Subscription;
 pub use tariff::{Bill, BillingError, LineItem, TariffSchedule};
 
 #[cfg(test)]
