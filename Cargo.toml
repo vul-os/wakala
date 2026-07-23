@@ -23,6 +23,7 @@ members = [
     "crates/broker-conformance",
     "crates/reachability-adapter",
     "crates/gateway",
+    "crates/admin",
 ]
 
 [workspace.package]

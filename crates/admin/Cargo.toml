@@ -1,0 +1,52 @@
+# admin — the operator admin API for a Wakala coordinator (BUILD-PLAN W7).
+#
+# Kind-agnostic: it composes broker-economics (descriptor/tariff signing), broker-billing
+# (metering + receipts + tariff-schedule shape), and broker-conformance (the COORD-1..8
+# checklist) into one HTTP control plane an operator runs alongside any coordinator kind
+# crate (gateway, relay, reachability-adapter, ...). It does not implement a coordinator
+# kind itself and does not sit on any user delivery path (see src/lib.rs module docs).
+[package]
+name = "admin"
+description = "Operator admin API for a Wakala coordinator: descriptor/tariff signing, quota policy, metering + receipts view, key management, and a COORD-1..8 conformance self-check."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "admin"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wakala-admin"
+path = "src/main.rs"
+
+[dependencies]
+# The real signed Descriptor/Tariff/UsageReceipt types (W3) and the COORD-1..8 checklist (W8) —
+# this crate composes them, never reimplements signing or the conformance rules.
+broker-economics = { path = "../broker-economics" }
+broker-billing = { path = "../broker-billing" }
+broker-conformance = { path = "../broker-conformance" }
+# Tag-pinned substrate (the isango guardrail: never HEAD, never a moving path dep). Needed
+# directly to build/parse the operator-policy CBOR body via `Cv`/`Fields` (src/policy.rs),
+# the same convention broker-economics/broker-billing already use for their own wire shapes.
+kotva-core = { git = "https://github.com/vul-os/kotva", tag = "core-v0.2.0" }
+
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
