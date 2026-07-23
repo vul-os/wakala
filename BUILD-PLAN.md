@@ -41,3 +41,18 @@ pick the highest-priority unblocked wave, dispatch Sonnet sub-agents to do it, v
 - One writer per repo per iteration (avoid concurrent conflicting edits).
 - If a wave needs a founder decision, log it to `COORDINATION.md`, mark the wave BLOCKED, move to the
   next unblocked wave — never guess on an irreversible product/business call.
+
+## Phase 2 — presentation + billing depth (2026-07-23, founder: "make it amazing like envoir")
+
+Decision: **billing is PREPAID** (top-up credit metered against usage) as the primary model —
+preserves swappability/zero-lock-in (§2.2), anonymous-but-accountable (SEC-7), fits one-directional
+metering (§6), matches patala's prepaid `PostageProvider` seam; Wakala holds no funds. **Monthly card
+checkout** is an OPTIONAL operator postpaid policy via patala-hyperswitch. USD = pricing/display
+currency; settlement stablecoin/fiat via patala. No token.
+
+| # | Wave | Status | Notes |
+|---|---|---|---|
+| P2-A | **Brand + new logo** | IN PROGRESS | `brand/` identity (mark/wordmark/mono/og/favicon), distinct from envoir's purple; replace stale logo.png |
+| P2-B | **Svelte operator console + screenshots** | IN PROGRESS | Vite+Svelte5+TS console fronting the `admin` API (dashboard/descriptor/pricing/billing/keys/conformance), dark+light, mock mode; playwright screenshots → docs/img/ |
+| P2-D | **Billing model: USD pricing + patala + prepaid + e2e** | IN PROGRESS | broker-billing: USD recommended per-kind pricing (cost-plus over Hetzner/Vultr, operator-overridable) + prepaid CreditAccount/ledger + sim events; new optional `broker-billing-patala` (SettlementRail over patala-core/stellar, hyperswitch for card; excluded from default-members like dmtap-postage-patala); e2e + simulated billing tests |
+| P2-C | **README to envoir caliber** | TODO (after A/B/D) | new logo + shields badges + dark/light console screenshots + billing/pricing section; ~envoir 400-line quality |
