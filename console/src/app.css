@@ -1,0 +1,490 @@
+/* Wakala Operator Console — "Harbor Ledger"
+   A coordinator's control room styled as a shipping manifest / bridge instrument
+   panel: brass and running-light color language, ledger typography, ink stamps
+   for signed artifacts. Palette keyed off the real Wakala mark (amber -> orange
+   gradient, teal broker-halo, ink-brown) so the console reads as family with
+   the rest of the brand, not a generic dashboard template. */
+
+@import '@fontsource-variable/fraunces/standard.css';
+@import '@fontsource-variable/fraunces/standard-italic.css';
+@import '@fontsource-variable/public-sans';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+:root {
+  color-scheme: light;
+
+  /* --- Day watch: parchment ledger --- */
+  --bg: #f4ecdb;
+  --bg-deep: #ece0c8;
+  --surface: #fffbf1;
+  --surface-raised: #ffffff;
+  --ink: #241207;
+  --ink-soft: #5a4736;
+  --ink-faint: #8a7a64;
+  --rule: #cbb994;
+  --rule-strong: #a9905f;
+
+  --brass-1: #ffc24b;
+  --brass-2: #ff8a3d;
+  --brass-3: #e8543d;
+  --teal: #0e8f81;
+  --teal-soft: #d9efec;
+
+  --pass: #2f7a4f;
+  --pass-bg: #e3efdf;
+  --behavioral: #a3690c;
+  --behavioral-bg: #f6e9d2;
+  --violation: #a4342a;
+  --violation-bg: #f5ded9;
+
+  --focus: #0e8f81;
+  --shadow: 220 40% 15%;
+
+  --font-display: 'Fraunces Variable', 'Iowan Old Style', ui-serif, serif;
+  --font-body: 'Public Sans Variable', 'Public Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #150c07;
+    --bg-deep: #0f0906;
+    --surface: #211308;
+    --surface-raised: #2a1a0e;
+    --ink: #f3e6d3;
+    --ink-soft: #cbb89e;
+    --ink-faint: #8f7a63;
+    --rule: #3d2a18;
+    --rule-strong: #55391f;
+
+    --brass-1: #ffc24b;
+    --brass-2: #ff9a4d;
+    --brass-3: #ff6a4d;
+    --teal: #2dd4c2;
+    --teal-soft: #163430;
+
+    --pass: #5fd08b;
+    --pass-bg: #17301f;
+    --behavioral: #f0b649;
+    --behavioral-bg: #362408;
+    --violation: #ff8579;
+    --violation-bg: #3a1811;
+
+    --focus: #2dd4c2;
+    --shadow: 0 0% 0%;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #150c07;
+  --bg-deep: #0f0906;
+  --surface: #211308;
+  --surface-raised: #2a1a0e;
+  --ink: #f3e6d3;
+  --ink-soft: #cbb89e;
+  --ink-faint: #8f7a63;
+  --rule: #3d2a18;
+  --rule-strong: #55391f;
+  --brass-1: #ffc24b;
+  --brass-2: #ff9a4d;
+  --brass-3: #ff6a4d;
+  --teal: #2dd4c2;
+  --teal-soft: #163430;
+  --pass: #5fd08b;
+  --pass-bg: #17301f;
+  --behavioral: #f0b649;
+  --behavioral-bg: #362408;
+  --violation: #ff8579;
+  --violation-bg: #3a1811;
+  --focus: #2dd4c2;
+  --shadow: 0 0% 0%;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4ecdb;
+  --bg-deep: #ece0c8;
+  --surface: #fffbf1;
+  --surface-raised: #ffffff;
+  --ink: #241207;
+  --ink-soft: #5a4736;
+  --ink-faint: #8a7a64;
+  --rule: #cbb994;
+  --rule-strong: #a9905f;
+  --brass-1: #ffc24b;
+  --brass-2: #ff8a3d;
+  --brass-3: #e8543d;
+  --teal: #0e8f81;
+  --teal-soft: #d9efec;
+  --pass: #2f7a4f;
+  --pass-bg: #e3efdf;
+  --behavioral: #a3690c;
+  --behavioral-bg: #f6e9d2;
+  --violation: #a4342a;
+  --violation-bg: #f5ded9;
+  --focus: #0e8f81;
+  --shadow: 220 40% 15%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 100% 2.1rem, 2.1rem 100%;
+  background-position: 0 6.4rem, 0 0;
+  opacity: 1;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
+}
+
+a {
+  color: var(--teal);
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--brass-1);
+  color: #241207;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- shared primitives ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 hsl(var(--shadow) / 0.04);
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.4rem 0.9rem;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.panel-header h2 {
+  font-size: 1.05rem;
+}
+
+.panel-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.panel-body {
+  padding: 1.4rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 0.62rem 1.1rem;
+  border-radius: 7px;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:hover {
+  border-color: var(--teal);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brass-1), var(--brass-2) 60%, var(--brass-3));
+  border-color: transparent;
+  color: #241207;
+  box-shadow: 0 6px 18px -8px rgba(232, 84, 61, 0.55);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 8px 22px -8px rgba(232, 84, 61, 0.65);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-soft);
+}
+
+.btn-ghost:hover {
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.btn-danger-outline {
+  border-color: var(--violation);
+  color: var(--violation);
+  background: transparent;
+}
+
+label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  color: var(--ink);
+}
+
+textarea {
+  font-family: var(--font-body);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--teal);
+}
+
+.field {
+  margin-bottom: 0.95rem;
+}
+
+.field-hint {
+  font-size: 0.74rem;
+  color: var(--ink-faint);
+  margin-top: 0.3rem;
+}
+
+.note {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  background: var(--bg-deep);
+  border: 1px dashed var(--rule-strong);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  line-height: 1.45;
+}
+
+.note strong {
+  color: var(--ink);
+}
+
+.note-caution {
+  background: var(--behavioral-bg);
+  border-color: color-mix(in srgb, var(--behavioral) 45%, var(--rule-strong));
+  color: var(--ink);
+}
+
+.note-danger {
+  background: var(--violation-bg);
+  border-color: color-mix(in srgb, var(--violation) 45%, var(--rule-strong));
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.pill-pass {
+  background: var(--pass-bg);
+  color: var(--pass);
+}
+
+.pill-behavioral {
+  background: var(--behavioral-bg);
+  color: var(--behavioral);
+}
+
+.pill-violation {
+  background: var(--violation-bg);
+  color: var(--violation);
+}
+
+.light-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent), 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
+/* the ink stamp — used on any freshly signed artifact */
+.stamp {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 5.6rem;
+  height: 5.6rem;
+  border-radius: 50%;
+  border: 2.5px solid currentColor;
+  transform: rotate(-8deg);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.stamp::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px dotted currentColor;
+  border-radius: 50%;
+  opacity: 0.6;
+}
+
+.stamp-signed {
+  color: var(--teal);
+}
+
+.stamp-declared {
+  color: var(--behavioral);
+}
+
+table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+table.ledger th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+table.ledger td {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px dashed var(--rule);
+  vertical-align: middle;
+}
+
+table.ledger tbody tr:last-child td {
+  border-bottom: none;
+}
+
+table.ledger tbody tr:hover {
+  background: color-mix(in srgb, var(--teal) 5%, transparent);
+}
+
+.hex {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .panel-body {
+    padding: 1rem;
+  }
+}
