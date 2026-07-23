@@ -1,0 +1,27 @@
+[package]
+name = "media-relay"
+description = "The KOTVA `media-relay` coordinator kind: forwards SFrame-sealed (RFC 9605) call/stream media to scale calls, orchestrating an externally-adopted SFU (coturn/LiveKit sidecar) rather than embedding one (CONTRACT §5, blind-routing/structural)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+broker-economics = { path = "../broker-economics" }
+broker-conformance = { path = "../broker-conformance" }
+# Tag-pinned substrate (the isango guardrail: never HEAD, never a moving path dep) — same tag
+# broker-economics/gateway/relay/reachability-adapter already pin. Only needed here for the real
+# `IdentityKey` used to sign this coordinator's descriptor (re-exported by broker-economics, but
+# named directly too so `MediaRelayCoordinator::signed` callers aren't forced through that
+# re-export).
+kotva-core = { git = "https://github.com/vul-os/kotva", tag = "core-v0.2.0" }
+# --- The orchestration seam (src/external.rs): generating a structured LiveKit-style sidecar
+# config. Coturn's config is the sidecar's own plain key=value `turnserver.conf` text, so it needs
+# no serialization crate; the LiveKit-style config is a small typed struct, serialized. No WebRTC,
+# no SFrame, no media-transport crate — this crate never touches a media byte.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

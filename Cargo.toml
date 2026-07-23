@@ -25,6 +25,7 @@ members = [
     "crates/gateway",
     "crates/admin",
     "crates/relay",
+    "crates/media-relay",
     "crates/indexer",
     "crates/labeler",
     "crates/matcher",
