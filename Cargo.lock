@@ -112,6 +112,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "broker-billing"
+version = "0.0.0"
+dependencies = [
+ "broker-economics",
+ "kotva-core",
+ "thiserror",
+]
+
+[[package]]
 name = "broker-conformance"
 version = "0.0.0"
 dependencies = [
@@ -1261,6 +1270,8 @@ version = "0.0.0"
 dependencies = [
  "broker-conformance",
  "broker-economics",
+ "getrandom 0.2.17",
+ "kotva-core",
  "thiserror",
  "tokio",
  "tokio-util",
