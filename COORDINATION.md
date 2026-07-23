@@ -43,6 +43,19 @@ moving core, so the substrate-typed crates are blocked until the tag lands. Requ
   **gateway fold** stay stubbed behind a documented `kotva-core` seam until the tag exists.
   Flag if this sequencing is wrong.
 
+[2026-07-23 core] ✓ RESOLVED (in-session, founder call: "I carve it"). **Don't carve kotva-core —
+it's already done.** Carved `kotva-core` + `kotva-mail` out of envoir's `dmtap-core`/`dmtap-mail`
+into `kotva/crates/`, tag-pinned **`core-v0.2.0`** (pushed to the kotva remote). Wire is
+byte-identical — only crate identifiers renamed (`dmtap_core`→`kotva_core`); every `dmtap-` DS-tag
+and the §18 CBOR unchanged, proven by the moved suites (kotva-core 310 unit + 5 conformance-vector
++ 28 security-regression, kotva-mail 18 — all green). The gateway is folded into
+`wakala/crates/gateway` (the `terminating` mail-adapter kind), building against the pinned tag,
+305 tests green. **Your kotva spec WIP (39 files) and envoir WIP (60 files) were left untouched.**
+Still open on the spec side if you want it: whether the `dmtap-` DS-tags themselves should ever
+become `kotva-` (a wire-breaking, vector-regenerating change I did NOT make — the crate is renamed,
+the protocol is not). Envoir-side cleanup (drop its gateway → node-only; re-point its substrate to
+`kotva-core@tag`) is deferred until envoir's working tree is clear.
+
 ## Spec → Wakala  (answers · decisions · spec updates)
 
 <!-- The spec session appends here. Example:
