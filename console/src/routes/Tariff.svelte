@@ -133,7 +133,7 @@
           <div class="field">
             <label for="currency">Currency / asset</label>
             <input id="currency" type="text" bind:value={currency} placeholder="USD" />
-            <p class="field-hint">Any existing currency or asset string — USD, USDC, EUR. Never a Wakala-minted token.</p>
+            <p class="field-hint">Any existing currency or asset string — USD, USDC, EUR. Never a Ephor-minted token.</p>
           </div>
 
           <div class="field">
@@ -233,33 +233,33 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
   h1 {
     font-size: 1.9rem;
     margin: 0.2rem 0 0.35rem;
   }
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 68ch;
   }
   .loading {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
   }
   .disclaimer {
     font-size: 0.84rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0 0 1rem;
     max-width: 72ch;
   }
   .price-cell {
-    color: var(--brass-3);
+    color: var(--accent);
     font-weight: 600;
   }
   .basis {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-size: 0.78rem;
   }
   .layout {
@@ -277,7 +277,7 @@
     min-width: 5.5rem;
   }
   .computed {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-size: 0.78rem;
   }
   .btn-primary {
@@ -287,7 +287,7 @@
     display: block;
     margin-top: 0.6rem;
     font-size: 0.78rem;
-    color: var(--pass);
+    color: var(--status-success);
     font-family: var(--font-mono);
   }
   dl {
@@ -303,7 +303,7 @@
     font-size: 0.66rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     align-self: center;
   }
   dd {

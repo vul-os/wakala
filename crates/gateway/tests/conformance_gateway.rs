@@ -5,8 +5,8 @@
 //! `dmtap-core`-flavored predecessor of this crate). Wave W1 (envoir commit `620a68c`, "envoir:
 //! node-only — drop the gateway + its conformance/fuzz coverage; consume kotva-core@tag") removed
 //! both the gateway crate and its conformance/fuzz coverage from envoir, since the gateway itself
-//! moved here, to Wakala's `gateway` crate. Wave W2 (this file) retrieves those cases from envoir's
-//! git history (`620a68c^`) and re-homes them here, driven against the REAL, current wakala
+//! moved here, to Ephor's `gateway` crate. Wave W2 (this file) retrieves those cases from envoir's
+//! git history (`620a68c^`) and re-homes them here, driven against the REAL, current ephor
 //! `gateway` public API (not a copy or a stub) — `kotva_core` in place of `dmtap_core`, `gateway::`
 //! in place of `envoir_gateway::`, and each case's calls updated wherever the API surface drifted
 //! (see the per-case doc comment below for what changed, if anything). The §7 spec citations in
@@ -19,7 +19,7 @@
 //!   this was *already* a documented **skip**, not an executable case, in envoir's own
 //!   `construction.rs` — envoir-gateway's attestation/provenance modules modeled exactly one
 //!   assurance tier (a flat DNS-published `_dmtap-gw` key), with no KT-anchored second tier and no
-//!   "high-value recipient" policy concept to select between. Wakala's `gateway::attestation` /
+//!   "high-value recipient" policy concept to select between. Ephor's `gateway::attestation` /
 //!   `gateway::provenance` modules inherited that same single-tier design (one DNS-published
 //!   `_dmtap-gw` key, verified via `Attestation::verify` / `GatewayAttestation::verify`) — there is
 //!   still no second, KT-anchored verification path to construct this case against, so it stays a
@@ -33,7 +33,7 @@
 //! AliasAllocator`, `gateway::alias_map::GatewayAliasMap`, `gateway::forwarded_addr::{encode,
 //! decode}` are the same names doing the same job); the one real rename is envoir's flat
 //! `envoir_gateway::attestation::Attestation` verify signature (`domain, key, rfc5322_bytes`) vs.
-//! wakala's `gateway::attestation::Attestation::verify` (`expected_domain, published_key,
+//! ephor's `gateway::attestation::Attestation::verify` (`expected_domain, published_key,
 //! wrapped_mote_id: &ContentId`) — the §7.2a attestation here binds to the wrapped MOTE's content
 //! address rather than to raw legacy bytes directly, so `DMTAP-LEG-01` below binds against a
 //! `ContentId` instead of an `&[u8]`.
@@ -225,7 +225,7 @@ fn dmtap_gwatt_05_chain_per_entry_domain_verified() {
 /// the (correct) published key rather than accepting a forged/corrupted attestation.
 ///
 /// **Adapted from envoir**: envoir's `Attestation::verify` took `(domain, key, rfc5322_bytes:
-/// &[u8])`; wakala's binds to the wrapped MOTE's content address instead, so `verify` here takes
+/// &[u8])`; ephor's binds to the wrapped MOTE's content address instead, so `verify` here takes
 /// `(expected_domain, published_key, wrapped_mote_id: &ContentId)` — otherwise unchanged.
 #[test]
 fn dmtap_leg_01_gateway_attestation_invalid_rejected() {

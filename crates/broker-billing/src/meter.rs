@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 /// A metered resource kind (CONTRACT §6: "bytes forwarded, connections, messages,
-/// compute-seconds"). Deliberately a closed, small enum — every Wakala coordinator kind meters
+/// compute-seconds"). Deliberately a closed, small enum — every Ephor coordinator kind meters
 /// in these terms; a kind that needs a resource not listed here should map it onto the closest
 /// fit rather than this crate growing a kind-specific variant per coordinator.
 ///

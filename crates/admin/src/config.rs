@@ -1,4 +1,4 @@
-//! Binary config for `wakala-admin` (`src/main.rs`), read from the environment. A library
+//! Binary config for `ephor-admin` (`src/main.rs`), read from the environment. A library
 //! consumer that embeds [`crate::AdminState`] directly (e.g. inside a coordinator-kind binary)
 //! is free to skip this and construct `AdminState`/`KeyState`/`AdminAuth` itself.
 
@@ -6,44 +6,44 @@ use std::net::SocketAddr;
 
 use broker_economics::{AssuranceLevel, ContentVisibility, CoordinatorKind, VisibilityClass};
 
-/// `WAKALA_ADMIN_BIND` — defaults to loopback (operator-local; see `auth.rs`/`lib.rs` module
+/// `EPHOR_ADMIN_BIND` — defaults to loopback (operator-local; see `auth.rs`/`lib.rs` module
 /// docs on why this surface must never be assumed safe to expose beyond the operator's own host).
 const DEFAULT_BIND: &str = "127.0.0.1:8090";
 
 pub struct AdminBinConfig {
     pub bind_addr: SocketAddr,
-    /// `None` = no `WAKALA_ADMIN_TOKEN` configured — the server still starts, but
+    /// `None` = no `EPHOR_ADMIN_TOKEN` configured — the server still starts, but
     /// [`crate::auth::AdminAuth::disabled`] refuses every request (fail-closed, SEC-1).
     pub admin_token: Option<String>,
     pub kind: CoordinatorKind,
     pub visibility: ContentVisibility,
-    /// A 32-byte Ed25519 seed, if `WAKALA_ADMIN_KEY_SEED_HEX`/`WAKALA_ADMIN_KEY_FILE` was
+    /// A 32-byte Ed25519 seed, if `EPHOR_ADMIN_KEY_SEED_HEX`/`EPHOR_ADMIN_KEY_FILE` was
     /// configured. `None` means `main.rs` generates an ephemeral key (loudly, at startup).
     pub key_seed: Option<[u8; 32]>,
 }
 
 impl AdminBinConfig {
     pub fn from_env() -> Result<Self, String> {
-        let bind_addr = match std::env::var("WAKALA_ADMIN_BIND") {
+        let bind_addr = match std::env::var("EPHOR_ADMIN_BIND") {
             Ok(v) => v
                 .parse()
-                .map_err(|e| format!("WAKALA_ADMIN_BIND {v:?} is not a socket address: {e}"))?,
+                .map_err(|e| format!("EPHOR_ADMIN_BIND {v:?} is not a socket address: {e}"))?,
             Err(_) => DEFAULT_BIND.parse().expect("DEFAULT_BIND is valid"),
         };
 
-        let admin_token = std::env::var("WAKALA_ADMIN_TOKEN").ok();
+        let admin_token = std::env::var("EPHOR_ADMIN_TOKEN").ok();
 
-        let kind = match std::env::var("WAKALA_ADMIN_KIND") {
+        let kind = match std::env::var("EPHOR_ADMIN_KIND") {
             Ok(v) => CoordinatorKind::from_wire_str(&v).ok_or_else(|| {
-                format!("WAKALA_ADMIN_KIND {v:?} is not a known coordinator kind")
+                format!("EPHOR_ADMIN_KIND {v:?} is not a known coordinator kind")
             })?,
             Err(_) => CoordinatorKind::Relay,
         };
 
         let visibility =
             match (
-                std::env::var("WAKALA_ADMIN_VISIBILITY_CLASS").ok(),
-                std::env::var("WAKALA_ADMIN_VISIBILITY_LEVEL").ok(),
+                std::env::var("EPHOR_ADMIN_VISIBILITY_CLASS").ok(),
+                std::env::var("EPHOR_ADMIN_VISIBILITY_LEVEL").ok(),
             ) {
                 (Some(c), Some(l)) => parse_visibility(&c, &l)?,
                 (None, None) => kind.typical_visibility().unwrap_or(ContentVisibility::new(
@@ -51,18 +51,18 @@ impl AdminBinConfig {
                     AssuranceLevel::Declared,
                 )),
                 _ => return Err(
-                    "WAKALA_ADMIN_VISIBILITY_CLASS and WAKALA_ADMIN_VISIBILITY_LEVEL must both \
+                    "EPHOR_ADMIN_VISIBILITY_CLASS and EPHOR_ADMIN_VISIBILITY_LEVEL must both \
                      be set together, or both omitted"
                         .into(),
                 ),
             };
 
-        let key_seed = match std::env::var("WAKALA_ADMIN_KEY_SEED_HEX") {
+        let key_seed = match std::env::var("EPHOR_ADMIN_KEY_SEED_HEX") {
             Ok(v) => Some(parse_seed_hex(&v)?),
-            Err(_) => match std::env::var("WAKALA_ADMIN_KEY_FILE") {
+            Err(_) => match std::env::var("EPHOR_ADMIN_KEY_FILE") {
                 Ok(path) => {
                     let contents = std::fs::read_to_string(&path)
-                        .map_err(|e| format!("reading WAKALA_ADMIN_KEY_FILE {path:?}: {e}"))?;
+                        .map_err(|e| format!("reading EPHOR_ADMIN_KEY_FILE {path:?}: {e}"))?;
                     Some(parse_seed_hex(contents.trim())?)
                 }
                 Err(_) => None,

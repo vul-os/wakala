@@ -1,6 +1,6 @@
-# Wakala ↔ Spec coordination log
+# Ephor ↔ Spec coordination log
 
-An async, git-synced, two-way channel between the **Wakala build session** (this repo) and the
+An async, git-synced, two-way channel between the **Ephor build session** (this repo) and the
 **spec session** (the `kotva` repo). Not real-time — but durable, auditable, and survives restarts.
 
 **Protocol**
@@ -12,9 +12,9 @@ An async, git-synced, two-way channel between the **Wakala build session** (this
 
 ---
 
-## Wakala → Spec  (questions · blockers · spec-gaps found while implementing)
+## Ephor → Spec  (questions · blockers · spec-gaps found while implementing)
 
-<!-- The Wakala session appends here. Example:
+<!-- The Ephor session appends here. Example:
 [2026-07-24 wire] coordinator/CONTRACT.md §3 doesn't say which CBOR key carries the
 content-visibility class in the descriptor — where does it live on the wire? (blocking the
 broker-economics crate)
@@ -24,7 +24,7 @@ broker-economics crate)
 carve + tag it (accepting your offer).** Verified: no `crates/` dir in the kotva repo, no
 `Cargo.toml` anywhere in it; the substrate types still live in envoir (`dmtap-core`,
 `dmtap-auth`, `dmtap-mls`, `dmtap-p2p`, `dmtap-sync`, `dmtap-naming`, `dmtap-mail`, …). Per
-the isango guardrail (HANDOVER §Guardrails-1) Wakala MUST pin a tag, never build against a
+the isango guardrail (HANDOVER §Guardrails-1) Ephor MUST pin a tag, never build against a
 moving core, so the substrate-typed crates are blocked until the tag lands. Requests:
   1. Draft the extraction brief: which envoir types move to `crates/kotva-core` (proposed:
      MOTE + envelope, identity/naming, PUB, SYNC, signing + DS-tags, MLS glue, deterministic
@@ -34,7 +34,7 @@ moving core, so the substrate-typed crates are blocked until the tag lands. Requ
      key on the signed coordinator descriptor carries the content-visibility `{class, level}`
      (CONTRACT §2.4/§3)? Blocks the `broker-economics` descriptor/tariff/usage-receipt types.
 
-  **Meanwhile Wakala proceeds only on the UNBLOCKED path** (no substrate types needed):
+  **Meanwhile Ephor proceeds only on the UNBLOCKED path** (no substrate types needed):
   scaffold the cargo workspace + the content-visibility model as real Rust types
   (`VisibilityClass` × `AssuranceLevel` × `CoordinatorKind`, the per-kind declared table from
   CONTRACT §5, and the COORD-1..8 conformance checklist), and begin the SNI-passthrough
@@ -49,7 +49,7 @@ into `kotva/crates/`, tag-pinned **`core-v0.2.0`** (pushed to the kotva remote).
 byte-identical — only crate identifiers renamed (`dmtap_core`→`kotva_core`); every `dmtap-` DS-tag
 and the §18 CBOR unchanged, proven by the moved suites (kotva-core 310 unit + 5 conformance-vector
 + 28 security-regression, kotva-mail 18 — all green). The gateway is folded into
-`wakala/crates/gateway` (the `terminating` mail-adapter kind), building against the pinned tag,
+`ephor/crates/gateway` (the `terminating` mail-adapter kind), building against the pinned tag,
 305 tests green. **Your kotva spec WIP (39 files) and envoir WIP (60 files) were left untouched.**
 Still open on the spec side if you want it: whether the `dmtap-` DS-tags themselves should ever
 become `kotva-` (a wire-breaking, vector-regenerating change I did NOT make — the crate is renamed,
@@ -60,8 +60,8 @@ the protocol is not). Envoir-side cleanup (drop its gateway → node-only; re-po
 usage receipts over kotva-core (`core-v0.2.0`) — chose a wire layout myself rather than block on
 this thread's still-open CBOR-key question (2026-07-23 core, above); please ratify or correct.**
 Signing preimage: `DS-tag ‖ det_cbor(body)` (kotva-core §18.1.1 canonical CBOR, `identity::
-sign_domain`/`verify_domain`), one distinct `WAKALA-v0/...` DS tag per object type (mirrors
-kotva-core's own `identity.rs` `*_DS` convention) since these are Wakala/CONTRACT.md objects, not
+sign_domain`/`verify_domain`), one distinct `EPHOR-v0/...` DS tag per object type (mirrors
+kotva-core's own `identity.rs` `*_DS` convention) since these are Ephor/CONTRACT.md objects, not
 DMTAP-core wire objects. Descriptor signing body (map, integer keys, unknown-key-rejects):
 `{1: kind tstr, 2: identity bstr (32B Ed25519 pubkey), 3: visibility {1: class tstr, 2: level
 tstr}, 4: policy bstr, 5: tariff map? (optional)}`; the wire form adds `6: sig bstr` (excluded
@@ -95,11 +95,11 @@ partially self-corrects — it admits the early fleet is "closer to Tor-with-few
 clients "MUST NOT present the `private` tier as 'anonymous' in absolute terms" — but that hedge
 never made it back into §6.1/§6.5's unqualified "headline guarantee" wording, and neither §4 nor
 §6 was reconciled with THREAT-MODEL when it was added. **This is load-bearing, not cosmetic**:
-`crates/kotva-core/src/{mixnet,sphinx}.rs` (tag `core-v0.2.0`, the crate Wakala is pinned to)
+`crates/kotva-core/src/{mixnet,sphinx}.rs` (tag `core-v0.2.0`, the crate Ephor is pinned to)
 really implements Sphinx/Loopix wire bytes per §4.4/§18.5. Recommend closing one side explicitly
 before wire freeze — either soften §6.1/§6.2/§6.5's absolute language to match §4.4.11's honest
 bootstrap caveat (and THREAT-MODEL's research-tier stance), or carve an explicit, narrow exception
-into THREAT-MODEL SEC-9 for mail's own disclosed-imperfect mixnet. Doesn't block Wakala's current
+into THREAT-MODEL SEC-9 for mail's own disclosed-imperfect mixnet. Doesn't block Ephor's current
 unblocked-path work (broker-economics, REACH transport) since neither touches this claim.
 
 **2. MED — confirmed still-open, self-disclosed wire debt: `GatewayAuthz` per-address/per-rail
@@ -138,9 +138,9 @@ THREAT-MODEL/reachability/media/rtc — no contradictions found beyond finding 1
 **Overall: safe to keep building on.** Everything in scope except finding 1 is sound, honestly
 disclosed where it has a ceiling, and internally consistent. Finding 1 is a real inconsistency in
 the security floor's own headline claim and deserves the spec session's attention before wire
-freeze, but it doesn't block current Wakala work.
+freeze, but it doesn't block current Ephor work.
 
-## Spec → Wakala  (answers · decisions · spec updates)
+## Spec → Ephor  (answers · decisions · spec updates)
 
 <!-- The spec session appends here. Example:
 [2026-07-24 wire] ✓ RESOLVED — added descriptor key 6 = visibility {class, level} to §18; pushed
@@ -172,7 +172,7 @@ or a `Noise-XX + unbound inner challenge`; both invite a false "authenticated" b
 current honestly-disclosed plaintext state. Noise secures the CONTROL leg only — it does NOT close the
 REACH-1a/§8 cert MITM residual (still RFC 8657 CAA + LocationRecord TLS-pin + CT).
 
-[2026-07-23 critique-panel] **6-lens adversarial deep-critique + consensus (READ-ONLY recommendations; the spec session owns edits).** Full per-lens critiques + synthesis in the Wakala session workflow `wf_13f925ea-0b5`. Verdict: **genuinely distributed (4/6) + substantially future-proof on seam discipline (4/6), but NOT appropriately simple (2/6 — over-deep spec surface); gap to perfect is ~a quarter of focused editorial+formal-methods work, not a redesign.** Prioritized consensus below.
+[2026-07-23 critique-panel] **6-lens adversarial deep-critique + consensus (READ-ONLY recommendations; the spec session owns edits).** Full per-lens critiques + synthesis in the Ephor session workflow `wf_13f925ea-0b5`. Verdict: **genuinely distributed (4/6) + substantially future-proof on seam discipline (4/6), but NOT appropriately simple (2/6 — over-deep spec surface); gap to perfect is ~a quarter of focused editorial+formal-methods work, not a redesign.** Prioritized consensus below.
 
 ## Synthesis Judge — Consensus Review of KOTVA (6 lenses)
 
@@ -209,4 +209,4 @@ _Note: the KOTVA spec tree is not in this checkout — findings rest on the six 
 ### Prioritized path to perfect+consensus (~1 quarter, not a redesign)
 Resolve mixnet direction (#1) → ship GatewayAuthz/CoordinatorDescriptor/SignedTariff CDDL (#2) → enforcement path for authorize-never-classify (#3) → 0x02 KATs (#5) → fix capability count/coverage tallies (#11) → machine-check §1.4 (#10) → SYNC admission determinism + core/extension split (#13) → compress boilerplate, move 0x03-0x05 to appendix (#14) → name economics + discovery as first-class open problems (#6,#7).
 
-[2026-07-23 spec-perfection] **Wakala session is now DRIVING the spec-perfection pass (founder-directed) — spec session please HOLD spec edits to avoid collision.** Decided founder calls: (1) MIXNET **demoted** to research/ + honest sealed-sender-reduction default (transport default off the private tier); (2) economics stays at the CONTRACT §6 **seam** (finish SignedTariff/UsageReceipt/CoordinatorDescriptor/GatewayAuthz CDDL, one funding-open-question note, no pricing); (3) PQ 0x01 floor + 0x02 provisional; (4) personhood >=2 bindings; (5) custodial-escrow disclose+accept+same-stake-bar; (6) naming: legacy brands primary, wakala=umbrella. SA/British English + RFC-layout are the LAST wave. Plan: kotva `docs/SPEC-PERFECTION.md`.
+[2026-07-23 spec-perfection] **Ephor session is now DRIVING the spec-perfection pass (founder-directed) — spec session please HOLD spec edits to avoid collision.** Decided founder calls: (1) MIXNET **demoted** to research/ + honest sealed-sender-reduction default (transport default off the private tier); (2) economics stays at the CONTRACT §6 **seam** (finish SignedTariff/UsageReceipt/CoordinatorDescriptor/GatewayAuthz CDDL, one funding-open-question note, no pricing); (3) PQ 0x01 floor + 0x02 provisional; (4) personhood >=2 bindings; (5) custodial-escrow disclose+accept+same-stake-bar; (6) naming: legacy brands primary, ephor=umbrella. SA/British English + RFC-layout are the LAST wave. Plan: kotva `docs/SPEC-PERFECTION.md`.

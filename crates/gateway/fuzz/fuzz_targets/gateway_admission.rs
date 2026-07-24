@@ -3,7 +3,7 @@ use libfuzzer_sys::fuzz_target;
 use gateway::authz::{AdmissionError, IdentityRegistry};
 
 // **Relocated from envoir** (`fuzz/fuzz_targets/gateway_admission.rs`, removed by envoir commit
-// `620a68c` when the gateway moved to Wakala) and retargeted at the real, current `gateway` crate:
+// `620a68c` when the gateway moved to Ephor) and retargeted at the real, current `gateway` crate:
 // `envoir_gateway::authz::{AdmissionError, IdentityRegistry}` → `gateway::authz::{AdmissionError,
 // IdentityRegistry}`. The API shape is unchanged (same method names, same fail-closed error
 // variants), so the property and the harness below are otherwise the original, unmodified logic.

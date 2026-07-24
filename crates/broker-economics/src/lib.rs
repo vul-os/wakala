@@ -1,6 +1,6 @@
 //! # broker-economics
 //!
-//! The shared model every Wakala coordinator kind is built on: the
+//! The shared model every Ephor coordinator kind is built on: the
 //! **content-visibility** property (a checkable class × assurance level), the
 //! **coordinator kinds** table, and the discovery-only **descriptor / tariff /
 //! usage-receipt** shapes — the machinery of `coordinator/CONTRACT.md` §2–§6.

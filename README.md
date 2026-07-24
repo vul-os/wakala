@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="brand/logo-mark.svg" width="88" height="88" alt="Wakala" />
+  <img src="brand/logo-mark.svg" width="88" height="88" alt="Ephor" />
 </p>
 
-<h1 align="center">Wakala</h1>
+<h1 align="center">Ephor</h1>
 
 <p align="center">
   <b>The broker (coordinator) reference implementation of the KOTVA standard — content-blind
@@ -18,22 +18,25 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Wakala operator console — Overview / bridge deck, dark theme">
-  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Wakala operator console — Overview / bridge deck, light theme">
+  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Ephor operator console — Overview / bridge deck, dark theme">
+  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Overview / bridge deck, light theme">
 </p>
 
-*wakala — Swahili for agent/agency: a swappable, fee-taking service point acting on a
-network's behalf. Vulos — rooted in **vula**, the Zulu and Xhosa word for **open**.*
+*ephor — Greek for overseer: in Sparta, one of five ephors elected annually to watch
+the state and check the kings' power, never holding it themselves and never serving a
+second term. The name keeps that shape here: a swappable, fee-taking service point
+that watches traffic pass without ever seeing inside it, hired for a term and replaced
+without ceremony. Vulos — rooted in **vula**, the Zulu and Xhosa word for **open**.*
 
 ---
 
-## What is Wakala
+## What is Ephor
 
-Wakala is the **single project that implements
+Ephor is the **single project that implements
 [`coordinator/CONTRACT.md`](https://github.com/vul-os/kotva/blob/main/coordinator/CONTRACT.md)**
 — the KOTVA spec's contract for centralization that is *hired, not depended-on*. A
 **coordinator** is any party providing a function the peer-to-peer substrate can't provide
-reciprocally: a global view, a scarce resource, a legal anchor. Wakala houses **every
+reciprocally: a global view, a scarce resource, a legal anchor. Ephor houses **every
 coordinator kind** behind that one contract (see [The coordinator kinds](#the-coordinator-kinds)
 below).
 
@@ -59,12 +62,12 @@ or canonical path — that judgement belongs to the recipient. **No token.** Eco
 signed tariff plus signed usage receipts delivered to the payer (a one-directional audit — proves
 a claimed operation happened, can't disconfirm a fabricated one, see
 [Billing & pricing](#billing--pricing)). Settlement rides an existing stablecoin or fiat rail;
-Wakala brokers none and takes no cut. Stake (where a kind requires skin-in-the-game — `arbiter`,
+Ephor brokers none and takes no cut. Stake (where a kind requires skin-in-the-game — `arbiter`,
 `oracle`) is verified on the settlement rail itself, never merely asserted.
 
 > **Not** the OS app-gateway. Routing `/app/<id>` to a box's local app ports (with auth-token
 > injection) is the VulOS shell's own internal reverse proxy — a separate concern that stays in
-> the OS. Wakala crosses the *network* boundary (P2P, public exposure, mail egress), not the
+> the OS. Ephor crosses the *network* boundary (P2P, public exposure, mail egress), not the
 > in-box one.
 
 ## The coordinator kinds
@@ -92,11 +95,11 @@ nor a §4 derived view, so they declare `Gate::NoDeliveryPath` instead.
 ## The operator console
 
 <p align="center">
-  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Wakala operator console — Overview, dark theme">
-  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Wakala operator console — Overview, light theme">
+  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Ephor operator console — Overview, dark theme">
+  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Overview, light theme">
 </p>
 
-The **Wakala operator console** (`console/`) is the web UI an operator runs a coordinator with:
+The **Ephor operator console** (`console/`) is the web UI an operator runs a coordinator with:
 one Svelte 5 app fronting the [`admin`](crates/admin) crate's HTTP API — the coordinator-kind-
 agnostic control plane for a descriptor, a tariff, metering/receipts, quota, and the operator's
 signing keys. Six views behind one left-nav shell:
@@ -110,14 +113,14 @@ signing keys. Six views behind one left-nav shell:
 | 05 | Keys | Current signing pubkey + rotate (re-signs the descriptor; old keys kept in history, never dropped) |
 | 06 | Conformance | The full COORD-1..8 checklist — pass / behavioral / violation, with clause refs |
 
-Run it locally in mock mode (no `wakala-admin` needed — full in-memory fixture data):
+Run it locally in mock mode (no `ephor-admin` needed — full in-memory fixture data):
 
 ```sh
 cd console && pnpm install && pnpm dev   # http://localhost:5173, VITE_MOCK=1 by default
 ```
 
 To point it at a live coordinator instead, build with `VITE_MOCK=0` and `VITE_API_BASE` set to
-your `wakala-admin` bind address (loopback by default, bearer-token gated, fail-closed if no
+your `ephor-admin` bind address (loopback by default, bearer-token gated, fail-closed if no
 token is configured). See [`console/README.md`](console/README.md) for the full DTO-to-Rust
 mapping and the screenshot pipeline (`pnpm build && pnpm screenshot`).
 
@@ -128,7 +131,7 @@ up a credit balance (via a settlement rail, see below); `broker-billing::prepaid
 debits it against real metered usage and issues a signed receipt per debit
 (`BillingState::{Ok, LowBalance, Exhausted}`). This preserves zero-lock-in (CONTRACT §2.2), fits
 the anonymous-but-accountable posture SEC-7 allows, matches §6's continuous-metering model better
-than an after-the-fact tab, and mirrors patala's own prepaid `PostageProvider` seam. **Wakala
+than an after-the-fact tab, and mirrors patala's own prepaid `PostageProvider` seam. **Ephor
 holds no funds** — a credit is a claim backed by an on-rail funding reference, never custody.
 
 A thin, **optional** monthly-card postpaid add-on (`broker_billing::subscription::Subscription`)
@@ -136,8 +139,8 @@ rides the exact same `SettlementRail` seam for operators who want a card-on-file
 instead — secondary by design, not the default.
 
 <p align="center">
-  <img src="docs/img/console-billing-dark.png#gh-dark-mode-only" width="900" alt="Wakala operator console — Billing view, dark theme">
-  <img src="docs/img/console-billing-light.png#gh-light-mode-only" width="900" alt="Wakala operator console — Billing view, light theme">
+  <img src="docs/img/console-billing-dark.png#gh-dark-mode-only" width="900" alt="Ephor operator console — Billing view, dark theme">
+  <img src="docs/img/console-billing-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Billing view, light theme">
 </p>
 
 ### Recommended pricing (cost-plus, illustrative)
@@ -200,7 +203,7 @@ extracting this same gateway from envoir failed twice before against a moving co
 | [`broker-conformance`](crates/broker-conformance) | The `Coordinator` trait + COORD-1..8 checklist harness | built |
 | [`broker-billing`](crates/broker-billing) | Metering, `TariffSchedule`, prepaid ledger, signed receipts, `SettlementRail`/`StakeVerifier` seams, USD recommended pricing | built |
 | [`broker-billing-patala`](crates/broker-billing-patala) | **Optional**, non-default: `SettlementRail` over real `patala` rails | built, isolated |
-| [`admin`](crates/admin) | Kind-agnostic operator HTTP API (`wakala-admin` binary) | built |
+| [`admin`](crates/admin) | Kind-agnostic operator HTTP API (`ephor-admin` binary) | built |
 | [`gateway`](crates/gateway), [`relay`](crates/relay), [`reachability-adapter`](crates/reachability-adapter), [`media-relay`](crates/media-relay) | The four built coordinator kinds | built |
 | [`indexer`](crates/indexer), [`labeler`](crates/labeler), [`matcher`](crates/matcher), [`arbiter`](crates/arbiter), [`oracle`](crates/oracle), [`compute`](crates/compute) | The six scaffolded kinds | scaffold |
 
@@ -249,7 +252,7 @@ Disclosed residuals, not silently fixed:
 
 ## Status (honest, as of this writing)
 
-Wakala is **mid-rewrite**. Read this before relying on any of it in production.
+Ephor is **mid-rewrite**. Read this before relying on any of it in production.
 
 - **The Rust workspace is in progress, not the shipping implementation yet.** The
   **Go reverse-tunnel relay** (`tunnel/`, `cmd/`) and the **`@vulos/relay-client` JS
@@ -461,9 +464,9 @@ conventions, and scope constraints.
 
 ## License
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Wakala is a VulOS
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Ephor is a VulOS
 project; source and issues at
-[github.com/vul-os/wakala](https://github.com/vul-os/wakala).
+[github.com/vul-os/ephor](https://github.com/vul-os/ephor).
 
 ---
 

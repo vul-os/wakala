@@ -1,7 +1,7 @@
 //! # broker-conformance
 //!
 //! The coordinator-contract conformance harness: the [`Coordinator`] trait every
-//! Wakala kind implements, and [`check`], which runs the COORD-1..8 checklist of
+//! Ephor kind implements, and [`check`], which runs the COORD-1..8 checklist of
 //! `coordinator/CONTRACT.md` §7 against it.
 //!
 //! Honesty rule (STYLE §8): some clauses are decidable from the descriptor and the

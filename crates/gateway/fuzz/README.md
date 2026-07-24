@@ -2,10 +2,10 @@
 
 A self-contained [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) project targeting the
 `gateway` crate's attacker-controlled parsing/verification boundaries. **Not** a member of the main
-Wakala workspace — `Cargo.toml` detaches it with its own `[workspace]` table, so libFuzzer's
+Ephor workspace — `Cargo.toml` detaches it with its own `[workspace]` table, so libFuzzer's
 nightly-only build flags never leak into `cargo build --workspace` / `cargo test --workspace` on
 stable. This mirrors how envoir's own top-level `fuzz/` project was structured before the gateway
-(and this fuzz coverage) moved to Wakala (Wave W2; see the doc comments in each
+(and this fuzz coverage) moved to Ephor (Wave W2; see the doc comments in each
 `fuzz_targets/*.rs` file for the exact provenance and any API adaptation).
 
 ## Targets

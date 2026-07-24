@@ -1,4 +1,4 @@
-// Rasterize the Wakala brand SVGs into PNG icons for app favicons / PWA / social cards.
+// Rasterize the Ephor brand SVGs into PNG icons for app favicons / PWA / social cards.
 // Usage: node brand/make-icons.mjs   (from the repo root or the brand/ dir)
 //
 // Uses `rsvg-convert` (librsvg) — a single, small, widely-packaged CLI

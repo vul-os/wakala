@@ -1,6 +1,6 @@
 // Typed client for the `admin` crate's HTTP API (crates/admin/src/lib.rs).
 //
-// Two implementations share one interface: `RealAdminClient` calls a live `wakala-admin`
+// Two implementations share one interface: `RealAdminClient` calls a live `ephor-admin`
 // instance; `MockAdminClient` serves realistic in-memory fixtures so the console runs
 // standalone (VITE_MOCK=1, the default for this build — see console/README.md). The rest
 // of the app talks only to `AdminClient` and never knows which backend it got.
@@ -53,7 +53,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Talks to a real `wakala-admin` instance (see crates/admin). */
+/** Talks to a real `ephor-admin` instance (see crates/admin). */
 export class RealAdminClient implements AdminClient {
   constructor(
     private baseUrl: string,
@@ -568,7 +568,7 @@ export function createClient(): AdminClient {
   const isMock = import.meta.env.VITE_MOCK !== '0';
   if (isMock) return new MockAdminClient();
   const base = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8090';
-  const token = localStorage.getItem('wakala:admin-token') ?? import.meta.env.VITE_ADMIN_TOKEN ?? '';
+  const token = localStorage.getItem('ephor:admin-token') ?? import.meta.env.VITE_ADMIN_TOKEN ?? '';
   return new RealAdminClient(base, token);
 }
 

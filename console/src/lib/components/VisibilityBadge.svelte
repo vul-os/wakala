@@ -55,13 +55,13 @@
     align-items: flex-start;
     padding: 1.1rem 1.3rem;
     border-radius: 12px;
-    border: 1.5px solid var(--teal);
-    background: var(--teal-soft);
+    border: 1.5px solid var(--accent);
+    background: var(--accent-soft);
   }
 
   .badge.warn {
-    border-color: var(--behavioral);
-    background: var(--behavioral-bg);
+    border-color: var(--status-warning);
+    background: var(--status-warning-soft);
   }
 
   .badge.sm {
@@ -73,17 +73,17 @@
     width: 2.4rem;
     height: 2.4rem;
     flex-shrink: 0;
-    color: var(--teal);
+    color: var(--accent);
     border-radius: 50%;
-    background: var(--surface-raised);
+    background: var(--bg-elevated);
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--rule);
+    border: 1px solid var(--border-default);
   }
 
   .badge.warn .glyph {
-    color: var(--behavioral);
+    color: var(--status-warning);
   }
 
   .glyph svg {
@@ -105,7 +105,7 @@
   }
 
   .class-row {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-weight: 700;
     font-size: 1.5rem;
     letter-spacing: -0.01em;
@@ -119,14 +119,14 @@
   }
 
   .sep {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-weight: 400;
   }
 
   .level-label {
     font-family: var(--font-mono);
     font-size: 0.95rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     font-weight: 500;
   }
   .sm .level-label {
@@ -136,7 +136,7 @@
   .desc {
     margin: 0.3rem 0 0;
     font-size: 0.82rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     max-width: 52ch;
   }
   .sm .desc {
@@ -147,7 +147,7 @@
     margin: 0.55rem 0 0;
     font-size: 0.78rem;
     line-height: 1.5;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     max-width: 52ch;
   }
 
@@ -157,9 +157,9 @@
   }
 
   .warn-text strong {
-    color: var(--behavioral);
+    color: var(--status-warning);
   }
   .ok-text strong {
-    color: var(--teal);
+    color: var(--accent);
   }
 </style>

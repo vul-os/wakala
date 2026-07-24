@@ -138,7 +138,7 @@
       {#if IS_MOCK}
         <div class="note note-caution">
           <span aria-hidden="true">⚑</span>
-          <span><strong>Demo data.</strong> This build is reading fixture data (VITE_MOCK=1), not a live <code>wakala-admin</code> instance. See <code>console/README.md</code> to point it at a real coordinator.</span>
+          <span><strong>Demo data.</strong> This build is reading fixture data (VITE_MOCK=1), not a live <code>ephor-admin</code> instance. See <code>console/README.md</code> to point it at a real coordinator.</span>
         </div>
       {/if}
     </div>
@@ -165,7 +165,7 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
 
   h1 {
@@ -174,13 +174,13 @@
   }
 
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 46ch;
   }
 
   .loading {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: 0.85rem;
   }
@@ -201,7 +201,7 @@
   .strip-note {
     margin: 0.9rem 0 0;
     font-size: 0.76rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     line-height: 1.5;
   }
 
@@ -224,6 +224,6 @@
   }
 
   .footer-notes .note span[aria-hidden] {
-    color: var(--teal);
+    color: var(--accent);
   }
 </style>

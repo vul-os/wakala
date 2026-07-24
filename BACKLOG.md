@@ -1,6 +1,6 @@
-# Wakala build backlog
+# Ephor build backlog
 
-Autonomous program: complete **Wakala** (broker reference implementation of the KOTVA
+Autonomous program: complete **Ephor** (broker reference implementation of the KOTVA
 coordinator contract) and **envoir** (node-only), as **clean OSS**. Worked in 15-minute sonnet
 waves. Status marks: `[ ]` todo · `[~]` in-progress · `[x]` done+green · `[!]` blocked (see
 COORDINATION.md).
@@ -18,7 +18,7 @@ COORDINATION.md).
   `profiles/*`) — never edit it. Never touch envoir/kotva uncommitted WIP. Spec gaps → COORDINATION.md.
 
 ## Phase 0 — repo hygiene
-- [ ] W0.1 Rewrite wakala `README.md` → Wakala = broker reference impl (the kinds, no-token billing, self-host). Clean OSS.
+- [ ] W0.1 Rewrite ephor `README.md` → Ephor = broker reference impl (the kinds, no-token billing, self-host). Clean OSS.
 - [ ] W0.2 Verify GH description + topics updated (set outside loop).
 - [ ] W0.3 OSS hygiene: CONTRIBUTING/SECURITY present, dual-license confirmed, `.github/` CI wired (Phase 4).
 
@@ -47,12 +47,12 @@ COORDINATION.md).
 - [ ] C4.2 CI (GitHub Actions) — fmt + clippy + test + conformance.
 
 ## Phase 5 — envoir node-only
-- [ ] N5.1 Remove the gateway crate from envoir (it now lives in wakala).
+- [ ] N5.1 Remove the gateway crate from envoir (it now lives in ephor).
 - [ ] N5.2 Re-point envoir substrate crates to `kotva-core@core-v0.2.0` (retire envoir's own `dmtap-core`).
 - [ ] N5.3 envoir builds node-only, tests green.
 - [ ] N5.4 Update envoir README → node-only (loses gateway).
 
 ## Done criteria
-Wakala: all kinds present (real or contract-stubbed), broker-economics billing model complete,
+Ephor: all kinds present (real or contract-stubbed), broker-economics billing model complete,
 admin surface, conformance + CI green, clean OSS + README/docs. Envoir: node-only, on
 `kotva-core@core-v0.2.0`, green.

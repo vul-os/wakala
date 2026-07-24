@@ -1,4 +1,4 @@
-# cargo-fuzz project for the `gateway` crate — NOT a member of the main Wakala workspace (the
+# cargo-fuzz project for the `gateway` crate — NOT a member of the main Ephor workspace (the
 # `[workspace]` table below detaches it, per the standard cargo-fuzz convention: libFuzzer/
 # nightly-only build flags must never leak into `cargo build --workspace` / `cargo test --workspace`
 # on stable). Mirrors how envoir's own top-level `fuzz/` was structured before the gateway (and its

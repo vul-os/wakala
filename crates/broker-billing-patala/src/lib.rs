@@ -30,7 +30,7 @@
 //!    the hot billing path, exactly the "prepaid, not per-message" rule
 //!    `crate::prepaid`/`dmtap-postage-patala` both already follow.
 //!
-//! ## Non-custodial, by construction; Wakala takes no cut
+//! ## Non-custodial, by construction; Ephor takes no cut
 //!
 //! This adapter never holds a payer's funds and never signs a payment on a payer's behalf.
 //! Patala's rails are non-custodial (`patala-stellar` settles wallet-to-wallet); this crate only

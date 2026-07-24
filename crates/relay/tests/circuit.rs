@@ -52,7 +52,7 @@ fn build_peer_swarm() -> Swarm<PeerBehaviour> {
         .expect("relay client transport")
         .with_behaviour(|key, relay_client| {
             let identify = identify::Behaviour::new(identify::Config::new(
-                "/wakala/relay-test/id/1.0.0".to_string(),
+                "/ephor/relay-test/id/1.0.0".to_string(),
                 key.public(),
             ));
             // Short interval + timeout: the default ping cadence is tuned for a long-lived

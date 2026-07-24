@@ -94,7 +94,7 @@ fn coord1_gateway_descriptor_signed_by_the_wrong_key_fails_verification() {
 // disclosed, not misrepresented as verified-blind.
 // =================================================================================================
 
-/// **Proves:** the gateway declares `terminating` at assurance `declared` (the one Wakala kind
+/// **Proves:** the gateway declares `terminating` at assurance `declared` (the one Ephor kind
 /// that is NOT content-blind — the legacy SMTP leg is unavoidably plaintext, CONTRACT §3.1), and
 /// this declaration is honestly surfaced: `is_verifiably_blind()` is false (it never claims to be
 /// blind at all) and `must_not_present_as_verified()` is also false — because that flag exists to

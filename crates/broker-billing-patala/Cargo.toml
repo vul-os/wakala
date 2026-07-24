@@ -1,6 +1,6 @@
 [package]
 name = "broker-billing-patala"
-description = "OPTIONAL patala-backed reference implementation of broker-billing's SettlementRail (CONTRACT §6, DIRECTION §5): prepaid credit top-ups verified against a patala PaymentRail (patala-stellar shipped as the one reference crypto rail; patala-hyperswitch noted for an optional card/monthly path), settlement charged synchronously from the resulting local credit balance. Never a hard dependency of broker-billing or any wakala coordinator kind. Wakala takes no cut. UNVERIFIED AGAINST LIVE STELLAR — see README.md."
+description = "OPTIONAL patala-backed reference implementation of broker-billing's SettlementRail (CONTRACT §6, DIRECTION §5): prepaid credit top-ups verified against a patala PaymentRail (patala-stellar shipped as the one reference crypto rail; patala-hyperswitch noted for an optional card/monthly path), settlement charged synchronously from the resulting local credit balance. Never a hard dependency of broker-billing or any ephor coordinator kind. Ephor takes no cut. UNVERIFIED AGAINST LIVE STELLAR — see README.md."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,10 +21,10 @@ workspace = true
 # receiving wallet — PATALA.md §6). An operator who wants Stripe, a bank rail, or their own
 # ledger instead writes their own SettlementRail impl and never touches this crate.
 #
-# This crate lives under `crates/*` (matched by the wakala workspace's member glob) but is
+# This crate lives under `crates/*` (matched by the ephor workspace's member glob) but is
 # deliberately left OUT of that workspace's `default-members` (see the root Cargo.toml) — exactly
 # the trick envoir's `dmtap-postage-patala` and patala's own workspace use for their
-# network/crypto-dependent optional adapters. Plain `cargo build`/`cargo test` at the wakala
+# network/crypto-dependent optional adapters. Plain `cargo build`/`cargo test` at the ephor
 # workspace root therefore never pulls in patala or any of its crypto/network dependencies; only
 # `cargo build -p broker-billing-patala` / `cargo test -p broker-billing-patala` does.
 # `broker-billing` alone stays the offline, patala-free default.

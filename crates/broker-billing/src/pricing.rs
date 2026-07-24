@@ -178,7 +178,7 @@ impl HostingProfile {
 
 /// Which coordinator kind a [`recommended_tariff`] is being computed for — deliberately a small,
 /// closed set mirroring the kinds CONTRACT §6 calls out by pricing shape (bandwidth vs.
-/// per-message vs. per-compute-second), not a copy of every Wakala coordinator kind.
+/// per-message vs. per-compute-second), not a copy of every Ephor coordinator kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoordinatorPricingKind {
     /// Mesh Circuit-Relay-style forwarding — bandwidth-priced, not in the scarce-reachability

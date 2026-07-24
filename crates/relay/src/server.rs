@@ -17,7 +17,7 @@
 //!
 //! - **Transport:** TCP, secured by **Noise**, multiplexed by **Yamux** — the same transport-
 //!   security stack envoir's `dmtap-p2p` mesh transport runs (matched libp2p major/minor +
-//!   feature shape, BUILD-PLAN.md W5), so a wakala relay and an envoir/dmtap-p2p mesh node
+//!   feature shape, BUILD-PLAN.md W5), so an ephor relay and an envoir/dmtap-p2p mesh node
 //!   interoperate on the wire.
 //! - **[`relay`](libp2p::relay) (Circuit Relay v2), server role only:** this crate is a relay,
 //!   never a relay *client* — it does not reserve slots on other relays or dial peers through
@@ -52,7 +52,7 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Identify protocol version this relay advertises. Versioned so a future change to what the
 /// relay identifies as is an additive protocol, not a silent break.
-const IDENTIFY_PROTOCOL: &str = "/wakala/relay/id/1.0.0";
+const IDENTIFY_PROTOCOL: &str = "/ephor/relay/id/1.0.0";
 
 /// The relay server's composed libp2p behaviour: Circuit Relay v2 (server role) + Identify. No
 /// `kad`, no `request-response`, no application protocol of any kind — a relay has nothing to

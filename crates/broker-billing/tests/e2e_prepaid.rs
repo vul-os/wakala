@@ -37,7 +37,7 @@ fn e2e_full_prepaid_lifecycle_through_a_recommended_tariff() {
     assert!(signed_tariff.verify().is_ok());
     let schedule = broker_billing::TariffSchedule::from_tariff(&signed_tariff).unwrap();
 
-    // 2. The prepaid rail: a payer tops up, custody-free (Wakala holds no funds — see
+    // 2. The prepaid rail: a payer tops up, custody-free (Ephor holds no funds — see
     // `prepaid`'s module doc); a mock settlement rail stands in for a real on-chain/patala rail
     // only for the OPTIONAL monthly-postpaid leg exercised at the end of this test.
     let mock_rail = InMemoryLedger::new();

@@ -61,7 +61,7 @@
 //! disclosure.
 //!
 //! No protocol token exists anywhere in this crate, by construction: every amount is
-//! denominated in a caller-supplied currency/asset string (DIRECTION §5), never a Wakala-minted
+//! denominated in a caller-supplied currency/asset string (DIRECTION §5), never an Ephor-minted
 //! unit, and [`meter`]/[`tariff`] never produce or consume anything resembling one.
 
 #![forbid(unsafe_code)]

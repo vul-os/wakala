@@ -15,7 +15,7 @@
 //!   against a standing balance is the natural match, rather than accumulating an unbounded tab
 //!   an operator must then collect after the fact.
 //!
-//! ## Wakala holds no funds — "credit claims," not custody
+//! ## Ephor holds no funds — "credit claims," not custody
 //!
 //! [`PrepaidLedger`] is bookkeeping only. [`PrepaidLedger::top_up`] credits a balance because the
 //! caller asserts a `funding_ref` — a pointer to whatever ALREADY happened on a real

@@ -93,7 +93,7 @@ async fn valid_token_is_200() {
 
 #[tokio::test]
 async fn no_token_configured_denies_every_request_default_deny() {
-    // No WAKALA_ADMIN_TOKEN-equivalent configured at all -> AdminAuth::disabled() -> everything
+    // No EPHOR_ADMIN_TOKEN-equivalent configured at all -> AdminAuth::disabled() -> everything
     // 401, even a request that presents *some* bearer token.
     let resp = app_no_token()
         .oneshot(req("GET", "/descriptor", Some("anything-at-all"), None))
@@ -224,7 +224,7 @@ async fn tariff_put_signs_and_attaches_to_descriptor() {
 async fn tariff_token_field_is_rejected() {
     let put_body = json!({
         "currency": "USD",
-        "token": {"mint": "WAKALA-COIN"},
+        "token": {"mint": "EPHOR-COIN"},
     });
     let resp = app()
         .oneshot(req("PUT", "/tariff", Some(TOKEN), Some(put_body)))

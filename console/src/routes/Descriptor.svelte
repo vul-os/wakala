@@ -226,19 +226,19 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
   h1 {
     font-size: 1.9rem;
     margin: 0.2rem 0 0.35rem;
   }
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 68ch;
   }
   .loading {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
   }
   .layout {
@@ -266,7 +266,7 @@
     gap: 0.4rem;
     margin-top: 0.5rem;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--text-primary);
     font-size: 0.78rem;
   }
   .checkline input {
@@ -279,7 +279,7 @@
     display: block;
     margin-top: 0.6rem;
     font-size: 0.78rem;
-    color: var(--pass);
+    color: var(--status-success);
     font-family: var(--font-mono);
   }
   .published dl {
@@ -294,7 +294,7 @@
     font-size: 0.68rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     align-self: center;
   }
   .published dd {
@@ -303,6 +303,6 @@
     min-width: 0;
   }
   .published dd.notes {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
   }
 </style>

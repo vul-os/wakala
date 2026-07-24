@@ -14,7 +14,7 @@
 //! `lib.rs` module doc on why every kind's admin surface stays composed, not coupled).
 //!
 //! Deployment note (documented, not enforced by this module): this API is **operator-local**. The
-//! binary (`src/main.rs`/`bin/wakala-admin`) defaults its bind address to loopback
+//! binary (`src/main.rs`/`bin/ephor-admin`) defaults its bind address to loopback
 //! (`127.0.0.1`) — reachability beyond that host, and the admin token itself, are the operator's
 //! own config/network responsibility (e.g. an SSH tunnel or a private network), same as any other
 //! control-plane surface. This is *not* a user delivery path — see `lib.rs`.

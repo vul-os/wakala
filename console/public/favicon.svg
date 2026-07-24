@@ -1,12 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Wakala Operator Console">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="48" height="48" role="img" aria-label="Ephor Operator Console">
+  <title>Ephor</title>
+  <desc>Favicon-weight mark: five bold bronze nodes around a thick ring marking the untouched core (brand/favicon.svg).</desc>
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFC24B"/>
-      <stop offset=".55" stop-color="#FF8A3D"/>
-      <stop offset="1" stop-color="#E8543D"/>
+    <linearGradient id="eph-tile-f" x1="0" y1="0" x2="240" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14171f"/>
+      <stop offset="1" stop-color="#08090c"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="48" height="48" rx="11" fill="url(#g)"/>
-  <path d="M12 15l7 18 6-10 6 10 7-18" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <circle cx="24" cy="23" r="4.6" fill="none" stroke="#14B8A6" stroke-width="1.8"/>
+  <rect x="0" y="0" width="240" height="240" rx="52" fill="url(#eph-tile-f)"/>
+  <circle cx="120" cy="120" r="34" fill="none" stroke="#C89A56" stroke-width="16"/>
+  <g fill="#C89A56">
+    <circle cx="120" cy="42" r="19"/>
+    <circle cx="194.2" cy="95.9" r="19"/>
+    <circle cx="165.9" cy="183.1" r="19"/>
+    <circle cx="74.2" cy="183.1" r="19"/>
+    <circle cx="45.8" cy="95.9" r="19"/>
+  </g>
 </svg>

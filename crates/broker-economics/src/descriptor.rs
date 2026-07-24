@@ -15,12 +15,12 @@
 //! forged or tampered descriptor/tariff/receipt fails [`SignedDescriptor::verify`]
 //! / [`Tariff::verify`] / [`UsageReceipt::verify`].
 //!
-//! ## Wire layout (not yet spec-ratified — see `COORDINATION.md` "Wakala → Spec")
+//! ## Wire layout (not yet spec-ratified — see `COORDINATION.md` "Ephor → Spec")
 //!
 //! `kotva-core`/DMTAP conventions are followed (integer-keyed canonical CBOR maps,
 //! §18.1.1/§18.1.2, unknown keys rejected). This crate mints its own object types
-//! and DS tags (`WAKALA-v0/...`) rather than DMTAP-core ones, since the coordinator
-//! descriptor is a Wakala/CONTRACT.md concept, not a DMTAP-core wire object.
+//! and DS tags (`EPHOR-v0/...`) rather than DMTAP-core ones, since the coordinator
+//! descriptor is an Ephor/CONTRACT.md concept, not a DMTAP-core wire object.
 //!
 //! `Descriptor` (signing body — the map with key `6` omitted):
 //! ```text
@@ -53,9 +53,9 @@ use crate::visibility::{AssuranceLevel, ContentVisibility, VisibilityClass};
 // Domain-separation tags (SEC-2 style, matching kotva-core's own `identity.rs` convention: an
 // ASCII string terminated by one `0x00` byte, distinct per object type so a signature over one
 // object can never be replayed as another). The signing preimage is `DS-tag ‖ det_cbor(body)`.
-const DESCRIPTOR_DS: &[u8] = b"WAKALA-v0/coordinator-descriptor\x00";
-const TARIFF_DS: &[u8] = b"WAKALA-v0/tariff\x00";
-const USAGE_RECEIPT_DS: &[u8] = b"WAKALA-v0/usage-receipt\x00";
+const DESCRIPTOR_DS: &[u8] = b"EPHOR-v0/coordinator-descriptor\x00";
+const TARIFF_DS: &[u8] = b"EPHOR-v0/tariff\x00";
+const USAGE_RECEIPT_DS: &[u8] = b"EPHOR-v0/usage-receipt\x00";
 
 /// Errors signing or verifying a [`Descriptor`]/[`Tariff`]/[`UsageReceipt`]. Every variant is a
 /// hard reject — callers MUST treat any error here as "not verified" (SEC-1 fail-closed), never
@@ -166,7 +166,7 @@ impl Descriptor {
 
     /// Sign this descriptor with the coordinator's real kotva-core identity (CONTRACT §2.1). The
     /// preimage is `DESCRIPTOR_DS ‖ det_cbor(self)` (SEC-2/SEC-3), so a descriptor signature can
-    /// never be replayed as a tariff, a usage receipt, or any other DMTAP/Wakala signed object.
+    /// never be replayed as a tariff, a usage receipt, or any other DMTAP/Ephor signed object.
     ///
     /// `ik`'s public key SHOULD equal `self.identity` — the descriptor is self-certifying, like
     /// kotva-core's own `Identity` object signing its own embedded public key. A mismatch is not

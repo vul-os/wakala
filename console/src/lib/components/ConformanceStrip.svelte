@@ -53,19 +53,19 @@
     gap: 0.4rem;
     padding: 0.7rem 0.4rem;
     border-radius: 9px;
-    background: var(--surface-raised);
-    border: 1px solid var(--rule);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
     cursor: default;
   }
 
   .light.pass {
-    color: var(--pass);
+    color: var(--status-success);
   }
   .light.behavioral {
-    color: var(--behavioral);
+    color: var(--status-warning);
   }
   .light.violation {
-    color: var(--violation);
+    color: var(--status-danger);
   }
 
   .label {
@@ -79,13 +79,13 @@
     font-family: var(--font-mono);
     font-size: 0.68rem;
     font-weight: 700;
-    color: var(--ink);
+    color: var(--text-primary);
   }
 
   .clause {
     font-family: var(--font-mono);
     font-size: 0.62rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
 
   .tooltip {
@@ -94,8 +94,8 @@
     left: 50%;
     transform: translateX(-50%) translateY(4px);
     width: 15rem;
-    background: var(--ink);
-    color: var(--bg);
+    background: var(--text-primary);
+    color: var(--bg-base);
     border-radius: 8px;
     padding: 0.6rem 0.75rem;
     font-size: 0.72rem;
@@ -104,13 +104,13 @@
     pointer-events: none;
     transition: opacity 0.15s ease, transform 0.15s ease;
     z-index: 20;
-    box-shadow: 0 12px 28px -10px hsl(var(--shadow) / 0.5);
+    box-shadow: var(--shadow-lg);
   }
 
   .tooltip strong {
     display: block;
-    color: var(--bg);
-    font-family: var(--font-body);
+    color: var(--bg-base);
+    font-family: var(--font-sans);
   }
 
   .tooltip .outcome-word {

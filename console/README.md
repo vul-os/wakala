@@ -1,6 +1,6 @@
-# Wakala Operator Console
+# Ephor Operator Console
 
-The web UI an operator uses to run a Wakala coordinator: it fronts the `admin` crate's HTTP
+The web UI an operator uses to run a Ephor coordinator: it fronts the `admin` crate's HTTP
 API (`crates/admin`) — the coordinator-kind-agnostic control plane for a descriptor, a tariff,
 metering/receipts, quota, and the operator's signing keys.
 
@@ -21,16 +21,16 @@ Six views, one left-nav shell:
 
 Vite + Svelte 5 (runes) + TypeScript. No UI framework, no CSS framework, no router library —
 a ~40-line hash router and hand-rolled components, on purpose: the surface is six views, not
-sixty. Fonts are self-hosted via `@fontsource*` (Fraunces for display, JetBrains Mono for
-identifiers/ledger numbers, Public Sans for body) so the console never depends on a font CDN.
+sixty. Fonts are self-hosted via `@fontsource*` (Public Sans for body/display, JetBrains Mono
+for identifiers/ledger numbers) so the console never depends on a font CDN.
 
-**Design language — "Harbor Ledger":** an operator's control room styled as a shipping
-manifest / bridge instrument panel, keyed off the real Wakala mark's amber→orange→teal
-palette (`brand/logo-mark.svg`) rather than a generic dashboard template — brass CTAs, an ink
-stamp on freshly signed artifacts, and COORD-1..8 rendered as running lights (green pass /
-amber behavioral / red violation). Day watch (parchment, light) and night bridge (ink-brown,
-dark) are both first-class; the theme toggle in the top bar overrides
-`prefers-color-scheme`, which is the default.
+**Design language:** the Vulos OS design system — cool near-black chrome, a single bronze
+accent (`#C89A56`, the exact value the real Ephor mark is drawn in, see
+`brand/logo-mark.svg`) rather than a generic dashboard template — a bronze primary CTA, an
+ink stamp on freshly signed artifacts, and COORD-1..8 still rendered as running lights (green
+pass / amber behavioral / red violation) via the shared `--status-*` tokens. Dark is the
+shipped default, matching the rest of Vulos; a full light palette is defined too, and the
+theme toggle in the top bar overrides `prefers-color-scheme`, which is the default.
 
 ## Develop
 
@@ -48,18 +48,18 @@ pnpm preview       # serve dist/ locally
 
 `pnpm check` runs `svelte-check` + `tsc` with no emit.
 
-## Connecting to a real `wakala-admin`
+## Connecting to a real `ephor-admin`
 
 By default (`.env`, committed — no secrets in it) this build runs entirely on the fixtures in
 `src/lib/api.ts` (`VITE_MOCK=1`), so it works standalone for development and for the
 screenshots below. To point it at a live coordinator instead:
 
-1. Set `VITE_MOCK=0` and `VITE_API_BASE=http://127.0.0.1:8090` (or wherever `wakala-admin`
+1. Set `VITE_MOCK=0` and `VITE_API_BASE=http://127.0.0.1:8090` (or wherever `ephor-admin`
    binds — it defaults to loopback-only, see `crates/admin/src/config.rs`) at build time, or
    in a `.env.local`.
-2. The admin API is bearer-token gated and fail-closed (`WAKALA_ADMIN_TOKEN` on the server
+2. The admin API is bearer-token gated and fail-closed (`EPHOR_ADMIN_TOKEN` on the server
    side — no token configured means every request is `401`, not merely unauthenticated). This
-   console reads the token from `localStorage['wakala:admin-token']` at runtime, or from
+   console reads the token from `localStorage['ephor:admin-token']` at runtime, or from
    `VITE_ADMIN_TOKEN` at build time as a fallback; it is never hardcoded or checked in.
 3. The real admin API has no prepaid/patala surface of its own — CONTRACT §6 deliberately
    leaves settlement to an operator-supplied rail. `RealAdminClient` (`src/lib/api.ts`) calls

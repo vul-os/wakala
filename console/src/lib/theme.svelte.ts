@@ -4,7 +4,7 @@
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'wakala:theme';
+const STORAGE_KEY = 'ephor:theme';
 
 function readInitial(): ThemeChoice {
   if (typeof localStorage === 'undefined') return 'system';

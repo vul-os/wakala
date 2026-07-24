@@ -1,6 +1,6 @@
-# Wakala Rust workspace
+# Ephor Rust workspace
 
-Wakala is the **broker (coordinator) reference implementation** of the KOTVA standard — the
+Ephor is the **broker (coordinator) reference implementation** of the KOTVA standard — the
 single project that implements [`coordinator/CONTRACT.md`](https://github.com/vul-os/kotva).
 This workspace is the all-Rust rewrite; the Go reverse-tunnel relay + JS client SDK are
 **preserved untouched** alongside it until the port is proven (HANDOVER §Guardrails-3).
@@ -17,7 +17,7 @@ asserted in prose.
 | `broker-economics` | Shared model: the content-visibility property, the coordinator-kinds table (CONTRACT §5), and the real `kotva-core`-signed descriptor / tariff / usage-receipt shapes (§2.1, §6). | **built** — real Ed25519 signing over deterministic CBOR, pinned to `kotva-core@core-v0.2.0` |
 | `broker-conformance` | The `Coordinator` trait + the COORD-1..8 checklist harness (CONTRACT §7). | **built** — harness + tests |
 | `broker-billing` | CONTRACT §6 made concrete: kind-agnostic metering, a signed `TariffSchedule`, signed usage receipts (`ReceiptLog`), and a no-token `SettlementRail`/`StakeVerifier` seam with mock reference adapters. | **built** — 27 tests |
-| `admin` | Kind-agnostic operator HTTP API (axum) composing broker-economics/broker-billing/broker-conformance: descriptor+tariff sign, metering/receipts view, quota/key mgmt, live `/conformance`. | **built** — 29 tests, `wakala-admin` reference binary |
+| `admin` | Kind-agnostic operator HTTP API (axum) composing broker-economics/broker-billing/broker-conformance: descriptor+tariff sign, metering/receipts view, quota/key mgmt, live `/conformance`. | **built** — 29 tests, `ephor-admin` reference binary |
 | `gateway` | The mail *adapter* — legacy SMTP/IMAP/POP3 bridge (spec §7). The one `terminating` kind. Folded out of envoir; pins `kotva-core@core-v0.2.0`. | **built** — 320 tests incl. conformance + runtime COORD-1/5 discharge |
 | `relay` | Mesh `relay` kind, `blind`/`structural` — real libp2p 0.56 Circuit Relay v2 server; forwards NAT'd-peer ciphertext, holds no decrypting key. | **built** — 12 tests, real two-peer loopback relay test |
 | `reachability-adapter` | REACH kind, `blind-routing` — SNI-passthrough public reach for box services; box terminates TLS. Replaces the Go L7-terminating proxy. REACH-2 key-auth done. | **built** — 32 tests. **Open:** control-channel transport not yet Noise-encrypted (see CHANGELOG "Honest limits") |

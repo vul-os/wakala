@@ -1,133 +1,190 @@
-/* Wakala Operator Console — "Harbor Ledger"
-   A coordinator's control room styled as a shipping manifest / bridge instrument
-   panel: brass and running-light color language, ledger typography, ink stamps
-   for signed artifacts. Palette keyed off the real Wakala mark (amber -> orange
-   gradient, teal broker-halo, ink-brown) so the console reads as family with
-   the rest of the brand, not a generic dashboard template. */
+/* Ephor Operator Console
+   A coordinator's control room, themed on the Vulos OS design system: cool
+   near-black chrome, a single bronze accent (#C89A56 — the same value the real
+   Ephor mark is drawn in, see brand/logo-mark.svg), and the eight-step text /
+   four-step surface / four-step border ladders shared with the rest of Vulos.
+   Dark is the default, matching the OS; a full light palette is defined too.
+   COORD-1..8 conformance still reads as running lights (green pass / amber
+   behavioral / red violation) via the canonical --status-* tokens, and freshly
+   signed artifacts still get an ink stamp — just retinted to the new system. */
 
-@import '@fontsource-variable/fraunces/standard.css';
-@import '@fontsource-variable/fraunces/standard-italic.css';
 @import '@fontsource-variable/public-sans';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
 
 :root {
-  color-scheme: light;
+  /* color-scheme makes native UA widgets (scrollbars, form controls, ::selection)
+     match the theme. Overridden in the light block below. Dark is the shipped
+     default, mirroring the rest of Vulos. */
+  color-scheme: dark;
 
-  /* --- Day watch: parchment ledger --- */
-  --bg: #f4ecdb;
-  --bg-deep: #ece0c8;
-  --surface: #fffbf1;
-  --surface-raised: #ffffff;
-  --ink: #241207;
-  --ink-soft: #5a4736;
-  --ink-faint: #8a7a64;
-  --rule: #cbb994;
-  --rule-strong: #a9905f;
+  --font-sans: 'Public Sans Variable', 'Public Sans', ui-sans-serif, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
 
-  --brass-1: #ffc24b;
-  --brass-2: #ff8a3d;
-  --brass-3: #e8543d;
-  --teal: #0e8f81;
-  --teal-soft: #d9efec;
+  /* ── Accent — Ephor bronze. The exact value the brand mark is drawn in
+     (brand/logo-mark.svg). Used sparingly: focus rings, primary button, active
+     nav rail, signed-artifact stamps, conformance/price emphasis. --accent-hover
+     and --accent-contrast are formulas (not re-declared per theme) so they
+     automatically follow whichever --accent / --bg-base is active. ── */
+  --accent: #c89a56;
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, black);
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  /* Bronze is mid-light: on the dark canvas the accent itself is bright enough
+     that the glyph sitting ON a solid accent fill must be near-black, not
+     white (measured ~8.2:1 accent-vs-bg-base in dark — see agent report for the
+     full contrast table). Formula-tied to --bg-base so it tracks the theme
+     automatically instead of a second hardcoded literal. */
+  --accent-contrast: var(--bg-base);
 
-  --pass: #2f7a4f;
-  --pass-bg: #e3efdf;
-  --behavioral: #a3690c;
-  --behavioral-bg: #f6e9d2;
-  --violation: #a4342a;
-  --violation-bg: #f5ded9;
+  /* ═══ DARK PALETTE (shipped default) — identical ladder to vulos/src/index.css ═══ */
+  --bg-base: #08090c;
+  --bg-surface: #0f1116;
+  --bg-elevated: #171a21;
+  --bg-hover: #1e222b;
+  --bg-active: #262b35;
 
-  --focus: #0e8f81;
-  --shadow: 220 40% 15%;
+  --border-subtle: #14171d;
+  --border-default: #1f232c;
+  --border-strong: #2b303b;
+  --border-emphasis: #3a4150;
 
-  --font-display: 'Fraunces Variable', 'Iowan Old Style', ui-serif, serif;
-  --font-body: 'Public Sans Variable', 'Public Sans', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --text-primary: #f2f4f8;
+  --text-secondary: #c3c8d2;
+  --text-tertiary: #8b93a2;
+  --text-muted: #6d7585;
+  --text-faint: #545b69;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 20px 52px -12px rgba(0, 0, 0, 0.6);
+
+  /* Semantic status — COORD-1..8 running lights + prepaid/receipt states. */
+  --status-success: #35c081;
+  --status-warning: #f0b232;
+  --status-danger: #f2565b;
+  --status-success-soft: color-mix(in srgb, var(--status-success) 14%, transparent);
+  --status-warning-soft: color-mix(in srgb, var(--status-warning) 14%, transparent);
+  --status-danger-soft: color-mix(in srgb, var(--status-danger) 12%, transparent);
+
+  /* Structural (theme-agnostic) */
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 9px;
+  --radius-lg: 13px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #150c07;
-    --bg-deep: #0f0906;
-    --surface: #211308;
-    --surface-raised: #2a1a0e;
-    --ink: #f3e6d3;
-    --ink-soft: #cbb89e;
-    --ink-faint: #8f7a63;
-    --rule: #3d2a18;
-    --rule-strong: #55391f;
-
-    --brass-1: #ffc24b;
-    --brass-2: #ff9a4d;
-    --brass-3: #ff6a4d;
-    --teal: #2dd4c2;
-    --teal-soft: #163430;
-
-    --pass: #5fd08b;
-    --pass-bg: #17301f;
-    --behavioral: #f0b649;
-    --behavioral-bg: #362408;
-    --violation: #ff8579;
-    --violation-bg: #3a1811;
-
-    --focus: #2dd4c2;
-    --shadow: 0 0% 0%;
-  }
-}
-
+/* Dark palette stated explicitly, so an explicit Dark choice ([data-theme="dark"])
+   is symmetric with Light rather than falling through to a partial default. */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #150c07;
-  --bg-deep: #0f0906;
-  --surface: #211308;
-  --surface-raised: #2a1a0e;
-  --ink: #f3e6d3;
-  --ink-soft: #cbb89e;
-  --ink-faint: #8f7a63;
-  --rule: #3d2a18;
-  --rule-strong: #55391f;
-  --brass-1: #ffc24b;
-  --brass-2: #ff9a4d;
-  --brass-3: #ff6a4d;
-  --teal: #2dd4c2;
-  --teal-soft: #163430;
-  --pass: #5fd08b;
-  --pass-bg: #17301f;
-  --behavioral: #f0b649;
-  --behavioral-bg: #362408;
-  --violation: #ff8579;
-  --violation-bg: #3a1811;
-  --focus: #2dd4c2;
-  --shadow: 0 0% 0%;
+  --accent: #c89a56;
+  --bg-base: #08090c;
+  --bg-surface: #0f1116;
+  --bg-elevated: #171a21;
+  --bg-hover: #1e222b;
+  --bg-active: #262b35;
+  --border-subtle: #14171d;
+  --border-default: #1f232c;
+  --border-strong: #2b303b;
+  --border-emphasis: #3a4150;
+  --text-primary: #f2f4f8;
+  --text-secondary: #c3c8d2;
+  --text-tertiary: #8b93a2;
+  --text-muted: #6d7585;
+  --text-faint: #545b69;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 20px 52px -12px rgba(0, 0, 0, 0.6);
+  --status-success: #35c081;
+  --status-warning: #f0b232;
+  --status-danger: #f2565b;
 }
 
+/* ═══ LIGHT PALETTE ═══
+   --accent is deepened from the raw brand hex (#c89a56) via color-mix so
+   accent-as-text still clears WCAG AA 4.5:1 — not just against the page canvas
+   (raw brand value only reaches ~2.6:1 on white; deepened measures ~6.2:1) but
+   also against its OWN --accent-soft-tinted badge background (the tightest
+   case in this file, ~4.95:1 — a lighter deepening looks fine on white alone
+   but drops that self-tint pairing below 4.5). --accent-contrast still
+   formula-resolves to --bg-base (white here), which is what a viewer sees on
+   a solid accent-filled button (~6.2:1 there too). */
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f4ecdb;
-  --bg-deep: #ece0c8;
-  --surface: #fffbf1;
-  --surface-raised: #ffffff;
-  --ink: #241207;
-  --ink-soft: #5a4736;
-  --ink-faint: #8a7a64;
-  --rule: #cbb994;
-  --rule-strong: #a9905f;
-  --brass-1: #ffc24b;
-  --brass-2: #ff8a3d;
-  --brass-3: #e8543d;
-  --teal: #0e8f81;
-  --teal-soft: #d9efec;
-  --pass: #2f7a4f;
-  --pass-bg: #e3efdf;
-  --behavioral: #a3690c;
-  --behavioral-bg: #f6e9d2;
-  --violation: #a4342a;
-  --violation-bg: #f5ded9;
-  --focus: #0e8f81;
-  --shadow: 220 40% 15%;
+  --accent: color-mix(in srgb, #c89a56 60%, black);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+
+  --bg-base: #ffffff;
+  --bg-surface: #f7f8fa;
+  --bg-elevated: #eef0f4;
+  --bg-hover: #e7eaf0;
+  --bg-active: #dde1ea;
+
+  --border-subtle: #eef0f3;
+  --border-default: #e2e5eb;
+  --border-strong: #cfd4dd;
+  --border-emphasis: #b7bdc9;
+
+  --text-primary: #12141a;
+  --text-secondary: #333844;
+  --text-tertiary: #565d6b;
+  --text-muted: #6b7280;
+  --text-faint: #8b93a1;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 3px 10px -2px rgba(15, 23, 42, 0.09);
+  --shadow-lg: 0 12px 30px -8px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 20px 52px -12px rgba(15, 23, 42, 0.14);
+
+  --status-danger: #dc2626;
+  --status-warning: #d97706;
+  --status-success: #16a34a;
+}
+
+/* Pure-CSS light fallback for the split second before theme.svelte.ts stamps
+   data-theme on <html> (and for any no-JS render) — keeps first paint honest
+   for a System-Light viewer instead of flashing the dark default. Only
+   applies when NO explicit data-theme is present (JS always wins once it runs). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --accent: color-mix(in srgb, #c89a56 60%, black);
+    --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+    --bg-base: #ffffff;
+    --bg-surface: #f7f8fa;
+    --bg-elevated: #eef0f4;
+    --bg-hover: #e7eaf0;
+    --bg-active: #dde1ea;
+    --border-subtle: #eef0f3;
+    --border-default: #e2e5eb;
+    --border-strong: #cfd4dd;
+    --border-emphasis: #b7bdc9;
+    --text-primary: #12141a;
+    --text-secondary: #333844;
+    --text-tertiary: #565d6b;
+    --text-muted: #6b7280;
+    --text-faint: #8b93a1;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 3px 10px -2px rgba(15, 23, 42, 0.09);
+    --shadow-lg: 0 12px 30px -8px rgba(15, 23, 42, 0.12);
+    --shadow-xl: 0 20px 52px -12px rgba(15, 23, 42, 0.14);
+    --status-danger: #dc2626;
+    --status-warning: #d97706;
+    --status-success: #16a34a;
+  }
 }
 
 * {
@@ -142,15 +199,15 @@ body {
 }
 
 body {
-  background-color: var(--bg);
+  background-color: var(--bg-base);
   background-image:
-    linear-gradient(var(--rule) 1px, transparent 1px),
-    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    linear-gradient(var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
   background-size: 100% 2.1rem, 2.1rem 100%;
   background-position: 0 6.4rem, 0 0;
   opacity: 1;
-  color: var(--ink);
-  font-family: var(--font-body);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -161,15 +218,15 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-display);
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0;
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 a {
-  color: var(--teal);
+  color: var(--accent);
 }
 
 code,
@@ -182,12 +239,12 @@ button {
 }
 
 ::selection {
-  background: var(--brass-1);
-  color: #241207;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -195,10 +252,10 @@ button {
 /* ---------- shared primitives ---------- */
 
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--rule);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  box-shadow: 0 1px 0 hsl(var(--shadow) / 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -207,7 +264,7 @@ button {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.1rem 1.4rem 0.9rem;
-  border-bottom: 1px dashed var(--rule);
+  border-bottom: 1px dashed var(--border-default);
 }
 
 .panel-header h2 {
@@ -219,7 +276,7 @@ button {
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--text-tertiary);
 }
 
 .panel-body {
@@ -230,20 +287,20 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.86rem;
   padding: 0.62rem 1.1rem;
   border-radius: 7px;
-  border: 1px solid var(--rule-strong);
-  background: var(--surface-raised);
-  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
 .btn:hover {
-  border-color: var(--teal);
+  border-color: var(--accent);
   transform: translateY(-1px);
 }
 
@@ -252,25 +309,26 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--brass-1), var(--brass-2) 60%, var(--brass-3));
+  background: var(--accent);
   border-color: transparent;
-  color: #241207;
-  box-shadow: 0 6px 18px -8px rgba(232, 84, 61, 0.55);
+  color: var(--accent-contrast);
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 8px 22px -8px rgba(232, 84, 61, 0.65);
+  background: var(--accent-hover);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 .btn-ghost {
   background: transparent;
   border-color: transparent;
-  color: var(--ink-soft);
+  color: var(--text-secondary);
 }
 
 .btn-ghost:hover {
-  color: var(--ink);
-  border-color: var(--rule);
+  color: var(--text-primary);
+  border-color: var(--border-default);
 }
 
 .btn:disabled {
@@ -281,15 +339,15 @@ button {
 }
 
 .btn-danger-outline {
-  border-color: var(--violation);
-  color: var(--violation);
+  border-color: var(--status-danger);
+  color: var(--status-danger);
   background: transparent;
 }
 
 label {
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--ink-soft);
+  color: var(--text-secondary);
   display: block;
   margin-bottom: 0.35rem;
 }
@@ -301,20 +359,20 @@ textarea {
   font-family: var(--font-mono);
   font-size: 0.86rem;
   padding: 0.55rem 0.7rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--rule-strong);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 textarea {
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--teal);
+  border-color: var(--accent);
 }
 
 .field {
@@ -323,15 +381,15 @@ textarea:focus {
 
 .field-hint {
   font-size: 0.74rem;
-  color: var(--ink-faint);
+  color: var(--text-tertiary);
   margin-top: 0.3rem;
 }
 
 .note {
   font-size: 0.8rem;
-  color: var(--ink-soft);
-  background: var(--bg-deep);
-  border: 1px dashed var(--rule-strong);
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px dashed var(--border-strong);
   border-radius: 8px;
   padding: 0.7rem 0.9rem;
   display: flex;
@@ -341,18 +399,18 @@ textarea:focus {
 }
 
 .note strong {
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .note-caution {
-  background: var(--behavioral-bg);
-  border-color: color-mix(in srgb, var(--behavioral) 45%, var(--rule-strong));
-  color: var(--ink);
+  background: var(--status-warning-soft);
+  border-color: color-mix(in srgb, var(--status-warning) 45%, var(--border-strong));
+  color: var(--text-primary);
 }
 
 .note-danger {
-  background: var(--violation-bg);
-  border-color: color-mix(in srgb, var(--violation) 45%, var(--rule-strong));
+  background: var(--status-danger-soft);
+  border-color: color-mix(in srgb, var(--status-danger) 45%, var(--border-strong));
 }
 
 .pill {
@@ -370,18 +428,18 @@ textarea:focus {
 }
 
 .pill-pass {
-  background: var(--pass-bg);
-  color: var(--pass);
+  background: var(--status-success-soft);
+  color: var(--status-success);
 }
 
 .pill-behavioral {
-  background: var(--behavioral-bg);
-  color: var(--behavioral);
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
 }
 
 .pill-violation {
-  background: var(--violation-bg);
-  color: var(--violation);
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
 }
 
 .light-dot {
@@ -425,11 +483,11 @@ textarea:focus {
 }
 
 .stamp-signed {
-  color: var(--teal);
+  color: var(--accent);
 }
 
 .stamp-declared {
-  color: var(--behavioral);
+  color: var(--status-warning);
 }
 
 table.ledger {
@@ -444,15 +502,15 @@ table.ledger th {
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--text-tertiary);
   font-weight: 500;
   padding: 0.5rem 0.7rem;
-  border-bottom: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--border-strong);
 }
 
 table.ledger td {
   padding: 0.6rem 0.7rem;
-  border-bottom: 1px dashed var(--rule);
+  border-bottom: 1px dashed var(--border-default);
   vertical-align: middle;
 }
 
@@ -461,13 +519,13 @@ table.ledger tbody tr:last-child td {
 }
 
 table.ledger tbody tr:hover {
-  background: color-mix(in srgb, var(--teal) 5%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 .hex {
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  color: var(--ink-soft);
+  color: var(--text-secondary);
 }
 
 .scroll-x {

@@ -1,8 +1,8 @@
 {
-  "name": "wakala-console",
+  "name": "ephor-console",
   "private": true,
   "version": "0.1.0",
-  "description": "Wakala operator console — a Svelte web UI for the admin crate's coordinator control plane.",
+  "description": "Ephor operator console — a Svelte web UI for the admin crate's coordinator control plane.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,6 @@
     "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
-    "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/public-sans": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

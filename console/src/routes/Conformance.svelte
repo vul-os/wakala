@@ -88,19 +88,19 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
   h1 {
     font-size: 1.9rem;
     margin: 0.2rem 0 0.35rem;
   }
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 72ch;
   }
   .loading {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: 0.85rem;
   }
@@ -120,13 +120,13 @@
   .summary-kind {
     font-family: var(--font-mono);
     font-size: 0.78rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
   .counts {
     display: flex;
     gap: 1rem;
     font-size: 0.78rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     font-family: var(--font-mono);
   }
   .counts span {
@@ -135,13 +135,13 @@
     gap: 0.4rem;
   }
   .pass-dot {
-    color: var(--pass);
+    color: var(--status-success);
   }
   .behavioral-dot {
-    color: var(--behavioral);
+    color: var(--status-warning);
   }
   .violation-dot {
-    color: var(--violation);
+    color: var(--status-danger);
   }
   .rows {
     display: flex;
@@ -154,16 +154,16 @@
     align-items: start;
     gap: 1rem;
     padding: 1rem 1.3rem;
-    border-left: 4px solid var(--rule);
+    border-left: 4px solid var(--border-default);
   }
   .finding.pass {
-    border-left-color: var(--pass);
+    border-left-color: var(--status-success);
   }
   .finding.behavioral {
-    border-left-color: var(--behavioral);
+    border-left-color: var(--status-warning);
   }
   .finding.violation {
-    border-left-color: var(--violation);
+    border-left-color: var(--status-danger);
   }
   @media (max-width: 700px) {
     .finding {
@@ -176,24 +176,24 @@
     gap: 0.15rem;
   }
   .finding.pass .finding-badge {
-    color: var(--pass);
+    color: var(--status-success);
   }
   .finding.behavioral .finding-badge {
-    color: var(--behavioral);
+    color: var(--status-warning);
   }
   .finding.violation .finding-badge {
-    color: var(--violation);
+    color: var(--status-danger);
   }
   .fid {
     font-family: var(--font-mono);
     font-weight: 700;
     font-size: 0.82rem;
-    color: var(--ink);
+    color: var(--text-primary);
   }
   .fclause {
     font-family: var(--font-mono);
     font-size: 0.7rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
   .finding-body h3 {
     font-size: 0.98rem;
@@ -202,14 +202,14 @@
   .summary {
     margin: 0;
     font-size: 0.82rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     line-height: 1.5;
   }
   .detail {
     margin: 0.5rem 0 0;
     font-size: 0.78rem;
-    color: var(--ink);
-    background: var(--bg-deep);
+    color: var(--text-primary);
+    background: var(--bg-base);
     border-radius: 6px;
     padding: 0.5rem 0.7rem;
     line-height: 1.5;
@@ -219,7 +219,7 @@
     font-family: var(--font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.06em;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     margin-right: 0.3rem;
   }
   .outcome-pill {

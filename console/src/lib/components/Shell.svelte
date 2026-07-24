@@ -22,21 +22,30 @@
   <aside class="nav">
     <div class="brandblock">
       <div class="mark" aria-hidden="true">
-        <svg viewBox="0 0 48 48" fill="none">
-          <rect x="0" y="0" width="48" height="48" rx="11" fill="url(#g)"/>
-          <path d="M12 15l7 18 6-10 6 10 7-18" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <circle cx="24" cy="23" r="4.6" fill="none" stroke="#14B8A6" stroke-width="1.6"/>
+        <!-- Ephor mark: five bronze watch-nodes around an untouched, hollow
+             core (brand/logo-mark.svg) — five ephors overseeing a centre they
+             never enter, same as the broker seeing traffic but never contents. -->
+        <svg viewBox="0 0 240 240" fill="none">
+          <rect x="0" y="0" width="240" height="240" rx="52" fill="url(#g)"/>
+          <circle cx="120" cy="120" r="74" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.35"/>
+          <circle cx="120" cy="120" r="30" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.55"/>
+          <g fill="#C89A56">
+            <circle cx="120" cy="46" r="15"/>
+            <circle cx="190.4" cy="97.1" r="15"/>
+            <circle cx="163.5" cy="179.9" r="15"/>
+            <circle cx="76.5" cy="179.9" r="15"/>
+            <circle cx="49.6" cy="97.1" r="15"/>
+          </g>
           <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-              <stop offset="0" stop-color="#FFC24B"/>
-              <stop offset=".55" stop-color="#FF8A3D"/>
-              <stop offset="1" stop-color="#E8543D"/>
+            <linearGradient id="g" x1="0" y1="0" x2="240" y2="240" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#14171f"/>
+              <stop offset="1" stop-color="#08090c"/>
             </linearGradient>
           </defs>
         </svg>
       </div>
       <div class="wordblock">
-        <span class="word">Wakala</span>
+        <span class="word">Ephor</span>
         <span class="sub">Operator Console</span>
       </div>
     </div>
@@ -62,7 +71,7 @@
 
     <div class="nav-foot">
       {#if IS_MOCK}
-        <span class="mode-badge" title="This build is running on fixture data, not a live wakala-admin — see console/README.md">
+        <span class="mode-badge" title="This build is running on fixture data, not a live ephor-admin — see console/README.md">
           <span class="light-dot" aria-hidden="true"></span> Demo data
         </span>
       {/if}
@@ -100,8 +109,8 @@
     position: absolute;
     left: -999px;
     top: 0;
-    background: var(--ink);
-    color: var(--bg);
+    background: var(--text-primary);
+    color: var(--bg-base);
     padding: 0.6rem 1rem;
     z-index: 100;
   }
@@ -127,8 +136,8 @@
   }
 
   .nav {
-    background: var(--surface);
-    border-right: 1px solid var(--rule);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-default);
     display: flex;
     flex-direction: column;
     padding: 1.4rem 1.1rem;
@@ -158,7 +167,7 @@
   }
 
   .word {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-weight: 700;
     font-size: 1.15rem;
   }
@@ -168,7 +177,7 @@
     font-size: 0.62rem;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
 
   .manifest {
@@ -178,8 +187,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    border-top: 1px dashed var(--rule);
-    border-bottom: 1px dashed var(--rule);
+    border-top: 1px dashed var(--border-default);
+    border-bottom: 1px dashed var(--border-default);
     padding: 0.5rem 0;
   }
 
@@ -192,7 +201,7 @@
     border-radius: 7px;
     border: none;
     background: transparent;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     font-size: 0.87rem;
     font-weight: 600;
     text-align: left;
@@ -200,25 +209,25 @@
   }
 
   .navitem:hover {
-    background: var(--bg-deep);
-    color: var(--ink);
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .navitem.active {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--brass-2) 18%, transparent), transparent);
-    color: var(--ink);
-    box-shadow: inset 3px 0 0 var(--brass-3);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent);
+    color: var(--text-primary);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .num {
     font-family: var(--font-mono);
     font-size: 0.68rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     width: 1.3rem;
   }
 
   .navitem.active .num {
-    color: var(--brass-3);
+    color: var(--accent);
   }
 
   .nav-foot {
@@ -236,16 +245,16 @@
     gap: 0.4rem;
     font-family: var(--font-mono);
     font-size: 0.68rem;
-    color: var(--teal);
-    background: var(--teal-soft);
-    border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent);
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     padding: 0.3rem 0.6rem;
     border-radius: 999px;
   }
 
   .foot-note {
     font-size: 0.68rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     line-height: 1.5;
     margin: 0;
   }
@@ -261,8 +270,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 1.1rem 1.8rem;
-    border-bottom: 1px solid var(--rule);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom: 1px solid var(--border-default);
+    background: color-mix(in srgb, var(--bg-base) 82%, transparent);
     backdrop-filter: blur(6px);
     position: sticky;
     top: 0;
@@ -274,7 +283,7 @@
     font-size: 0.68rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
 
   .theme-toggle {
@@ -284,15 +293,15 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
   }
 
   .track {
     width: 2.5rem;
     height: 1.4rem;
     border-radius: 999px;
-    background: var(--bg-deep);
-    border: 1px solid var(--rule-strong);
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
     display: flex;
     align-items: center;
     padding: 0.12rem;
@@ -300,7 +309,7 @@
   }
 
   .track.night {
-    background: color-mix(in srgb, var(--teal) 30%, var(--bg-deep));
+    background: color-mix(in srgb, var(--accent) 30%, var(--bg-base));
     justify-content: flex-end;
   }
 
@@ -308,16 +317,16 @@
     width: 1.05rem;
     height: 1.05rem;
     border-radius: 50%;
-    background: var(--surface-raised);
-    color: var(--brass-3);
+    background: var(--bg-elevated);
+    color: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 1px 3px hsl(var(--shadow) / 0.3);
+    box-shadow: var(--shadow-sm);
   }
 
   .track.night .thumb {
-    color: var(--teal);
+    color: var(--accent);
   }
 
   .thumb svg {

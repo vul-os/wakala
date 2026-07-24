@@ -1,4 +1,4 @@
-# Wakala — the broker (coordinator) reference implementation of the KOTVA standard.
+# Ephor — the broker (coordinator) reference implementation of the KOTVA standard.
 #
 # This is a virtual workspace: one crate per coordinator *kind* plus the shared
 # `broker-economics` crate (the content-visibility model, authz, tariff, usage
@@ -66,7 +66,7 @@ default-members = [
 version = "0.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/vul-os/wakala"
+repository = "https://github.com/vul-os/ephor"
 rust-version = "1.85"
 
 [workspace.lints.rust]

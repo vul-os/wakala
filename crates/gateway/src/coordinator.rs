@@ -1,6 +1,6 @@
 //! The gateway as a KOTVA coordinator kind (CONTRACT §5, the mail `adapter`).
 //!
-//! This is the one Wakala kind that is **not** content-blind: the legacy SMTP leg is unavoidably
+//! This is the one Ephor kind that is **not** content-blind: the legacy SMTP leg is unavoidably
 //! plaintext, so it declares visibility `terminating` at assurance `declared` (CONTRACT §3.1). Every
 //! other clause it satisfies like any coordinator — accountable, swappable (a DNS change, spec §7),
 //! self-hostable behind the one disclosed scarce-reachability exception (a reputable IP + unblocked

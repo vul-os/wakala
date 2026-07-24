@@ -93,11 +93,11 @@ use tokio::sync::Mutex;
 use crate::tunnel::{read_registration, write_registration, Registration, TunnelError};
 
 /// DMTAP/kotva-core domain-separation convention (§18.9.3 in the KOTVA spec, applied here
-/// as `WAKALA-REACH-v0/...`, matching `broker-economics/src/descriptor.rs`'s own
+/// as `EPHOR-REACH-v0/...`, matching `broker-economics/src/descriptor.rs`'s own
 /// per-object-type tag convention): an ASCII string terminated by one `0x00` byte, distinct
 /// from every other signed object type in this workspace so a tunnel-auth signature can
 /// never be replayed as a descriptor, tariff, receipt, or any other signed object.
-pub const TUNNEL_AUTH_DS: &[u8] = b"WAKALA-REACH-v0/tunnel-auth\x00";
+pub const TUNNEL_AUTH_DS: &[u8] = b"EPHOR-REACH-v0/tunnel-auth\x00";
 
 /// Raw Ed25519 public key length (kotva-core suite `0x01`, classical).
 const IK_LEN: usize = 32;

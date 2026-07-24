@@ -3,13 +3,13 @@ use libfuzzer_sys::fuzz_target;
 use gateway::forwarded_addr::{decode, encode};
 
 // **Relocated from envoir, and RETARGETED** (`fuzz/fuzz_targets/gateway_alias.rs`, removed by
-// envoir commit `620a68c` when the gateway moved to Wakala).
+// envoir commit `620a68c` when the gateway moved to Ephor).
 //
 // Envoir's original target fuzzed `dmtap::naming::{gateway_alias_local, ik_from_gateway_alias}` —
 // a **key-derived** gateway alias that reversibly packs a full 32-byte DMTAP identity key into a
 // `dmtap1-<base32>` local-part and decodes it straight back. That function pair lived in
 // `envoir-node`'s library crate (`../node/src/naming.rs`), NOT in `envoir-gateway` — it has no
-// analogue anywhere in Wakala's `gateway` crate (this crate's own key-derived alias,
+// analogue anywhere in Ephor's `gateway` crate (this crate's own key-derived alias,
 // `gateway::authz::key_derived_localpart`, is a one-way **content-address hash** of the key,
 // `k` + base32(first 10 bytes of `ContentId::of(key)`); by design it does NOT reversibly decode
 // back to the key, so envoir's bijection property simply does not hold for it, and would be a

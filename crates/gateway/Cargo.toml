@@ -1,10 +1,10 @@
 # gateway — the KOTVA mail *adapter* coordinator kind (the legacy SMTP/IMAP/POP3 bridge, spec §7).
 #
-# Folded out of envoir (was `envoir-gateway`) into Wakala, the broker reference implementation, so
+# Folded out of envoir (was `envoir-gateway`) into Ephor, the broker reference implementation, so
 # every coordinator kind lives in one place and envoir becomes node-only. It depends on the
 # tag-pinned substrate (`kotva-core`, `kotva-mail`) — never a moving path dep (the isango guardrail).
 #
-# This is the ONE Wakala kind that is not content-blind: the legacy leg is unavoidably plaintext, so
+# This is the ONE Ephor kind that is not content-blind: the legacy leg is unavoidably plaintext, so
 # it declares visibility `terminating` (CONTRACT §3.1/§5). It is optional and fades as adoption grows.
 [package]
 name = "gateway"
@@ -13,7 +13,7 @@ edition = "2021"
 rust-version = "1.75"
 license = "MIT OR Apache-2.0"
 description = "KOTVA mail adapter (the DMTAP legacy SMTP/IMAP/POP3 gateway) — the one terminating coordinator kind"
-repository = "https://github.com/vul-os/wakala"
+repository = "https://github.com/vul-os/ephor"
 
 [dependencies]
 # The broker contract this kind is an instance of (CONTRACT §5): declares its content-visibility
@@ -51,12 +51,12 @@ rcgen = "0.13"
 
 # NOTE: this crate deliberately does NOT set `[lints] workspace = true` — the workspace forbids
 # `unsafe_code`, but the daemon's SIGINT/SIGTERM handler (src/main.rs) needs one `unsafe { libc::… }`
-# block. The gateway keeps its own lint posture; every other Wakala crate stays forbid-unsafe.
+# block. The gateway keeps its own lint posture; every other Ephor crate stays forbid-unsafe.
 
 [lib]
 name = "gateway"
 path = "src/lib.rs"
 
 [[bin]]
-name = "wakala-gateway"
+name = "ephor-gateway"
 path = "src/main.rs"

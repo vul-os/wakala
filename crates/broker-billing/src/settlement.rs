@@ -3,13 +3,13 @@
 //!
 //! ## The no-token invariant
 //!
-//! Wakala/KOTVA mints nothing. There is no protocol token anywhere in this crate, and
+//! Ephor/KOTVA mints nothing. There is no protocol token anywhere in this crate, and
 //! [`SettlementRail`] is written so there structurally cannot be one smuggled in: it charges an
 //! amount denominated in a caller-supplied `currency` string (an ISO 4217 code or an existing
-//! stablecoin ticker — whatever [`crate::tariff::TariffSchedule::currency`] says), never in a
-//! Wakala-defined unit. Custody and canonical settlement of that asset are **entirely the rail
+//! stablecoin ticker — whatever [`crate::tariff::TariffSchedule::currency`] says), never in an
+//! Ephor-defined unit. Custody and canonical settlement of that asset are **entirely the rail
 //! implementation's problem** — a real chain client, a card processor, a bank-transfer API — none
-//! of which lives in this crate. Wakala brokers none of it and takes no cut (DIRECTION §5,
+//! of which lives in this crate. Ephor brokers none of it and takes no cut (DIRECTION §5,
 //! CONTRACT §6).
 //!
 //! ## What's real here vs. what's a seam
@@ -190,7 +190,7 @@ impl SettlementRail for InMemoryLedger {
 pub struct PaymentRequired {
     /// The amount required, in `currency`'s minor unit.
     pub amount: u64,
-    /// An existing asset code (ISO 4217 or a stablecoin ticker) — never a Wakala-defined unit.
+    /// An existing asset code (ISO 4217 or a stablecoin ticker) — never an Ephor-defined unit.
     pub currency: String,
     /// The coordinator identity/account payment should be made to — rail-specific in format (an
     /// address, an account id); this crate does not constrain the string's shape.

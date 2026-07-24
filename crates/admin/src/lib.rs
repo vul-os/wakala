@@ -1,6 +1,6 @@
 //! # admin
 //!
-//! The operator admin API for a Wakala coordinator (BUILD-PLAN.md W7) — a kind-agnostic HTTP
+//! The operator admin API for an Ephor coordinator (BUILD-PLAN.md W7) — a kind-agnostic HTTP
 //! control plane an operator runs alongside any `crates/*` coordinator-kind crate (gateway,
 //! relay, reachability-adapter, ...). It composes, and never reimplements:
 //!
@@ -33,7 +33,7 @@
 //!
 //! ## Deployment posture — operator-local, not a delivery-path surface
 //! This is the operator's own control plane, analogous to a database admin console: it is meant
-//! to be reachable only by the operator (the reference binary, `bin/wakala-admin`, binds loopback
+//! to be reachable only by the operator (the reference binary, `bin/ephor-admin`, binds loopback
 //! by default — `config.rs`), and the bearer token is operator config, not a credential any end
 //! user ever holds or needs. It sits on **no** user delivery/authoritative path — the descriptor,
 //! tariff, and receipts it produces are exactly the discovery-only, self-asserted artifacts
@@ -49,7 +49,7 @@
 //!   quota state, which this crate does not abstract behind a trait) with a durable store.
 //! - **Ephemeral key by default.** With no seed configured, `main.rs` generates a fresh key at
 //!   startup (loudly, to the log) rather than refusing to start — convenient for a first run, but
-//!   an operator MUST configure `WAKALA_ADMIN_KEY_SEED_HEX`/`WAKALA_ADMIN_KEY_FILE` for anything
+//!   an operator MUST configure `EPHOR_ADMIN_KEY_SEED_HEX`/`EPHOR_ADMIN_KEY_FILE` for anything
 //!   that needs to keep the same accountable identity across restarts.
 //! - **Rotate re-signs the descriptor only**, per the wave's own scope — a tariff already
 //!   attached to the descriptor keeps its *own* (still self-certifying, still valid) signature

@@ -37,7 +37,7 @@
     font-size: 0.66rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
   }
 
   .value-row {
@@ -47,10 +47,10 @@
   }
 
   .value {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-size: 1.9rem;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--text-primary);
     line-height: 1;
     letter-spacing: -0.01em;
     white-space: nowrap;
@@ -59,20 +59,20 @@
   }
 
   .value.teal {
-    color: var(--teal);
+    color: var(--accent);
   }
   .value.brass {
-    color: var(--brass-3);
+    color: var(--accent);
   }
 
   .unit {
     font-size: 0.78rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
   }
 
   .hint {
     font-size: 0.74rem;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
   }
 </style>

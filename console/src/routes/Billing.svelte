@@ -277,20 +277,20 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
   h1 {
     font-size: 1.9rem;
     margin: 0.2rem 0 0.35rem;
   }
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 68ch;
   }
   .loading,
   .empty {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: 0.85rem;
   }
@@ -322,22 +322,22 @@
     gap: 0.7rem;
   }
   .balance-value {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-size: 2.6rem;
     font-weight: 700;
-    color: var(--brass-3);
+    color: var(--accent);
     letter-spacing: -0.01em;
   }
   .balance-value.low {
-    color: var(--violation);
+    color: var(--status-danger);
   }
   .low-flag {
     margin: -0.4rem 0 0;
     font-size: 0.78rem;
-    color: var(--violation);
+    color: var(--status-danger);
   }
   .topup-form {
-    border-top: 1px dashed var(--rule);
+    border-top: 1px dashed var(--border-default);
     padding-top: 0.9rem;
     margin-top: 0.3rem;
     display: flex;
@@ -347,7 +347,7 @@
   .rail-label {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     display: block;
     margin-bottom: 0.35rem;
   }
@@ -360,24 +360,24 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    border: 1px solid var(--rule-strong);
+    border: 1px solid var(--border-strong);
     border-radius: 7px;
     padding: 0.55rem 0.7rem;
     font-size: 0.82rem;
     font-weight: 500;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     cursor: pointer;
   }
   .rail-opt.active {
-    border-color: var(--teal);
-    color: var(--ink);
-    background: var(--teal-soft);
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--accent-soft);
   }
   .rail-opt input {
     width: auto;
   }
   .topup-history {
-    border-top: 1px dashed var(--rule);
+    border-top: 1px dashed var(--border-default);
     padding-top: 0.8rem;
     margin-top: 0.2rem;
   }
@@ -397,18 +397,18 @@
     font-size: 0.78rem;
   }
   .topup-history .mono {
-    color: var(--pass);
+    color: var(--status-success);
     font-weight: 600;
   }
   .topup-detail {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
   }
   .topup-date {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     margin-left: auto;
   }
   .settings-block {
-    border-top: 1px dashed var(--rule);
+    border-top: 1px dashed var(--border-default);
     margin-top: 1.1rem;
     padding-top: 1rem;
   }
@@ -425,7 +425,7 @@
   .settings-desc {
     margin: 0.25rem 0 0;
     font-size: 0.76rem;
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     max-width: 40ch;
   }
   .switch {
@@ -433,22 +433,22 @@
     width: 2.6rem;
     height: 1.5rem;
     border-radius: 999px;
-    background: var(--bg-deep);
-    border: 1px solid var(--rule-strong);
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
     padding: 0.15rem;
     display: flex;
     cursor: pointer;
   }
   .switch.on {
-    background: color-mix(in srgb, var(--teal) 45%, var(--bg-deep));
+    background: color-mix(in srgb, var(--accent) 45%, var(--bg-base));
     justify-content: flex-end;
   }
   .knob {
     width: 1.1rem;
     height: 1.1rem;
     border-radius: 50%;
-    background: var(--surface-raised);
-    box-shadow: 0 1px 3px hsl(var(--shadow) / 0.3);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-sm);
   }
   .audit-note {
     margin-bottom: 1rem;

@@ -126,20 +126,20 @@
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--teal);
+    color: var(--accent);
   }
   h1 {
     font-size: 1.9rem;
     margin: 0.2rem 0 0.35rem;
   }
   .lede {
-    color: var(--ink-soft);
+    color: var(--text-secondary);
     margin: 0;
     max-width: 68ch;
   }
   .loading,
   .empty {
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: 0.85rem;
   }
@@ -159,24 +159,24 @@
     font-size: 0.86rem;
     line-height: 1.6;
     word-break: break-all;
-    background: var(--bg-deep);
-    border: 1px solid var(--rule);
+    background: var(--bg-base);
+    border: 1px solid var(--border-default);
     border-radius: 8px;
     padding: 0.8rem 1rem;
     margin-bottom: 1rem;
-    color: var(--teal);
+    color: var(--accent);
   }
   .confirm-box {
     margin-top: 0.9rem;
-    border: 1px dashed var(--violation);
-    background: var(--violation-bg);
+    border: 1px dashed var(--status-danger);
+    background: var(--status-danger-soft);
     border-radius: 9px;
     padding: 0.9rem 1rem;
   }
   .confirm-box p {
     margin: 0 0 0.8rem;
     font-size: 0.82rem;
-    color: var(--ink);
+    color: var(--text-primary);
     line-height: 1.5;
   }
   .confirm-actions {
@@ -196,14 +196,14 @@
     align-items: center;
     gap: 0.6rem;
     font-size: 0.8rem;
-    background: var(--bg-deep);
-    border: 1px solid var(--rule);
+    background: var(--bg-base);
+    border: 1px solid var(--border-default);
     border-radius: 7px;
     padding: 0.5rem 0.7rem;
   }
   .history .idx {
     font-family: var(--font-mono);
-    color: var(--ink-faint);
+    color: var(--text-tertiary);
     width: 1.2rem;
   }
   .history code {
@@ -212,15 +212,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--ink-soft);
+    color: var(--text-secondary);
   }
   .tag {
     font-family: var(--font-mono);
     font-size: 0.64rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--ink-faint);
-    border: 1px solid var(--rule-strong);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-strong);
     border-radius: 999px;
     padding: 0.15rem 0.5rem;
   }

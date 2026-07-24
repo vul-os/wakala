@@ -1,6 +1,6 @@
 # Changelog
 
-## Wakala broker — Rust reference implementation (Unreleased)
+## Ephor broker — Rust reference implementation (Unreleased)
 
 The all-Rust coordinator (broker) reference implementation of the KOTVA standard, living in
 `crates/` (`coordinator/CONTRACT.md`). New top section — the Go reverse-tunnel relay + JS SDK's
@@ -13,7 +13,7 @@ own changelog, preserved unchanged, follows below.
   unchanged — DS-tags stay `dmtap-*`, only the Rust crate identifiers renamed `dmtap_core` →
   `kotva_core`.
 - envoir is now **node-only**: the mail gateway and its conformance/fuzz moved here.
-- The mail gateway **folded into wakala** as `crates/gateway`, the sole `terminating` kind.
+- The mail gateway **folded into ephor** as `crates/gateway`, the sole `terminating` kind.
 
 ### The broker model
 
@@ -67,7 +67,7 @@ Ten coordinator kinds now exist in `crates/`, each declaring exactly one content
   (rejects a silent visibility downgrade and any `token` field), metering/receipts GET, quota/rate
   GET/PUT (declared, not enforced), key GET/rotate, and `/conformance` running the live COORD-1..8
   checklist. Auth is a constant-time bearer token, fail-closed default-deny; reference binary
-  `wakala-admin` binds loopback by default.
+  `ephor-admin` binds loopback by default.
 - **Runtime conformance tests** — real sign/verify + tamper cases and observed-vs-declared
   visibility checks against the live wire path, for the kinds with real implementations (gateway,
   reachability-adapter), discharging the COORD-1/COORD-5 behavioral findings the static harness

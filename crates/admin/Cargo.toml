@@ -1,4 +1,4 @@
-# admin — the operator admin API for a Wakala coordinator (BUILD-PLAN W7).
+# admin — the operator admin API for an Ephor coordinator (BUILD-PLAN W7).
 #
 # Kind-agnostic: it composes broker-economics (descriptor/tariff signing), broker-billing
 # (metering + receipts + tariff-schedule shape), and broker-conformance (the COORD-1..8
@@ -7,7 +7,7 @@
 # kind itself and does not sit on any user delivery path (see src/lib.rs module docs).
 [package]
 name = "admin"
-description = "Operator admin API for a Wakala coordinator: descriptor/tariff signing, quota policy, metering + receipts view, key management, and a COORD-1..8 conformance self-check."
+description = "Operator admin API for an Ephor coordinator: descriptor/tariff signing, quota policy, metering + receipts view, key management, and a COORD-1..8 conformance self-check."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -22,7 +22,7 @@ name = "admin"
 path = "src/lib.rs"
 
 [[bin]]
-name = "wakala-admin"
+name = "ephor-admin"
 path = "src/main.rs"
 
 [dependencies]

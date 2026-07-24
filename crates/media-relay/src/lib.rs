@@ -26,7 +26,7 @@
 //!
 //! ## Why the SFU is orchestrated, not embedded (DIRECTION §3, bind-don't-reinvent)
 //!
-//! Per the founder decision (wakala `DECISIONS.md`, `[2026-07-23 sfu]`) and DIRECTION §7, "the
+//! Per the founder decision (ephor `DECISIONS.md`, `[2026-07-23 sfu]`) and DIRECTION §7, "the
 //! large-scale SFU is orchestrated externally (coturn/LiveKit sidecar), not embedded." This
 //! crate deliberately does **not**:
 //!
