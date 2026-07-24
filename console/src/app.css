@@ -37,6 +37,10 @@
      full contrast table). Formula-tied to --bg-base so it tracks the theme
      automatically instead of a second hardcoded literal. */
   --accent-contrast: var(--bg-base);
+  /* Fill role: the true brand bronze with a near-black label on top. On dark
+     this is identical to --accent; on light it deliberately diverges. */
+  --accent-fill: #c89a56;
+  --accent-fill-contrast: #14100a;
 
   /* ═══ DARK PALETTE (shipped default) — identical ladder to vulos/src/index.css ═══ */
   --bg-base: #08090c;
@@ -198,14 +202,11 @@ body {
   height: 100%;
 }
 
+/* No graph-paper grid: the canonical Vulos surface is a flat, restrained
+   near-black. The grid read as texture on dark but as noise on light, and it
+   competed with the ledger rules that carry real meaning. */
 body {
   background-color: var(--bg-base);
-  background-image:
-    linear-gradient(var(--border-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-  background-size: 100% 2.1rem, 2.1rem 100%;
-  background-position: 0 6.4rem, 0 0;
-  opacity: 1;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 15px;
@@ -308,16 +309,21 @@ button {
   transform: translateY(0);
 }
 
+/* Fills use --accent-fill, not --accent. The two have different contrast
+   partners: --accent is read AGAINST the page and so must be deepened on light
+   to clear 4.5:1, which drags it to mud when poured into a button. A fill is
+   only ever read against its own label, so it can stay the true brand bronze
+   and put a near-black label on top (7.4:1). Same colour, different job. */
 .btn-primary {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: transparent;
-  color: var(--accent-contrast);
-  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent-fill-contrast);
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent-fill) 55%, transparent);
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
-  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent-fill) 88%, black);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent-fill) 65%, transparent);
 }
 
 .btn-ghost {
@@ -516,6 +522,16 @@ table.ledger td {
 
 table.ledger tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Numeric columns: right-aligned so magnitudes line up, and tabular figures so
+   digits sit in fixed-width cells — an operator scanning a metered/billed pair
+   for a discrepancy reads down the column, not across the row. */
+table.ledger th.num,
+table.ledger td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 table.ledger tbody tr:hover {

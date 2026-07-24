@@ -2,7 +2,7 @@
   import { client, IS_MOCK } from '../lib/api';
   import type { ReportDto, ReceiptsResponse, PrepaidAccount, SignedDescriptorDto } from '../lib/types';
   import VisibilityBadge from '../lib/components/VisibilityBadge.svelte';
-  import ConformanceStrip from '../lib/components/ConformanceStrip.svelte';
+  import ConformanceStrip, { CLAUSE_TITLE } from '../lib/components/ConformanceStrip.svelte';
   import StatCard from '../lib/components/StatCard.svelte';
   import { ledgerMoney, kindQuantity, kindLabel, integer } from '../lib/format';
   import { router } from '../lib/router.svelte';
@@ -55,7 +55,7 @@
   <div class="page-head">
     <div>
       <span class="kicker">01 · Overview</span>
-      <h1>Bridge deck</h1>
+      <h1>Coordinator posture</h1>
       <p class="lede">The coordinator's declared posture and the numbers an operator checks first.</p>
     </div>
   </div>
@@ -90,6 +90,14 @@
         <div class="panel-body">
           <ConformanceStrip report={conformance} />
           <p class="strip-note">Amber lights are <strong>behavioral</strong> — decidable only against real traffic, not a violation. Hover a light for its clause.</p>
+          <dl class="clause-legend">
+            {#each conformance.findings as f (f.id)}
+              <div class="clause-row">
+                <dt>{f.id}</dt>
+                <dd>{CLAUSE_TITLE[f.id] ?? f.id} <span class="clause-ref">{f.clause}</span></dd>
+              </div>
+            {/each}
+          </dl>
         </div>
       </section>
     </div>
@@ -109,7 +117,7 @@
       <StatCard
         label="Prepaid balance"
         value={ledgerMoney(totalBalance, currency)}
-        accent="brass"
+        accent="bronze"
         hint={lowBalanceCount > 0 ? `${lowBalanceCount} payer${lowBalanceCount > 1 ? 's' : ''} below top-up threshold` : 'all payers above threshold'}
       />
       <StatCard
@@ -203,6 +211,49 @@
     font-size: 0.76rem;
     color: var(--text-tertiary);
     line-height: 1.5;
+  }
+
+  .clause-legend {
+    margin: 1rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--border-default);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1.2rem;
+  }
+
+  @media (max-width: 560px) {
+    .clause-legend {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .clause-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
+
+  .clause-row dt {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.66rem;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    width: 4.4rem;
+  }
+
+  .clause-row dd {
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .clause-ref {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-faint);
   }
 
   .stat-grid {

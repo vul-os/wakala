@@ -50,15 +50,20 @@ export function kindUnit(k: ResourceKind): string {
   return KIND_UNIT[k] ?? '';
 }
 
-/** Human-friendly rendering of a raw metered quantity, per resource kind. */
+/** Human-friendly rendering of a raw metered quantity, per resource kind. Every branch routes
+ * its whole-number case through `integer()` so thousands separators are consistent with the
+ * count-style kinds (connections/messages) below — no bare `toFixed` on a value that can run
+ * into four+ digits. */
 export function kindQuantity(k: ResourceKind, units: number): string {
   if (k === 'bytes_forwarded') {
     const gib = units / 1024;
-    return gib >= 1 ? `${gib.toFixed(gib >= 100 ? 0 : 2)} GiB` : `${integer(units)} MiB`;
+    if (gib >= 1) return gib >= 100 ? `${integer(Math.round(gib))} GiB` : `${gib.toFixed(2)} GiB`;
+    return `${integer(units)} MiB`;
   }
   if (k === 'compute_seconds') {
     const hours = units / 3600;
-    return hours >= 1 ? `${hours.toFixed(hours >= 100 ? 0 : 1)} hr` : `${integer(units)} sec`;
+    if (hours >= 1) return hours >= 100 ? `${integer(Math.round(hours))} hr` : `${hours.toFixed(1)} hr`;
+    return `${integer(units)} sec`;
   }
   return `${integer(units)} ${KIND_UNIT[k]}`;
 }

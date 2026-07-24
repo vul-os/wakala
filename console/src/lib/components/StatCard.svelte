@@ -10,14 +10,14 @@
     value: string;
     unit?: string;
     hint?: string;
-    accent?: 'ink' | 'teal' | 'brass';
+    accent?: 'ink' | 'teal' | 'bronze';
   } = $props();
 </script>
 
 <div class="stat panel">
   <span class="label">{label}</span>
   <div class="value-row">
-    <span class="value" class:teal={accent === 'teal'} class:brass={accent === 'brass'}>{value}</span>
+    <span class="value" class:teal={accent === 'teal'} class:bronze={accent === 'bronze'}>{value}</span>
     {#if unit}<span class="unit">{unit}</span>{/if}
   </div>
   {#if hint}<span class="hint">{hint}</span>{/if}
@@ -61,7 +61,7 @@
   .value.teal {
     color: var(--accent);
   }
-  .value.brass {
+  .value.bronze {
     color: var(--accent);
   }
 

@@ -1,9 +1,7 @@
-<script lang="ts">
-  import type { ReportDto } from '../types';
-
-  let { report }: { report: ReportDto } = $props();
-
-  const CLAUSE_TITLE: Record<string, string> = {
+<script module lang="ts">
+  // Exported so other views (e.g. the Overview summary card) can reuse the same clause titles
+  // instead of re-declaring them — the single source of truth for what COORD-1..8 stand for.
+  export const CLAUSE_TITLE: Record<string, string> = {
     'COORD-1': 'Signed, discovery-only descriptor',
     'COORD-2': 'Zero lock-in',
     'COORD-3': 'Self-host backstop',
@@ -13,6 +11,12 @@
     'COORD-7': 'Signed receipts if metered',
     'COORD-8': 'No token; existing-asset settlement',
   };
+</script>
+
+<script lang="ts">
+  import type { ReportDto } from '../types';
+
+  let { report }: { report: ReportDto } = $props();
 </script>
 
 <div class="strip" role="list" aria-label="COORD-1..8 conformance status">

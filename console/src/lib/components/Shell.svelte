@@ -22,8 +22,8 @@
   <aside class="nav">
     <div class="brandblock">
       <div class="mark" aria-hidden="true">
-        <!-- Ephor mark: five bronze watch-nodes around an untouched, hollow
-             core (brand/logo-mark.svg) — five ephors overseeing a centre they
+        <!-- Ephor mark: five bronze nodes around an untouched, hollow core
+             (brand/logo-mark.svg) — five ephors overseeing a centre they
              never enter, same as the broker seeing traffic but never contents. -->
         <svg viewBox="0 0 240 240" fill="none">
           <rect x="0" y="0" width="240" height="240" rx="52" fill="url(#g)"/>
@@ -51,7 +51,7 @@
     </div>
 
     <nav aria-label="Console sections">
-      <ol class="manifest">
+      <ol class="navlist">
         {#each NAV as item (item.id)}
           <li>
             <button
@@ -84,8 +84,8 @@
       <div class="crumbs">
         <span class="crumb-kicker">Coordinator control plane</span>
       </div>
-      <button type="button" class="theme-toggle" onclick={() => theme.toggle()} aria-label="Toggle day/night theme">
-        <span class="track" class:night={theme.resolved() === 'dark'}>
+      <button type="button" class="theme-toggle" onclick={() => theme.toggle()} aria-label="Toggle light/dark theme">
+        <span class="track" class:dark={theme.resolved() === 'dark'}>
           <span class="thumb">
             {#if theme.resolved() === 'dark'}
               <svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.5 8.5 0 119.5 4a7 7 0 1010.5 10.5z" fill="currentColor"/></svg>
@@ -94,7 +94,7 @@
             {/if}
           </span>
         </span>
-        <span class="tlabel">{theme.resolved() === 'dark' ? 'Night' : 'Day'}</span>
+        <span class="tlabel">{theme.resolved() === 'dark' ? 'Dark' : 'Light'}</span>
       </button>
     </header>
 
@@ -180,7 +180,7 @@
     color: var(--text-tertiary);
   }
 
-  .manifest {
+  .navlist {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -308,7 +308,7 @@
     transition: background 0.2s ease;
   }
 
-  .track.night {
+  .track.dark {
     background: color-mix(in srgb, var(--accent) 30%, var(--bg-base));
     justify-content: flex-end;
   }
@@ -325,7 +325,7 @@
     box-shadow: var(--shadow-sm);
   }
 
-  .track.night .thumb {
+  .track.dark .thumb {
     color: var(--accent);
   }
 

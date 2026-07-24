@@ -14,7 +14,7 @@
   <a href="Cargo.toml"><img alt="Rust" src="https://img.shields.io/badge/rust-1.85%2B-C2410C?logo=rust&logoColor=white"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-pre--alpha%20reference-FFC24B">
   <a href="https://github.com/vul-os/kotva"><img alt="Spec: KOTVA" src="https://img.shields.io/badge/spec-KOTVA-FF8A3D"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-508%20green-14B8A6">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-548%20green-14B8A6">
 </p>
 
 <p align="center">
@@ -22,11 +22,10 @@
   <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Overview / bridge deck, light theme">
 </p>
 
-*ephor — Greek for overseer: in Sparta, one of five ephors elected annually to watch
-the state and check the kings' power, never holding it themselves and never serving a
-second term. The name keeps that shape here: a swappable, fee-taking service point
-that watches traffic pass without ever seeing inside it, hired for a term and replaced
-without ceremony. Vulos — rooted in **vula**, the Zulu and Xhosa word for **open**.*
+*ephor — Greek for overseer: in Sparta, one of five magistrates elected annually to
+check the kings' power, never sovereign and never reappointed — the same shape here, a
+swappable service point that watches traffic pass without ever seeing inside it, hired
+for a term and replaced without ceremony.*
 
 ---
 
@@ -77,7 +76,7 @@ Ephor brokers none and takes no cut. Stake (where a kind requires skin-in-the-ga
 | `gateway` | Legacy mail bridge — MX, DKIM, SMTP/IMAP/POP3 | `terminating` — the one non-blind kind, disclosed | **built**, 320 tests |
 | `relay` | Mesh reachability for NAT'd peers, real libp2p 0.56 Circuit Relay v2 | `blind` / `structural` | **built**, 12 tests, real two-peer loopback relay proof |
 | `reachability-adapter` | ngrok-style public subdomains for box services, SNI-passthrough | `blind-routing` / `structural`(own-domain) or `declared`(vanity) | **built**, 32 tests — REACH-2 key-auth done, control channel not yet Noise-encrypted (see [Honest limits](#honest-limits)) |
-| `media-relay` | Scales calls — orchestrates an external SFU (coturn/LiveKit), SFrame-sealed payload (RFC 9605) | `blind-routing` / `structural` | **built**, 23 tests |
+| `media-relay` | Scales calls — orchestrates an external SFU (coturn/LiveKit), SFrame-sealed payload (RFC 9605) | `blind-routing` / `structural` | **built**, 24 tests |
 | `indexer` | Search/discovery over an opt-in public corpus | `terminating` / `declared` (attested-TEE option) — `Gate::DerivedViewOnly` (§4 carve-out) | **scaffold**, 8 tests |
 | `labeler` | Opt-in, subscribable moderation labels — §4's own named carve-out example | `terminating` / `declared` — `Gate::DerivedViewOnly` | **scaffold**, 7 tests |
 | `matcher` | Real-time supply/demand matching (rides, delivery) | `terminating` / `declared` (attested-TEE option) — `Gate::DerivedViewOnly` | **scaffold**, 8 tests |
@@ -212,7 +211,7 @@ Full crate map, per-crate detail, and the `kotva-core` pin mechanics:
 
 ```sh
 cargo build --workspace
-cargo test  --workspace     # 508 tests, clippy clean
+cargo test  --workspace     # 548 tests, clippy clean
 cargo clippy --workspace --all-targets
 ```
 
@@ -382,7 +381,7 @@ design) and is off by default, explicit opt-in.
 | [COORDINATION.md](COORDINATION.md) | Cross-repo sync log with the kotva spec session |
 | [crates/README.md](crates/README.md) | Rust workspace map, per-crate status, the `kotva-core` seam |
 | [console/README.md](console/README.md) | Operator console views, stack, mock mode, screenshot pipeline |
-| [brand/README.md](brand/README.md) | The Broker Amber mark — concept, palette, file map, usage rules |
+| [brand/README.md](brand/README.md) | The five-node Bronze mark — concept, palette, file map, usage rules |
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Zero-to-reachable-box walkthrough (Go relay) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Go relay trust model — what the operator can/cannot see |
 | [docs/TUNNEL.md](docs/TUNNEL.md) | Full server flag/env reference & deploy notes (Go relay) |
@@ -466,11 +465,13 @@ conventions, and scope constraints.
 
 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Ephor is a VulOS
 project; source and issues at
-[github.com/vul-os/ephor](https://github.com/vul-os/ephor).
+[github.com/vul-os/ephor](https://github.com/vul-os/ephor). Brand mark, palette, and
+usage rules: [brand/README.md](brand/README.md).
 
 ---
 
 <p align="center">
   <a href="https://vulos.org"><img src="docs/assets/vulos-logo.png" alt="vulos" height="20"></a><br>
-  <sub><a href="https://vulos.org"><b>vulos</b></a> — open by design</sub>
+  <sub><a href="https://vulos.org"><b>vulos</b></a> — rooted in <b>vula</b>, the Zulu/Xhosa word for
+  <b>open</b></sub>
 </p>

@@ -81,13 +81,13 @@ try {
     route: 'overview',
     colorScheme: 'dark',
     file: 'console-dark.png',
-    waitForSelector: 'text=Bridge deck',
+    waitForSelector: 'text=Coordinator posture',
   });
   await shoot({
     route: 'overview',
     colorScheme: 'light',
     file: 'console-light.png',
-    waitForSelector: 'text=Bridge deck',
+    waitForSelector: 'text=Coordinator posture',
   });
   await shoot({
     route: 'billing',

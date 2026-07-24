@@ -1,5 +1,5 @@
 {
-  "name": "vulos-relay",
+  "name": "ephor",
   "private": true,
   "license": "MIT OR Apache-2.0",
   "description": "Root workspace for vulos-relay. The publishable package is in client/. Dev scripts (screenshots, etc.) are in scripts/.",

@@ -205,7 +205,7 @@ const TARIFF_SCHEDULE: TariffScheduleDto = {
 const DESCRIPTOR_POLICY = {
   region: 'eu-west',
   capabilities: ['reachability-adapter', 'sni-passthrough', 'own-domain-cert'],
-  contact: 'ops@harborline.example',
+  contact: 'ops@ephor.example',
   notes:
     'Public reachable ingress for self-hosted boxes. SNI-passthrough profile; operator does not hold the origin TLS key for adapter-zone vanity names.',
 };

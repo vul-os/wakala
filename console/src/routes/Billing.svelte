@@ -184,11 +184,11 @@
             {#if usage && hasUsage}
               <div class="scroll-x">
                 <table class="ledger">
-                  <thead><tr><th>Resource</th><th>Metered</th></tr></thead>
+                  <thead><tr><th>Resource</th><th class="num">Metered</th></tr></thead>
                   <tbody>
                     {#each RESOURCE_KINDS as k (k)}
                       {#if (usage.usage[k] ?? 0) > 0}
-                        <tr><td>{kindLabel(k)}</td><td class="mono">{kindQuantity(k, usage.usage[k] ?? 0)}</td></tr>
+                        <tr><td>{kindLabel(k)}</td><td class="mono num">{kindQuantity(k, usage.usage[k] ?? 0)}</td></tr>
                       {/if}
                     {/each}
                   </tbody>
@@ -200,20 +200,20 @@
 
             <div class="settings-block">
               <div class="settings-row">
-                <div>
+                <div class="settings-head">
                   <span class="settings-title">Monthly card (postpaid)</span>
-                  <p class="settings-desc">Optional fallback via patala-hyperswitch — bills a card at period close instead of debiting prepaid balance. Secondary to prepaid; off unless the operator opts a payer in.</p>
+                  <button
+                    type="button"
+                    class="switch"
+                    class:on={selectedAccount.monthly_card_enabled}
+                    onclick={toggleMonthlyCard}
+                    aria-pressed={selectedAccount.monthly_card_enabled}
+                    aria-label="Toggle monthly card postpaid fallback"
+                  >
+                    <span class="knob"></span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="switch"
-                  class:on={selectedAccount.monthly_card_enabled}
-                  onclick={toggleMonthlyCard}
-                  aria-pressed={selectedAccount.monthly_card_enabled}
-                  aria-label="Toggle monthly card postpaid fallback"
-                >
-                  <span class="knob"></span>
-                </button>
+                <p class="settings-desc">Optional fallback via patala-hyperswitch — bills a card at period close instead of debiting prepaid balance. Secondary to prepaid; off unless the operator opts a payer in.</p>
               </div>
             </div>
           </div>
@@ -236,16 +236,16 @@
             <div class="scroll-x">
               <table class="ledger">
                 <thead>
-                  <tr><th>#</th><th>Kind</th><th>Metered</th><th>Billed</th><th>Amount</th><th>Verifies</th><th>Signer</th></tr>
+                  <tr><th>#</th><th>Kind</th><th class="num">Metered</th><th class="num">Billed</th><th class="num">Amount</th><th>Verifies</th><th>Signer</th></tr>
                 </thead>
                 <tbody>
                   {#each receipts as r (r.sequence + r.kind)}
                     <tr>
                       <td class="mono">{r.sequence}</td>
                       <td>{kindLabel(r.kind)}</td>
-                      <td class="mono">{kindQuantity(r.kind, r.metered_units)}</td>
-                      <td class="mono">{kindQuantity(r.kind, r.billed_units)}</td>
-                      <td class="mono">{money(r.amount, r.currency)}</td>
+                      <td class="mono num">{kindQuantity(r.kind, r.metered_units)}</td>
+                      <td class="mono num">{kindQuantity(r.kind, r.billed_units)}</td>
+                      <td class="mono num">{money(r.amount, r.currency)}</td>
                       <td>
                         <span class="pill" class:pill-pass={r.verifies} class:pill-violation={!r.verifies}>
                           {r.verifies ? 'signature ok' : 'invalid'}
