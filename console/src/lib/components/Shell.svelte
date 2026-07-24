@@ -6,13 +6,28 @@
 
   let { children }: { children: Snippet } = $props();
 
-  const NAV: { id: Route; num: string; label: string }[] = [
-    { id: 'overview', num: '01', label: 'Overview' },
-    { id: 'descriptor', num: '02', label: 'Descriptor' },
-    { id: 'tariff', num: '03', label: 'Pricing' },
-    { id: 'billing', num: '04', label: 'Billing' },
-    { id: 'keys', num: '05', label: 'Keys' },
-    { id: 'conformance', num: '06', label: 'Conformance' },
+  // Grouped like the Vulos OS settings rail: plain labels under small muted
+  // section headers, no leading numbers.
+  const NAV_GROUPS: { heading: string; items: { id: Route; label: string }[] }[] = [
+    {
+      heading: 'Posture',
+      items: [
+        { id: 'overview', label: 'Overview' },
+        { id: 'descriptor', label: 'Descriptor' },
+        { id: 'conformance', label: 'Conformance' },
+      ],
+    },
+    {
+      heading: 'Billing',
+      items: [
+        { id: 'tariff', label: 'Pricing' },
+        { id: 'billing', label: 'Ledger' },
+      ],
+    },
+    {
+      heading: 'Identity',
+      items: [{ id: 'keys', label: 'Keys' }],
+    },
   ];
 </script>
 
@@ -22,22 +37,18 @@
   <aside class="nav">
     <div class="brandblock">
       <div class="mark" aria-hidden="true">
-        <!-- Ephor mark: five bronze nodes around an untouched, hollow core
-             (brand/logo-mark.svg) — five ephors overseeing a centre they
-             never enter, same as the broker seeing traffic but never contents. -->
-        <svg viewBox="0 0 240 240" fill="none">
-          <rect x="0" y="0" width="240" height="240" rx="52" fill="url(#g)"/>
-          <circle cx="120" cy="120" r="74" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.35"/>
-          <circle cx="120" cy="120" r="30" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.55"/>
-          <g fill="#C89A56">
-            <circle cx="120" cy="46" r="15"/>
-            <circle cx="190.4" cy="97.1" r="15"/>
-            <circle cx="163.5" cy="179.9" r="15"/>
-            <circle cx="76.5" cy="179.9" r="15"/>
-            <circle cx="49.6" cy="97.1" r="15"/>
+        <!-- Ephor mark: a comma drawn so it reads as a lowercase "e" — the
+             product's initial (brand/logo-mark.svg). The bowl and crossbar
+             form the e; its lower terminal continues into the comma's tail. -->
+        <svg viewBox="0 0 128 128" fill="none">
+          <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#g)"/>
+          <g fill="none" stroke="#C89A56" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M40 60 H83"/>
+            <path d="M83 60 A29 29 0 1 0 72 86"/>
+            <path d="M72 86 Q 80 104 58 112"/>
           </g>
           <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="240" y2="240" gradientUnits="userSpaceOnUse">
+            <linearGradient id="g" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
               <stop offset="0" stop-color="#14171f"/>
               <stop offset="1" stop-color="#08090c"/>
             </linearGradient>
@@ -51,22 +62,24 @@
     </div>
 
     <nav aria-label="Console sections">
-      <ol class="navlist">
-        {#each NAV as item (item.id)}
-          <li>
-            <button
-              type="button"
-              class="navitem"
-              class:active={router.current === item.id}
-              onclick={() => router.go(item.id)}
-              aria-current={router.current === item.id ? 'page' : undefined}
-            >
-              <span class="num">{item.num}</span>
-              <span class="lbl">{item.label}</span>
-            </button>
-          </li>
-        {/each}
-      </ol>
+      {#each NAV_GROUPS as group (group.heading)}
+        <p class="nav-heading">{group.heading}</p>
+        <ul class="navlist">
+          {#each group.items as item (item.id)}
+            <li>
+              <button
+                type="button"
+                class="navitem"
+                class:active={router.current === item.id}
+                onclick={() => router.go(item.id)}
+                aria-current={router.current === item.id ? 'page' : undefined}
+              >
+                <span class="lbl">{item.label}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/each}
     </nav>
 
     <div class="nav-foot">
@@ -173,11 +186,23 @@
   }
 
   .sub {
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
     color: var(--text-tertiary);
+  }
+
+  .nav-heading {
+    font-family: var(--font-sans);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 1.1rem 0 0.35rem;
+    padding: 0 0.6rem;
+  }
+  .nav-heading:first-of-type {
+    margin-top: 0.2rem;
   }
 
   .navlist {
@@ -186,24 +211,20 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    border-top: 1px dashed var(--border-default);
-    border-bottom: 1px dashed var(--border-default);
-    padding: 0.5rem 0;
+    gap: 0.1rem;
   }
 
   .navitem {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 0.65rem;
-    padding: 0.55rem 0.6rem;
+    padding: 0.45rem 0.6rem;
     border-radius: 7px;
     border: none;
     background: transparent;
     color: var(--text-secondary);
     font-size: 0.87rem;
-    font-weight: 600;
+    font-weight: 500;
     text-align: left;
     cursor: pointer;
   }
@@ -214,20 +235,10 @@
   }
 
   .navitem.active {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--text-primary);
-    box-shadow: inset 3px 0 0 var(--accent);
-  }
-
-  .num {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--text-tertiary);
-    width: 1.3rem;
-  }
-
-  .navitem.active .num {
-    color: var(--accent);
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   .nav-foot {
@@ -243,12 +254,13 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 500;
     color: var(--accent);
     background: var(--accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-    padding: 0.3rem 0.6rem;
+    padding: 0.25rem 0.6rem;
     border-radius: 999px;
   }
 
@@ -279,10 +291,9 @@
   }
 
   .crumb-kicker {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    font-weight: 500;
     color: var(--text-tertiary);
   }
 
@@ -335,8 +346,9 @@
   }
 
   .tlabel {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
   }
 
   main {

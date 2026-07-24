@@ -54,7 +54,7 @@
 <div class="page">
   <div class="page-head">
     <div>
-      <span class="kicker">01 · Overview</span>
+      <span class="kicker">Overview</span>
       <h1>Coordinator posture</h1>
       <p class="lede">The coordinator's declared posture and the numbers an operator checks first.</p>
     </div>
@@ -169,15 +169,15 @@
   }
 
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
 
   h1 {
-    font-size: 2.1rem;
+    font-size: 1.5rem;
     margin: 0.2rem 0 0.35rem;
   }
 

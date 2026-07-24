@@ -8,7 +8,6 @@
    behavioral / red violation) via the canonical --status-* tokens, and freshly
    signed artifacts still get an ink stamp — just retinted to the new system. */
 
-@import '@fontsource-variable/public-sans';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
@@ -19,8 +18,11 @@
      default, mirroring the rest of Vulos. */
   color-scheme: dark;
 
-  --font-sans: 'Public Sans Variable', 'Public Sans', ui-sans-serif, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif;
+  /* Match the Vulos OS stack exactly (vulos/src/index.css): system-ui first,
+     Inter as the preferred named fallback. No bundled webfont — the OS itself
+     ships none, and a self-host product must not pull one at runtime. */
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Inter', system-ui, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
 
   /* ── Accent — Ephor bronze. The exact value the brand mark is drawn in
@@ -220,10 +222,23 @@ h2,
 h3,
 h4 {
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: -0.01em;
   margin: 0;
   color: var(--text-primary);
+}
+
+/* Vulos-scale headings: a page H1 sits around 1.35rem, not the display size a
+   marketing page would use. This is a dense operator tool — the OS's own
+   "Web Publishing" / "AI Assistant" page titles are this size. */
+h1 {
+  font-size: 1.35rem;
+}
+h2 {
+  font-size: 1.05rem;
+}
+h3 {
+  font-size: 0.95rem;
 }
 
 a {
@@ -252,11 +267,13 @@ button {
 
 /* ---------- shared primitives ---------- */
 
+/* Vulos cards are flat: a thin subtle border on the surface tone, no drop
+   shadow, modest radius. The shadow read as "web dashboard"; the OS chrome is
+   calmer than that. */
 .panel {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 9px;
 }
 
 .panel-header {
@@ -265,17 +282,20 @@ button {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.1rem 1.4rem 0.9rem;
-  border-bottom: 1px dashed var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-header h2 {
   font-size: 1.05rem;
 }
 
+/* Section kicker in the Vulos idiom: small muted sans small-caps, not a wide
+   mono monospace label. Caps are reserved for these headers only. */
 .panel-kicker {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -395,7 +415,7 @@ textarea:focus {
   font-size: 0.8rem;
   color: var(--text-secondary);
   background: var(--bg-base);
-  border: 1px dashed var(--border-strong);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 0.7rem 0.9rem;
   display: flex;
@@ -516,7 +536,7 @@ table.ledger th {
 
 table.ledger td {
   padding: 0.6rem 0.7rem;
-  border-bottom: 1px dashed var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
 }
 

@@ -76,7 +76,7 @@
 
 <div class="page">
   <div class="page-head">
-    <span class="kicker">03 · Pricing</span>
+    <span class="kicker">Pricing</span>
     <h1>Tariff schedule</h1>
     <p class="lede">Priced in an existing currency, never a protocol token (DIRECTION §5) — this UI has no field for one, on purpose.</p>
   </div>
@@ -229,11 +229,11 @@
     gap: 1.5rem;
   }
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
   h1 {
     font-size: 1.9rem;

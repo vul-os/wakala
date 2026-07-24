@@ -1,24 +1,21 @@
-<svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ephor">
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ephor">
   <title>Ephor</title>
-  <desc>Five bronze watch-nodes evenly spaced in a ring around an untouched, hollow core — five ephors overseeing a centre they never enter; the broker sees traffic pass but never its contents.</desc>
+  <desc>A single comma drawn so it reads as a lowercase "e" — the initial of Ephor. The bowl and crossbar form the e; the lower terminal continues into the comma's tail. One continuous bronze gesture: the mark both punctuates and names.</desc>
   <defs>
-    <linearGradient id="eph-tile" x1="0" y1="0" x2="240" y2="240" gradientUnits="userSpaceOnUse">
+    <linearGradient id="eph-tile" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#14171f"/>
       <stop offset="1" stop-color="#08090c"/>
     </linearGradient>
   </defs>
   <!-- near-black tile, matching Vulos OS chrome -->
-  <rect x="0" y="0" width="240" height="240" rx="52" fill="url(#eph-tile)"/>
-  <!-- the orbit: the path the five watchers walk, drawn faint so the nodes carry the shape -->
-  <circle cx="120" cy="120" r="74" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.35"/>
-  <!-- the sealed, untouched core: a boundary the ring encloses but never crosses -->
-  <circle cx="120" cy="120" r="30" fill="none" stroke="#C89A56" stroke-width="3" opacity="0.55"/>
-  <!-- five ephors: evenly spaced, equal size, equal colour — no single node holds the centre -->
-  <g fill="#C89A56">
-    <circle cx="120" cy="46" r="15"/>
-    <circle cx="190.4" cy="97.1" r="15"/>
-    <circle cx="163.5" cy="179.9" r="15"/>
-    <circle cx="76.5" cy="179.9" r="15"/>
-    <circle cx="49.6" cy="97.1" r="15"/>
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#eph-tile)"/>
+  <!-- the comma-e, drawn as one weight of bronze stroke -->
+  <g fill="none" stroke="#C89A56" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+    <!-- crossbar of the e -->
+    <path d="M40 60 H83"/>
+    <!-- bowl: aperture left open at lower-right, the arc sweeping the long way round -->
+    <path d="M83 60 A29 29 0 1 0 72 86"/>
+    <!-- the comma's tail, hooking down from the terminal -->
+    <path d="M72 86 Q 80 104 58 112"/>
   </g>
 </svg>

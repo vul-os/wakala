@@ -1,37 +1,36 @@
 # Ephor brand
 
-The Ephor mark is **five bronze nodes evenly spaced in a ring around an untouched,
-hollow core** — five overseers watching a centre they never enter. It replaces an
-obsolete predecessor mark: a stylised letter "W" built from five routing nodes,
-which named the previous product and no longer fit once the product became *Ephor*.
-The five nodes carried forward (they were always the right count for the concept);
-the shape they form no longer spells a letter.
+The Ephor mark is **a comma drawn so it reads as a lowercase "e"** — the product's
+initial and a punctuation mark at once. One continuous bronze gesture: the bowl and
+crossbar make the *e*; the *e*'s lower terminal keeps going, curling down into the
+comma's tail. Hold it as a letter and it says *Ephor*; hold it as punctuation and it
+is a comma — a small mark that sits between things without being the thing.
 
 Ephor is a **sibling** of the [Envoir](../../envoir) mark, not a clone: same build
 quality and lockup conventions (rounded-square tile, mono variant via `currentColor`,
 wordmark/og-image pattern), deliberately different hue and a different core glyph —
 Envoir's continuous lowercase e/@ spiral (indigo→violet) reads *identity/mail*;
-Ephor's five watch-nodes (bronze on near-black) read *oversight/brokerage*.
+Ephor's comma-e (bronze on near-black) reads *the mark between, the overseer*.
 
 ## Concept
 
-*Ephor* is Greek for **overseer**: in Sparta, one of **five** ephors elected annually
+*Ephor* is Greek for **overseer**: in Sparta, one of five ephors elected annually
 to watch the state and check the kings' power — elected, term-limited, replaceable,
-never sovereign, never acting alone. Ephor the product is the broker/coordinator
-reference implementation of KOTVA — it brokers reach between parties, is
-**content-blind** (it carries sealed traffic it cannot read), is **hired, not
-depended-on**, and is **swappable**.
+never sovereign. Ephor the product is the broker/coordinator reference implementation
+of KOTVA — it brokers reach between parties, is **content-blind** (it carries sealed
+traffic it cannot read), is **hired, not depended-on**, and is **swappable**.
 
 The mark draws that directly:
 
-- **Five nodes, evenly placed on a ring** — the five ephors, drawn identical in size
-  and colour. No node is larger, no node is centred, no node is a different hue —
-  none of the five holds power alone.
-- **A hollow, untouched core** — the ring the nodes sit on encloses an empty centre;
-  a second, smaller ring marks that boundary explicitly so the emptiness reads as
-  deliberate, not accidental. That hollow core *is* the content-blindness: the broker
-  watches traffic pass through its ring without ever occupying — or seeing into —
-  the centre.
+- **A comma that reads as an "e"** — the double reading is the whole idea. The letter
+  names the product; the comma says what it *does*. A comma is the mark that stands
+  between two clauses, joining them without belonging to either — exactly a broker's
+  place between two parties.
+- **One open, continuous stroke** — the bowl of the *e* is left open at its lower
+  right (the aperture), and the stroke exits there into the tail rather than closing
+  on itself. Nothing is sealed shut; the mark passes traffic through rather than
+  enclosing it. Read that aperture as the content-blindness — the form carries but
+  never contains.
 - **Near-black tile, bronze accent** — the tile is a Vulos-standard near-black
   surface (not a loud brand gradient); bronze is the one warm accent against it, kept
   restrained rather than glowing.
@@ -43,7 +42,7 @@ one warm accent, used sparingly, never as a full-bleed gradient tile.
 
 | Token | Hex | Use |
 |-------|-----|-----|
-| **Bronze (canonical accent)** | **`#C89A56`** | the five nodes, both rings, favicon accent, console theme accent — the one value every surface should agree on |
+| **Bronze (canonical accent)** | **`#C89A56`** | the comma-e glyph, favicon accent, console theme accent — the one value every surface should agree on |
 | Bronze-ink (text-on-light) | `#8B5A2B` | wordmark fill on light backgrounds — deeper than the accent for legibility on white/cream |
 | Tile near-black (top) | `#14171f` | app-tile gradient start (matches Vulos `--bg-elevated` family) |
 | Tile near-black (bottom) | `#08090c` | app-tile gradient end (matches Vulos `--bg-base`) |
@@ -59,9 +58,9 @@ No teal, no purple, no Iris blue: this is a one-accent palette by design.
 
 | File | Use |
 |------|-----|
-| `logo-mark.svg` | App-tile mark (near-black tile, bronze five-node ring, 240×240 viewBox, rounded tile). App icons, social avatars. |
-| `logo-mono.svg` | Single-color five-node/ring mark via `currentColor` — light/dark UI, print, watermarks. |
-| `favicon.svg` | Enlarged nodes, thicker core ring, thin orbit line dropped — tuned to stay legible at 16px. |
+| `logo-mark.svg` | App-tile mark (near-black tile, bronze comma-e, 128×128 viewBox, rounded tile). App icons, social avatars. |
+| `logo-mono.svg` | Single-color comma-e via `currentColor` — light/dark UI, print, watermarks. |
+| `favicon.svg` | Heavier stroke, larger glyph, shorter tail — tuned to stay legible at 16px. |
 | `wordmark.svg` | Mark + "Ephor" lockup for headers/navbars. |
 | `og-image.svg` | 1200×630 social card: mark, wordmark, tagline "The KOTVA broker". |
 | `make-icons.mjs` | `node brand/make-icons.mjs` — rasterizes the above into `icons/` (16 through 512px, apple-touch-icon, favicon-16/32, og-image.png). Uses `rsvg-convert` if present, falls back to `npx playwright`. |
@@ -85,12 +84,11 @@ tool like `svg-text-to-path` and drop the `font-family`/`font-weight` attributes
 - Keep clear space ≈ the tile corner radius around the mark.
 - Don't recolor the bronze accent, stretch, skew, or add effects. Use `logo-mono.svg`
   when one flat color is needed.
-- Don't fill the centre. The hollow core is the whole point — it reads as
-  content-blindness. Don't add a sixth node, a centred dot, or anything that
-  touches the middle.
-- Keep all five nodes the same size and colour. No node is more important than the
-  others — that egalitarianism is the concept.
-- The mark scales down cleanly by simplification, not just shrinking: `favicon.svg`
-  drops the thin faint orbit line (invisible below ~48px anyway), enlarges the five
-  nodes, and thickens the core ring into a bold stroke so the "ring around a hole"
-  reading survives all the way down to 16px.
+- Keep the aperture open. The gap at the lower-right of the bowl, where the stroke
+  exits into the tail, is deliberate — it is what makes the *e* read as a comma and
+  what carries the content-blind meaning. Don't close the bowl into a solid ring.
+- Preserve the double reading. Don't straighten the tail into a plain descender (it
+  stops being a comma) and don't shorten the crossbar until the *e* is unreadable.
+- The mark scales down by simplification, not just shrinking: `favicon.svg` uses a
+  heavier stroke, a larger glyph, and a shorter tail (a long thin tail disappears
+  first at small sizes) so the comma-e still reads at 16px.

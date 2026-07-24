@@ -87,7 +87,7 @@
 
 <div class="page">
   <div class="page-head">
-    <span class="kicker">04 · Billing</span>
+    <span class="kicker">Billing</span>
     <h1>Prepaid ledger</h1>
     <p class="lede">Payers fund a balance up front; usage debits it. No invoicing float, no credit risk to the operator by default.</p>
   </div>
@@ -273,11 +273,11 @@
     gap: 1.4rem;
   }
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
   h1 {
     font-size: 1.9rem;
@@ -323,10 +323,11 @@
   }
   .balance-value {
     font-family: var(--font-sans);
-    font-size: 2.6rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--accent);
     letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
   }
   .balance-value.low {
     color: var(--status-danger);

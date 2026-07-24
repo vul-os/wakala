@@ -33,10 +33,11 @@
   }
 
   .label {
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--text-tertiary);
   }
 
@@ -48,8 +49,9 @@
 
   .value {
     font-family: var(--font-sans);
-    font-size: 1.9rem;
+    font-size: 1.5rem;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
     line-height: 1;
     letter-spacing: -0.01em;

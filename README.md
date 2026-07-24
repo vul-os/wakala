@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Ephor operator console — Overview / bridge deck, dark theme">
-  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Overview / bridge deck, light theme">
+  <img src="docs/img/console-dark.png#gh-dark-mode-only" width="900" alt="Ephor operator console — Overview, dark theme">
+  <img src="docs/img/console-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Overview, light theme">
 </p>
 
 *ephor — Greek for overseer: in Sparta, one of five magistrates elected annually to
@@ -105,7 +105,7 @@ signing keys. Six views behind one left-nav shell:
 
 | # | View | What it's for |
 |---|---|---|
-| 01 | Overview | Kind + declared content-visibility badge, live COORD-1..8 strip, headline metrics (metered usage, prepaid balance, receipts issued, uptime) — the "bridge deck" pictured above |
+| 01 | Overview | Kind + declared content-visibility badge, live COORD-1..8 strip, headline metrics (metered usage, prepaid balance, receipts issued, uptime) — the coordinator posture pictured above |
 | 02 | Descriptor | View/edit operator policy + declared visibility, sign & publish; warns before a silent visibility downgrade (CONTRACT §3.2) and requires explicit disclosure to proceed |
 | 03 | Pricing | Recommended cost-plus USD pricing (Hetzner/Vultr basis) as a reference only, plus your own editable, signable `TariffSchedule` — no token field anywhere in this UI (DIRECTION §5) |
 | 04 | Billing | Prepaid credit balance per payer, top-up, metered usage, and signed receipts with the one-directional-audit caveat surfaced on every panel — see [Billing & pricing](#billing--pricing) |
@@ -381,7 +381,7 @@ design) and is off by default, explicit opt-in.
 | [COORDINATION.md](COORDINATION.md) | Cross-repo sync log with the kotva spec session |
 | [crates/README.md](crates/README.md) | Rust workspace map, per-crate status, the `kotva-core` seam |
 | [console/README.md](console/README.md) | Operator console views, stack, mock mode, screenshot pipeline |
-| [brand/README.md](brand/README.md) | The five-node Bronze mark — concept, palette, file map, usage rules |
+| [brand/README.md](brand/README.md) | The comma-e Bronze mark — concept, palette, file map, usage rules |
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Zero-to-reachable-box walkthrough (Go relay) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Go relay trust model — what the operator can/cannot see |
 | [docs/TUNNEL.md](docs/TUNNEL.md) | Full server flag/env reference & deploy notes (Go relay) |

@@ -70,7 +70,7 @@
 
 <div class="page">
   <div class="page-head">
-    <span class="kicker">02 · Descriptor</span>
+    <span class="kicker">Descriptor</span>
     <h1>Operator policy &amp; declared visibility</h1>
     <p class="lede">The signed, discovery-only artifact this coordinator publishes about itself (CONTRACT §2.1). No score, no price rank, no stake field — the type has none.</p>
   </div>
@@ -222,11 +222,11 @@
     gap: 1.5rem;
   }
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
   h1 {
     font-size: 1.9rem;

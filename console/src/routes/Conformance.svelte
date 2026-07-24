@@ -30,7 +30,7 @@
 
 <div class="page">
   <div class="page-head">
-    <span class="kicker">06 · Conformance</span>
+    <span class="kicker">Conformance</span>
     <h1>COORD-1..8 checklist</h1>
     <p class="lede">Every coordinator kind inherits the same eight clauses (CONTRACT §7). Some are decidable from the descriptor; others are marked <strong>behavioral</strong> — honestly deferred to a runtime test, never falsely passed.</p>
   </div>
@@ -84,11 +84,11 @@
     gap: 1.4rem;
   }
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
   h1 {
     font-size: 1.9rem;

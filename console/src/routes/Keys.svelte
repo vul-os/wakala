@@ -31,7 +31,7 @@
 
 <div class="page">
   <div class="page-head">
-    <span class="kicker">05 · Keys</span>
+    <span class="kicker">Keys</span>
     <h1>Signing identity</h1>
     <p class="lede">The operator's accountable identity (CONTRACT §2.1). Rotating generates a fresh key and re-signs the descriptor — the outgoing key is kept in history, never dropped.</p>
   </div>
@@ -122,11 +122,11 @@
     gap: 1.5rem;
   }
   .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
   }
   h1 {
     font-size: 1.9rem;

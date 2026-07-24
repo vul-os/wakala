@@ -1,16 +1,9 @@
-<svg viewBox="25 21 191 184" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ephor">
+<svg viewBox="28 40 76 84" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ephor">
   <title>Ephor (monochrome)</title>
-  <desc>Five watch-nodes in a ring around an untouched core, single-colour via currentColor for use on light or dark surfaces.</desc>
-  <!-- the orbit the five watchers walk -->
-  <circle cx="120" cy="120" r="74" fill="none" stroke="currentColor" stroke-width="3" opacity="0.35"/>
-  <!-- the sealed, untouched core -->
-  <circle cx="120" cy="120" r="30" fill="none" stroke="currentColor" stroke-width="3" opacity="0.55"/>
-  <!-- five ephors: equal size, equal weight -->
-  <g fill="currentColor">
-    <circle cx="120" cy="46" r="15"/>
-    <circle cx="190.4" cy="97.1" r="15"/>
-    <circle cx="163.5" cy="179.9" r="15"/>
-    <circle cx="76.5" cy="179.9" r="15"/>
-    <circle cx="49.6" cy="97.1" r="15"/>
+  <desc>The comma-e glyph in a single colour via currentColor, for use on light or dark surfaces.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 60 H83"/>
+    <path d="M83 60 A29 29 0 1 0 72 86"/>
+    <path d="M72 86 Q 80 104 58 112"/>
   </g>
 </svg>
