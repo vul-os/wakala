@@ -142,6 +142,13 @@ instead — secondary by design, not the default.
   <img src="docs/img/console-billing-light.png#gh-light-mode-only" width="900" alt="Ephor operator console — Billing view, light theme">
 </p>
 
+The console is responsive: on a phone the sidebar collapses to a drawer and the
+metric grid drops to a single column so no figure is truncated.
+
+<p align="center">
+  <img src="docs/img/console-mobile-dark.png" width="300" alt="Ephor operator console on a phone viewport — Overview, dark theme">
+</p>
+
 ### Recommended pricing (cost-plus, illustrative)
 
 `broker-billing::pricing::recommended_tariff` turns a real infra cost profile into a **starting

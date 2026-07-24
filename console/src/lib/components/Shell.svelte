@@ -6,6 +6,18 @@
 
   let { children }: { children: Snippet } = $props();
 
+  // Mobile: the sidebar collapses to a slide-in drawer behind a hamburger.
+  let drawerOpen = $state(false);
+
+  function go(id: Route) {
+    router.go(id);
+    drawerOpen = false; // dismiss the drawer after navigating on mobile
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') drawerOpen = false;
+  }
+
   // Grouped like the Vulos OS settings rail: plain labels under small muted
   // section headers, no leading numbers.
   const NAV_GROUPS: { heading: string; items: { id: Route; label: string }[] }[] = [
@@ -31,10 +43,21 @@
   ];
 </script>
 
-<div class="shell">
+<svelte:window onkeydown={onKeydown} />
+
+<div class="shell" class:drawer-open={drawerOpen}>
   <a href="#main" class="skip-link">Skip to content</a>
 
-  <aside class="nav">
+  <!-- scrim behind the mobile drawer -->
+  <button
+    type="button"
+    class="scrim"
+    aria-label="Close menu"
+    tabindex={drawerOpen ? 0 : -1}
+    onclick={() => (drawerOpen = false)}
+  ></button>
+
+  <aside class="nav" class:open={drawerOpen}>
     <div class="brandblock">
       <div class="mark" aria-hidden="true">
         <!-- Ephor mark: a comma drawn so it reads as a lowercase "e" — the
@@ -71,7 +94,7 @@
                 type="button"
                 class="navitem"
                 class:active={router.current === item.id}
-                onclick={() => router.go(item.id)}
+                onclick={() => go(item.id)}
                 aria-current={router.current === item.id ? 'page' : undefined}
               >
                 <span class="lbl">{item.label}</span>
@@ -95,6 +118,15 @@
   <div class="content-col">
     <header class="topbar">
       <div class="crumbs">
+        <button
+          type="button"
+          class="hamburger"
+          aria-label="Open menu"
+          aria-expanded={drawerOpen}
+          onclick={() => (drawerOpen = true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
         <span class="crumb-kicker">Coordinator control plane</span>
       </div>
       <button type="button" class="theme-toggle" onclick={() => theme.toggle()} aria-label="Toggle light/dark theme">
@@ -138,16 +170,6 @@
     min-height: 100vh;
   }
 
-  @media (max-width: 900px) {
-    .shell {
-      grid-template-columns: 1fr;
-    }
-    .nav {
-      position: static;
-      height: auto;
-    }
-  }
-
   .nav {
     background: var(--bg-surface);
     border-right: 1px solid var(--border-default);
@@ -157,6 +179,52 @@
     position: sticky;
     top: 0;
     height: 100vh;
+  }
+
+  /* Scrim is inert on desktop; only the mobile drawer reveals it. */
+  .scrim {
+    display: none;
+    border: none;
+    padding: 0;
+  }
+
+  /* ── Mobile: single column; the sidebar becomes a slide-in drawer ── */
+  @media (max-width: 900px) {
+    .shell {
+      grid-template-columns: 1fr;
+    }
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 60;
+      width: 16rem;
+      max-width: 82vw;
+      height: 100dvh;
+      transform: translateX(-100%);
+      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: var(--shadow-lg);
+      overflow-y: auto;
+    }
+    .nav.open {
+      transform: translateX(0);
+    }
+    .scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.24s ease;
+      cursor: default;
+    }
+    .shell.drawer-open .scrim {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   .brandblock {
@@ -180,20 +248,22 @@
   }
 
   .word {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-weight: 700;
-    font-size: 1.15rem;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
   }
 
   .sub {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
   }
 
   .nav-heading {
-    font-family: var(--font-sans);
-    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -254,7 +324,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 500;
     color: var(--accent);
@@ -281,20 +351,59 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.1rem 1.8rem;
+    padding: 1rem 1.8rem;
     border-bottom: 1px solid var(--border-default);
-    background: color-mix(in srgb, var(--bg-base) 82%, transparent);
+    background: var(--nav-scrim);
     backdrop-filter: blur(6px);
     position: sticky;
     top: 0;
     z-index: 10;
   }
 
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
   .crumb-kicker {
-    font-family: var(--font-sans);
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
     font-weight: 500;
-    color: var(--text-tertiary);
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Hamburger: hidden on desktop, shown when the sidebar is a drawer. */
+  .hamburger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .hamburger svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+  .hamburger:hover {
+    color: var(--text-primary);
+    border-color: var(--border-emphasis);
+  }
+  @media (max-width: 900px) {
+    .hamburger {
+      display: inline-flex;
+    }
   }
 
   .theme-toggle {
@@ -346,7 +455,7 @@
   }
 
   .tlabel {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--text-secondary);
   }

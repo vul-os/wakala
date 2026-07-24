@@ -33,7 +33,7 @@
   }
 
   .label {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0;
@@ -48,7 +48,7 @@
   }
 
   .value {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 1.5rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;

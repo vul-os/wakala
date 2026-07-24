@@ -114,7 +114,7 @@
   .tooltip strong {
     display: block;
     color: var(--bg-base);
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
   }
 
   .tooltip .outcome-word {

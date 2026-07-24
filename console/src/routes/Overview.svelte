@@ -169,11 +169,11 @@
   }
 
   .kicker {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: 0.02em;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
   }
 
   h1 {
@@ -216,7 +216,7 @@
   .clause-legend {
     margin: 1rem 0 0;
     padding-top: 0.9rem;
-    border-top: 1px dashed var(--border-default);
+    border-top: 1px solid var(--border-default);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem 1.2rem;
@@ -265,6 +265,15 @@
   @media (max-width: 760px) {
     .stat-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Below ~520px a two-up grid is too narrow for a full metric — "1,065,700"
+     was being ellipsised to "1,06…", which defeats the point of showing it.
+     One column per row keeps every figure whole. */
+  @media (max-width: 520px) {
+    .stat-grid {
+      grid-template-columns: 1fr;
     }
   }
 

@@ -1,195 +1,205 @@
 /* Ephor Operator Console
-   A coordinator's control room, themed on the Vulos OS design system: cool
-   near-black chrome, a single bronze accent (#C89A56 — the same value the real
-   Ephor mark is drawn in, see brand/logo-mark.svg), and the eight-step text /
-   four-step surface / four-step border ladders shared with the rest of Vulos.
-   Dark is the default, matching the OS; a full light palette is defined too.
-   COORD-1..8 conformance still reads as running lights (green pass / amber
-   behavioral / red violation) via the canonical --status-* tokens, and freshly
-   signed artifacts still get an ink stamp — just retinted to the new system. */
+   ────────────────────────────────────────────────────────────────────────────
+   Same design system as Vulos, its own product. The token ladder, geometry,
+   shadows, semantic colours and the monospace IDE/terminal aesthetic are
+   adopted VERBATIM from the Vulos theme (vulos-static/src/theme.css, which
+   mirrors the OS index.css). The one deliberate divergence — Ephor's identity —
+   is the accent: Vulos's teal/iris is swapped for Ephor bronze (#C89A56, the
+   value the brand mark is drawn in). One colour out, everything else the same:
+   standalone, but unmistakably of the family.
 
+   Body and chrome are monospace (the Vulos "IDE/terminal" signature); Inter is
+   used only for running prose. Both fonts are self-hosted — a self-host product
+   must never fetch a webfont at runtime and must stay air-gappable. */
+
+@import '@fontsource-variable/inter';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
 
 :root {
-  /* color-scheme makes native UA widgets (scrollbars, form controls, ::selection)
-     match the theme. Overridden in the light block below. Dark is the shipped
-     default, mirroring the rest of Vulos. */
   color-scheme: dark;
 
-  /* Match the Vulos OS stack exactly (vulos/src/index.css): system-ui first,
-     Inter as the preferred named fallback. No bundled webfont — the OS itself
-     ships none, and a self-host product must not pull one at runtime. */
-  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    'Inter', system-ui, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  /* SF Mono first so this renders identically to the Vulos screenshots on the
+     reference machine; bundled JetBrains Mono is the air-gap/cross-platform
+     fallback. Inter (variable, vendored) carries running prose only. */
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* ── Accent — Ephor bronze. The exact value the brand mark is drawn in
-     (brand/logo-mark.svg). Used sparingly: focus rings, primary button, active
-     nav rail, signed-artifact stamps, conformance/price emphasis. --accent-hover
-     and --accent-contrast are formulas (not re-declared per theme) so they
-     automatically follow whichever --accent / --bg-base is active. ── */
+  /* ── Accent — Ephor bronze (the swapped colour) ─────────────────────────── */
   --accent: #c89a56;
-  --accent-hover: color-mix(in srgb, var(--accent) 82%, black);
-  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
-  /* Bronze is mid-light: on the dark canvas the accent itself is bright enough
-     that the glyph sitting ON a solid accent fill must be near-black, not
-     white (measured ~8.2:1 accent-vs-bg-base in dark — see agent report for the
-     full contrast table). Formula-tied to --bg-base so it tracks the theme
-     automatically instead of a second hardcoded literal. */
+  --accent-hover: color-mix(in srgb, var(--accent) 85%, white 15%);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  /* Text/glyph colour sitting ON a solid accent fill. Bronze is mid-light, so
+     on the dark canvas this must be near-black, not white. Formula-tied to
+     --bg-base so it tracks the theme. */
   --accent-contrast: var(--bg-base);
-  /* Fill role: the true brand bronze with a near-black label on top. On dark
-     this is identical to --accent; on light it deliberately diverges. */
+  /* Fill role: the true brand bronze with a near-black label. On dark it equals
+     --accent; on light --accent deepens for text contrast while the fill does
+     not (a fill is only read against its own label). */
   --accent-fill: #c89a56;
   --accent-fill-contrast: #14100a;
 
-  /* ═══ DARK PALETTE (shipped default) — identical ladder to vulos/src/index.css ═══ */
-  --bg-base: #08090c;
-  --bg-surface: #0f1116;
-  --bg-elevated: #171a21;
-  --bg-hover: #1e222b;
-  --bg-active: #262b35;
+  /* ═══ DARK PALETTE — verbatim Vulos ladder (vulos-static theme.css) ═══ */
+  --bg-base: #0c0c0c;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --bg-hover: #1e1e1e;
+  --bg-active: #262626;
+  /* selection surface retinted from Vulos teal to Ephor bronze */
+  --bg-selected: #1b1509;
+  --bg-selected-border: #3a2e17;
 
-  --border-subtle: #14171d;
-  --border-default: #1f232c;
-  --border-strong: #2b303b;
-  --border-emphasis: #3a4150;
+  --border-subtle: #111111;
+  --border-default: #1a1a1a;
+  --border-strong: #222222;
+  --border-emphasis: #333333;
 
-  --text-primary: #f2f4f8;
-  --text-secondary: #c3c8d2;
-  --text-tertiary: #8b93a2;
-  --text-muted: #6d7585;
-  --text-faint: #545b69;
+  --text-primary: #e5e5e5;
+  --text-secondary: #cccccc;
+  --text-tertiary: #999999;
+  --text-muted: #888888;
+  --text-faint: #666666;
+  --text-ghost: #555555;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
-  --shadow-xl: 0 20px 52px -12px rgba(0, 0, 0, 0.6);
+  /* Deep shadows, no bloom (Vulos) */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.50), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.60), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.65), 0 8px 20px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 40px 100px rgba(0, 0, 0, 0.70), 0 16px 40px rgba(0, 0, 0, 0.45);
 
-  /* Semantic status — COORD-1..8 running lights + prepaid/receipt states. */
-  --status-success: #35c081;
-  --status-warning: #f0b232;
-  --status-danger: #f2565b;
+  /* Semantic status — Vulos values (COORD-1..8 running lights + prepaid states) */
+  --status-success: #2dd4bf;
+  --status-warning: #f59e0b;
+  --status-danger: #f43f5e;
   --status-success-soft: color-mix(in srgb, var(--status-success) 14%, transparent);
   --status-warning-soft: color-mix(in srgb, var(--status-warning) 14%, transparent);
   --status-danger-soft: color-mix(in srgb, var(--status-danger) 12%, transparent);
 
-  /* Structural (theme-agnostic) */
-  --radius-xs: 5px;
-  --radius-sm: 7px;
-  --radius-md: 9px;
-  --radius-lg: 13px;
-  --radius-xl: 18px;
+  /* Geometry — Vulos radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
   --radius-full: 9999px;
 
+  /* Spacing — 8px base (Vulos) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+  --nav-scrim: rgba(12, 12, 12, 0.82);
 }
 
-/* Dark palette stated explicitly, so an explicit Dark choice ([data-theme="dark"])
-   is symmetric with Light rather than falling through to a partial default. */
+/* Dark stated explicitly so an explicit Dark choice is symmetric with Light. */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --accent: #c89a56;
-  --bg-base: #08090c;
-  --bg-surface: #0f1116;
-  --bg-elevated: #171a21;
-  --bg-hover: #1e222b;
-  --bg-active: #262b35;
-  --border-subtle: #14171d;
-  --border-default: #1f232c;
-  --border-strong: #2b303b;
-  --border-emphasis: #3a4150;
-  --text-primary: #f2f4f8;
-  --text-secondary: #c3c8d2;
-  --text-tertiary: #8b93a2;
-  --text-muted: #6d7585;
-  --text-faint: #545b69;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
-  --shadow-xl: 0 20px 52px -12px rgba(0, 0, 0, 0.6);
-  --status-success: #35c081;
-  --status-warning: #f0b232;
-  --status-danger: #f2565b;
+  --bg-base: #0c0c0c;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --bg-hover: #1e1e1e;
+  --bg-active: #262626;
+  --bg-selected: #1b1509;
+  --bg-selected-border: #3a2e17;
+  --border-subtle: #111111;
+  --border-default: #1a1a1a;
+  --border-strong: #222222;
+  --border-emphasis: #333333;
+  --text-primary: #e5e5e5;
+  --text-secondary: #cccccc;
+  --text-tertiary: #999999;
+  --text-muted: #888888;
+  --text-faint: #666666;
+  --text-ghost: #555555;
+  --status-success: #2dd4bf;
+  --status-warning: #f59e0b;
+  --status-danger: #f43f5e;
+  --nav-scrim: rgba(12, 12, 12, 0.82);
 }
 
-/* ═══ LIGHT PALETTE ═══
-   --accent is deepened from the raw brand hex (#c89a56) via color-mix so
-   accent-as-text still clears WCAG AA 4.5:1 — not just against the page canvas
-   (raw brand value only reaches ~2.6:1 on white; deepened measures ~6.2:1) but
-   also against its OWN --accent-soft-tinted badge background (the tightest
-   case in this file, ~4.95:1 — a lighter deepening looks fine on white alone
-   but drops that self-tint pairing below 4.5). --accent-contrast still
-   formula-resolves to --bg-base (white here), which is what a viewer sees on
-   a solid accent-filled button (~6.2:1 there too). */
+/* ═══ LIGHT PALETTE — warm-neutral paper (Vulos), accent deepened for text ═══
+   Vulos light is a warm paper canvas, not a raw inversion. --accent deepens
+   from the raw brand bronze so accent-as-text clears WCAG AA 4.5:1 on paper
+   (raw ~2.6:1 on white → deepened ~6:1), while --accent-fill stays true bronze
+   (read only against its own near-black label). */
 :root[data-theme='light'] {
   color-scheme: light;
   --accent: color-mix(in srgb, #c89a56 60%, black);
+  --accent-hover: color-mix(in srgb, var(--accent) 84%, black 16%);
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
 
-  --bg-base: #ffffff;
-  --bg-surface: #f7f8fa;
-  --bg-elevated: #eef0f4;
-  --bg-hover: #e7eaf0;
-  --bg-active: #dde1ea;
+  --bg-base: #fdfcfa;
+  --bg-surface: #f5f2ec;
+  --bg-elevated: #efebe3;
+  --bg-hover: #e9e4da;
+  --bg-active: #e2dccf;
+  --bg-selected: #f3ecdc;
+  --bg-selected-border: #dcc79a;
 
-  --border-subtle: #eef0f3;
-  --border-default: #e2e5eb;
-  --border-strong: #cfd4dd;
-  --border-emphasis: #b7bdc9;
+  --border-subtle: #f0ebe2;
+  --border-default: #e6e0d5;
+  --border-strong: #dad3c6;
+  --border-emphasis: #c7bfae;
 
-  --text-primary: #12141a;
-  --text-secondary: #333844;
-  --text-tertiary: #565d6b;
-  --text-muted: #6b7280;
-  --text-faint: #8b93a1;
+  --text-primary: #1c1a17;
+  --text-secondary: #3a352e;
+  --text-tertiary: #5b544a;
+  --text-muted: #6d6559;
+  --text-faint: #877e70;
+  --text-ghost: #a49a89;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 3px 10px -2px rgba(15, 23, 42, 0.09);
-  --shadow-lg: 0 12px 30px -8px rgba(15, 23, 42, 0.12);
-  --shadow-xl: 0 20px 52px -12px rgba(15, 23, 42, 0.14);
+  --shadow-sm: 0 2px 8px rgba(28, 26, 23, 0.07), 0 1px 3px rgba(28, 26, 23, 0.05);
+  --shadow-md: 0 8px 28px rgba(28, 26, 23, 0.10), 0 2px 8px rgba(28, 26, 23, 0.06);
+  --shadow-lg: 0 20px 52px rgba(28, 26, 23, 0.12), 0 8px 18px rgba(28, 26, 23, 0.07);
+  --shadow-xl: 0 36px 88px rgba(28, 26, 23, 0.14), 0 14px 34px rgba(28, 26, 23, 0.08);
 
-  --status-danger: #dc2626;
-  --status-warning: #d97706;
-  --status-success: #16a34a;
+  --status-success: #0d9488;
+  --status-warning: #b45309;
+  --status-danger: #e11d48;
+
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+  --nav-scrim: rgba(253, 252, 250, 0.82);
 }
 
-/* Pure-CSS light fallback for the split second before theme.svelte.ts stamps
-   data-theme on <html> (and for any no-JS render) — keeps first paint honest
-   for a System-Light viewer instead of flashing the dark default. Only
-   applies when NO explicit data-theme is present (JS always wins once it runs). */
+/* Pre-hydration System-light fallback (FOUC-free), only when no explicit
+   data-theme is set — JS wins once it stamps the root. Mirrors the block above. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     color-scheme: light;
     --accent: color-mix(in srgb, #c89a56 60%, black);
+    --accent-hover: color-mix(in srgb, var(--accent) 84%, black 16%);
     --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-    --bg-base: #ffffff;
-    --bg-surface: #f7f8fa;
-    --bg-elevated: #eef0f4;
-    --bg-hover: #e7eaf0;
-    --bg-active: #dde1ea;
-    --border-subtle: #eef0f3;
-    --border-default: #e2e5eb;
-    --border-strong: #cfd4dd;
-    --border-emphasis: #b7bdc9;
-    --text-primary: #12141a;
-    --text-secondary: #333844;
-    --text-tertiary: #565d6b;
-    --text-muted: #6b7280;
-    --text-faint: #8b93a1;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 3px 10px -2px rgba(15, 23, 42, 0.09);
-    --shadow-lg: 0 12px 30px -8px rgba(15, 23, 42, 0.12);
-    --shadow-xl: 0 20px 52px -12px rgba(15, 23, 42, 0.14);
-    --status-danger: #dc2626;
-    --status-warning: #d97706;
-    --status-success: #16a34a;
+    --bg-base: #fdfcfa;
+    --bg-surface: #f5f2ec;
+    --bg-elevated: #efebe3;
+    --bg-hover: #e9e4da;
+    --bg-active: #e2dccf;
+    --bg-selected: #f3ecdc;
+    --bg-selected-border: #dcc79a;
+    --border-subtle: #f0ebe2;
+    --border-default: #e6e0d5;
+    --border-strong: #dad3c6;
+    --border-emphasis: #c7bfae;
+    --text-primary: #1c1a17;
+    --text-secondary: #3a352e;
+    --text-tertiary: #5b544a;
+    --text-muted: #6d6559;
+    --text-faint: #877e70;
+    --text-ghost: #a49a89;
+    --shadow-sm: 0 2px 8px rgba(28, 26, 23, 0.07), 0 1px 3px rgba(28, 26, 23, 0.05);
+    --shadow-md: 0 8px 28px rgba(28, 26, 23, 0.10), 0 2px 8px rgba(28, 26, 23, 0.06);
+    --shadow-lg: 0 20px 52px rgba(28, 26, 23, 0.12), 0 8px 18px rgba(28, 26, 23, 0.07);
+    --shadow-xl: 0 36px 88px rgba(28, 26, 23, 0.14), 0 14px 34px rgba(28, 26, 23, 0.08);
+    --status-success: #0d9488;
+    --status-warning: #b45309;
+    --status-danger: #e11d48;
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+    --nav-scrim: rgba(253, 252, 250, 0.82);
   }
 }
 
@@ -204,45 +214,56 @@ body {
   height: 100%;
 }
 
-/* No graph-paper grid: the canonical Vulos surface is a flat, restrained
-   near-black. The grid read as texture on dark but as noise on light, and it
-   competed with the ledger rules that carry real meaning. */
+/* Monospace body — the Vulos IDE/terminal signature. Flat near-black canvas,
+   no grid, no ambient glow. */
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* Headings are monospace too (Vulos), tight and bold. */
 h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-sans);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
   margin: 0;
   color: var(--text-primary);
 }
 
-/* Vulos-scale headings: a page H1 sits around 1.35rem, not the display size a
-   marketing page would use. This is a dense operator tool — the OS's own
-   "Web Publishing" / "AI Assistant" page titles are this size. */
 h1 {
-  font-size: 1.35rem;
+  font-size: 1.375rem;
+  letter-spacing: -0.03em;
 }
 h2 {
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
 }
 h3 {
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* Running prose uses Inter for readability — the one place sans appears. */
+p {
+  font-family: var(--font-sans);
 }
 
 a {
   color: var(--accent);
+  text-decoration: none;
+  transition: color 0.16s ease;
+}
+a:hover {
+  color: var(--accent-hover);
 }
 
 code,
@@ -251,18 +272,39 @@ code,
 }
 
 button {
-  font-family: inherit;
+  font-family: var(--font-mono);
 }
 
 ::selection {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-primary);
 }
 
+/* Vulos focus: a soft accent ring via box-shadow, not a hard outline. */
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Thin Vulos scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-emphasis);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-ghost);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-emphasis) transparent;
 }
 
 /* ---------- shared primitives ---------- */
@@ -272,8 +314,8 @@ button {
    calmer than that. */
 .panel {
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
 }
 
 .panel-header {
@@ -289,15 +331,15 @@ button {
   font-size: 1.05rem;
 }
 
-/* Section kicker in the Vulos idiom: small muted sans small-caps, not a wide
-   mono monospace label. Caps are reserved for these headers only. */
+/* Section kicker in the Vulos idiom: small muted monospace small-caps — the
+   same treatment as the file-view NAME / SIZE / MODIFIED column headers. */
 .panel-kicker {
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .panel-body {
@@ -308,11 +350,11 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 0.86rem;
-  padding: 0.62rem 1.1rem;
-  border-radius: 7px;
+  font-size: 0.82rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -371,8 +413,9 @@ button {
 }
 
 label {
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--text-secondary);
   display: block;
   margin-bottom: 0.35rem;
@@ -387,18 +430,17 @@ textarea {
   padding: 0.55rem 0.7rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
-}
-
-textarea {
-  font-family: var(--font-sans);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
+  outline: none;
   border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .field {

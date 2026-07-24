@@ -57,9 +57,9 @@ console.log(`serving dist/ at ${base}`);
 
 const browser = await chromium.launch();
 
-async function shoot({ route, colorScheme, file, waitForSelector }) {
+async function shoot({ route, colorScheme, file, waitForSelector, viewport }) {
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: viewport ?? { width: 1440, height: 900 },
     colorScheme,
     deviceScaleFactor: 2,
   });
@@ -100,6 +100,15 @@ try {
     colorScheme: 'light',
     file: 'console-billing-light.png',
     waitForSelector: 'text=Prepaid ledger',
+  });
+  // Phone viewport — the sidebar collapses to a drawer and the metric grid
+  // drops to one column so no figure gets ellipsised.
+  await shoot({
+    route: 'overview',
+    colorScheme: 'dark',
+    file: 'console-mobile-dark.png',
+    waitForSelector: 'text=Coordinator posture',
+    viewport: { width: 390, height: 844 },
   });
 } finally {
   await browser.close();

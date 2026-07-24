@@ -273,11 +273,11 @@
     gap: 1.4rem;
   }
   .kicker {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: 0.02em;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
   }
   h1 {
     font-size: 1.9rem;
@@ -322,7 +322,7 @@
     gap: 0.7rem;
   }
   .balance-value {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 2rem;
     font-weight: 700;
     color: var(--accent);
@@ -338,7 +338,7 @@
     color: var(--status-danger);
   }
   .topup-form {
-    border-top: 1px dashed var(--border-default);
+    border-top: 1px solid var(--border-default);
     padding-top: 0.9rem;
     margin-top: 0.3rem;
     display: flex;
@@ -378,7 +378,7 @@
     width: auto;
   }
   .topup-history {
-    border-top: 1px dashed var(--border-default);
+    border-top: 1px solid var(--border-default);
     padding-top: 0.8rem;
     margin-top: 0.2rem;
   }
@@ -409,7 +409,7 @@
     margin-left: auto;
   }
   .settings-block {
-    border-top: 1px dashed var(--border-default);
+    border-top: 1px solid var(--border-default);
     margin-top: 1.1rem;
     padding-top: 1rem;
   }

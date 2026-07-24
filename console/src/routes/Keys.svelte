@@ -122,11 +122,11 @@
     gap: 1.5rem;
   }
   .kicker {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: 0.02em;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
   }
   h1 {
     font-size: 1.9rem;

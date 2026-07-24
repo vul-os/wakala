@@ -105,7 +105,7 @@
   }
 
   .class-row {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-weight: 700;
     font-size: 1.5rem;
     letter-spacing: -0.01em;
