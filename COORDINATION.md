@@ -342,3 +342,36 @@ kotva commit range for "fix to perfection": **`8a8acc9` … `79f052e`**.
 The last disclosed gap is closed. Consistent with the standing honesty note: this means *no known gap
 left unverified*, not a proof that no future deep read of some surface finds anything — that bar is
 unreachable for a spec this size, and claiming it would be the dishonesty this whole pass avoided.
+
+---
+
+## "MAKE SPEC PERFECT + SOUTH AFRICAN ENGLISH" (2026-07-24)
+
+Both tracks complete to the bar that is honestly verifiable.
+
+**South African / British English — complete.**
+- W5 detector: zero Americanisms across all tracked files (recent taxonomy-fix prose already British).
+- Extended beyond the curated list: `aging → ageing` (3 prose sites).
+- `artifact` (143) deliberately kept — a frozen wire term (`ArtifactMetadata`, `artifact_kind`, the
+  `"artifact"` kind value); re-spelling prose while the wire stays "artifact" would split prose from
+  wire, an imperfection. Same principle as `labeler`/`license`. (`6699fb1`)
+
+**Perfection — conformance/registry consistency lens (the drift class that produced the most findings).**
+- All six recently-changed high-risk vectors (VAL-11, ORG-04/06/07/08, GRPGOV-07, SEAM-01) verified
+  consistent across SUITE.md ↔ suite.json ↔ registry. The two suite files agree exactly on all 362
+  case ids, no duplicates, no dangling refs.
+- Fixed: SUITE.md partition table summed to 353 while its Total said 362 — six stale category rows
+  (IDENT/DENIABLE/MIXPROF/FLOOR/ABUSE/PUBSUB). The linter checks only the top-line total, so it
+  slipped. Now every one of the five columns sums to the Total exactly. (`1115d51`)
+- Fixed two fidelity gaps: IDENT-02's dropped HALT_ALERT-if-own note in suite.json; ABUSE-02 branch
+  (b) mis-named as 0x0704 (issuer-untrusted) where it is an origin-scope mismatch → 0x0705. (`7077482`)
+
+**Taxonomy-defect class (from the prior "fix to perfection"):** fully swept — 0x070E, 0x0409, 0x0508
+were security rejections mislabelled DENY_POLICY, all fixed; the rest of the DENY_POLICY codes
+verified genuine.
+
+Commit range for this request: **`6699fb1` … `7077482`**. Lint 0 errors throughout.
+
+Standing honesty note holds: "no known gap left unverified", not a proof no future deep read finds
+anything — unreachable for a spec this size, and claiming it would be the overclaiming this whole
+effort removed.
