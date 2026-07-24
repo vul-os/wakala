@@ -388,7 +388,7 @@ design) and is off by default, explicit opt-in.
 | [COORDINATION.md](COORDINATION.md) | Cross-repo sync log with the kotva spec session |
 | [crates/README.md](crates/README.md) | Rust workspace map, per-crate status, the `kotva-core` seam |
 | [console/README.md](console/README.md) | Operator console views, stack, mock mode, screenshot pipeline |
-| [brand/README.md](brand/README.md) | The comma-e Bronze mark — concept, palette, file map, usage rules |
+| [brand/README.md](brand/README.md) | The Bronze comma mark — concept, palette, file map, usage rules |
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | Zero-to-reachable-box walkthrough (Go relay) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Go relay trust model — what the operator can/cannot see |
 | [docs/TUNNEL.md](docs/TUNNEL.md) | Full server flag/env reference & deploy notes (Go relay) |

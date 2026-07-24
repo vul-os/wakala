@@ -65,6 +65,44 @@
 
 <svelte:window onkeydown={onKeydown} />
 
+<!-- The paired mark (brand/ephor-combined.svg): two commas turned to face each
+     other — the broker's shape, two parties with the mark between them. Used in
+     the topbar and the sidebar footer. Rendered via a snippet because it is
+     inlined more than once and each instance needs its own mask ids; a shared
+     id would make the second instance reuse the first one's mask. -->
+{#snippet combinedMark(uid: string)}
+  <svg class="combined-mark" viewBox="14 5 130 92" role="presentation" aria-hidden="true">
+    <defs>
+      <mask id="{uid}-a">
+        <rect x="-40" y="-40" width="240" height="240" fill="#fff" />
+        <rect x="31.5" y="29" width="32" height="14" rx="3" fill="#000"
+              transform="translate(16 5) rotate(200 47.5 36)" />
+      </mask>
+      <mask id="{uid}-b">
+        <rect x="-40" y="-40" width="240" height="240" fill="#fff" />
+        <rect x="31.5" y="29" width="32" height="14" rx="3" fill="#000"
+              transform="translate(16 5) rotate(200 47.5 36)" />
+      </mask>
+    </defs>
+    <g mask="url(#{uid}-a)" fill="currentColor">
+      <g transform="rotate(350 50 50) translate(100 0) scale(-1 1)">
+        <path d="M 50,10 C 68,10 80,23 80,41 C 80,64 64,82 46,90 C 40,93 35,85 40,81
+                 C 51,73 57,65 60,56 C 55,61 48,63 41,62 C 28,60 20,51 20,39
+                 C 20,23 32,10 50,10 Z" />
+      </g>
+    </g>
+    <g transform="translate(158 0) scale(-1 1)">
+      <g mask="url(#{uid}-b)" fill="currentColor" opacity="0.5">
+        <g transform="rotate(350 50 50) translate(100 0) scale(-1 1)">
+          <path d="M 50,10 C 68,10 80,23 80,41 C 80,64 64,82 46,90 C 40,93 35,85 40,81
+                   C 51,73 57,65 60,56 C 55,61 48,63 41,62 C 28,60 20,51 20,39
+                   C 20,23 32,10 50,10 Z" />
+        </g>
+      </g>
+    </g>
+  </svg>
+{/snippet}
+
 <div class="shell" class:drawer-open={drawerOpen}>
   <a href="#main" class="skip-link">Skip to content</a>
 
@@ -129,6 +167,7 @@
     </nav>
 
     <div class="nav-foot">
+      <div class="foot-mark">{@render combinedMark('ft-mark')}</div>
       {#if IS_MOCK}
         <span class="mode-badge" title="This build is running on fixture data, not a live ephor-admin — see console/README.md">
           <span class="light-dot" aria-hidden="true"></span> Demo data
@@ -151,6 +190,7 @@
         >
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
+        {@render combinedMark('tb-mark')}
         <span class="crumb-kicker">Coordinator control plane</span>
       </div>
       <button
@@ -289,10 +329,36 @@
     background: linear-gradient(90deg, var(--border-emphasis), transparent 85%);
   }
 
+  /* The mark is portrait (72×92), so height leads and width follows — forcing
+     it into a square box would squash the comma. Bronze is the product accent
+     and clears contrast on both canvases. */
+  .mark {
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+  }
   .mark svg {
-    width: 2.15rem;
-    height: 2.15rem;
+    height: 2rem;
+    width: auto;
     display: block;
+  }
+
+  /* Paired mark: landscape (130×92). Sized by height in both placements. */
+  .combined-mark {
+    height: 1.15rem;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
+  }
+  .crumbs .combined-mark {
+    color: var(--text-secondary);
+  }
+  .foot-mark {
+    color: var(--text-faint);
+    margin-bottom: var(--space-3);
+  }
+  .foot-mark .combined-mark {
+    height: 1rem;
   }
 
   .wordblock {
