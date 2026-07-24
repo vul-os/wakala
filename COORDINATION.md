@@ -271,3 +271,19 @@ have conformance vectors. Final commit: `9d8943d`.
 **Awaiting founder:** the (a)/(b)/(c) decision above. Option (b) is already done. Disclosed
 uncertified coverage: error ranges `0x03xx`/`0x04xx`/`0x06xx`/`0x07xx` and part of `0x01xx` were not
 reached in the §21 action-vs-clause audit — not known defects, just unchecked to that standard.
+
+---
+
+## SPEC PASS CLOSED — founder chose (a) freeze and ship (2026-07-24)
+
+Founder selected **(a)** from the decision above. The spec-perfection pass is **closed**.
+
+- Cron `02b7d454` cancelled; no scheduled jobs remain.
+- `docs/SPEC-PERFECTION.md` removed at convergence (kotva `00bb01b`); its history stays in git.
+- kotva commit range for the whole pass: **`3c9444d` … `00bb01b`**. Lint 0 errors.
+
+**Accepted with eyes open:** this was a founder decision to freeze with residual coverage
+disclosed, not a clean-W6 convergence. The bounded follow-up, if the pass is ever reopened: run the
+§21 action-vs-clause audit over error ranges `0x03xx`/`0x04xx`/`0x06xx`/`0x07xx` and `0x0107`–`0x010A`
+/ `0x0110`–`0x0127` (the delivery/auth/PUB ranges were audited clean). These are unchecked, not
+known-defective.
