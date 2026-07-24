@@ -210,3 +210,64 @@ _Note: the KOTVA spec tree is not in this checkout — findings rest on the six 
 Resolve mixnet direction (#1) → ship GatewayAuthz/CoordinatorDescriptor/SignedTariff CDDL (#2) → enforcement path for authorize-never-classify (#3) → 0x02 KATs (#5) → fix capability count/coverage tallies (#11) → machine-check §1.4 (#10) → SYNC admission determinism + core/extension split (#13) → compress boilerplate, move 0x03-0x05 to appendix (#14) → name economics + discovery as first-class open problems (#6,#7).
 
 [2026-07-23 spec-perfection] **Ephor session is now DRIVING the spec-perfection pass (founder-directed) — spec session please HOLD spec edits to avoid collision.** Decided founder calls: (1) MIXNET **demoted** to research/ + honest sealed-sender-reduction default (transport default off the private tier); (2) economics stays at the CONTRACT §6 **seam** (finish SignedTariff/UsageReceipt/CoordinatorDescriptor/GatewayAuthz CDDL, one funding-open-question note, no pricing); (3) PQ 0x01 floor + 0x02 provisional; (4) personhood >=2 bindings; (5) custodial-escrow disclose+accept+same-stake-bar; (6) naming: legacy brands primary, ephor=umbrella. SA/British English + RFC-layout are the LAST wave. Plan: kotva `docs/SPEC-PERFECTION.md`.
+
+---
+
+## FOUNDER DECISION REQUIRED — discoverability preference on PUB objects (raised 2026-07-24, spec session)
+
+**Source.** External prior-art critique (lens L2) of the KOTVA spec against deployed systems.
+
+**The finding.** Mastodon deliberately restricted full-text search to a user's own posts and
+mentions, because complete searchability is the mechanism by which harassment pile-ons locate
+targets. It is a defended product decision, not a missing feature. KOTVA currently frames the
+opposite as a virtue: an `indexer`'s "corpus is public plaintext (nothing to be blind about)"
+(`coordinator/CONTRACT.md` §5). Verified by grep: the spec contains **no** mention of harassment,
+pile-ons, discoverability preferences or search opt-out anywhere in `profiles/search.md`,
+`profiles/social.md` or `22-public-objects.md`.
+
+**Already done (no decision needed).** The residual is now disclosed honestly in
+`profiles/search.md` §8. Disclosure required no design change and was not blocked on this.
+
+**The decision.** Should a PUB object carry a **discoverability preference** (e.g. "public, but
+not indexable")?
+
+The tension is real in both directions:
+- *For:* without it there is no way to express the most common privacy expectation on a public
+  social object, and the SOCIAL profile inherits a harm its closest shipped comparator engineered
+  against.
+- *Against:* it cannot be enforced. Indexers are uncoordinated, swappable and adversarial by
+  assumption, so the field would be an author-declared request a conformant indexer MAY honour and
+  a hostile one ignores — structurally the same shape as `endorsed-only` (§24.11), which obligates
+  no one. It also sits awkwardly beside "authorize, never classify": a *content*-derived indexing
+  rule is close to the classification coordinators are forbidden to do.
+- *Also against:* adding a waist-level field violates DIRECTION §9 "simple by subtraction" unless
+  most profiles need it.
+
+**Recommendation from the spec session:** do NOT add a waist-level field. If anything, this belongs
+in the SOCIAL profile as an author-declared, explicitly-unenforceable hint with its uselessness
+against a hostile indexer stated plainly — which is close to what §8 now discloses. Escalated rather
+than decided because it changes what a PUB object *is*, which is a founder call.
+
+**Status:** BLOCKED on founder. Spec work continues on other waves.
+
+---
+
+## SPEC LOOP HALTED (2026-07-24, spec session) — NOT a perfection declaration
+
+The 15-minute spec-perfection cron (`02b7d454`) has been **cancelled**, because the W6 stop rule
+fired (three successive re-critiques each found substantive residuals) and the loop's own
+instruction is "STOP and report … don't loop forever." A cron that keeps firing is the loop
+continuing, so halting it is what STOP means here. This is **reversible** — recreate the cron or
+reply with a direction and the pass resumes.
+
+**This is explicitly NOT the convergence path.** The spec is *not* declared perfected;
+`docs/SPEC-PERFECTION.md` is deliberately kept, not deleted. Halting is because the pass is
+**blocked on the founder's invest-further decision**, not because W6 came back clean (it did not).
+
+**State at halt:** every finding from all three W6 rounds is fixed and pushed; lint 0 errors; the
+security-load-bearing error ranges (`0x02xx`/`0x05xx`/`0x09xx`) audited clean; §18.7.3 caveats now
+have conformance vectors. Final commit: `9d8943d`.
+
+**Awaiting founder:** the (a)/(b)/(c) decision above. Option (b) is already done. Disclosed
+uncertified coverage: error ranges `0x03xx`/`0x04xx`/`0x06xx`/`0x07xx` and part of `0x01xx` were not
+reached in the §21 action-vs-clause audit — not known defects, just unchecked to that standard.
